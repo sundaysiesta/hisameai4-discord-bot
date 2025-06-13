@@ -1,0 +1,14 @@
+# fly.toml app configuration file generated for hisameai-mark-4 on 2025-06-12T20:20:01+09:00
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = 'hisameai-mark-4'
+primary_region = 'nrt'
+
+[build]
+
+[[vm]]
+  memory = '1gb'
+  cpu_kind = 'shared'
+  cpus = 1
