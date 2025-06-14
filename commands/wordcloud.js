@@ -1,15 +1,40 @@
 const { SlashCommandBuilder, AttachmentBuilder, ChannelType } = require('discord.js');
 const { createCanvas } = require('canvas');
 const cloud = require('d3-cloud');
-// 【修正】新しいライブラリをインポート
 const TinySegmenter = require('tiny-segmenter');
 const config = require('../config.js');
 
 const EXCLUDED_ROLE_ID = '1371467046055055432';
 const PHRASES_TO_COMBINE = ['確認してください', 'よろしくお願いします'];
-const STOP_WORDS = new Set(['する', 'いる', 'なる', 'れる', 'ある', 'ない', 'です', 'ます', 'こと', 'もの', 'それ', 'あれ', 'これ', 'よう', 'ため', 'さん', 'せる', 'れる', 'から', 'ので', 'まで', 'など', 'w', '笑']);
 
-// 【修正】新しいライブラリのインスタンスを作成
+// 【最重要修正】ストップワードのリストをさらに強化
+const STOP_WORDS = new Set([
+    // 助詞・助動詞・補助動詞など
+    'する', 'いる', 'なる', 'れる', 'ある', 'ない', 'です', 'ます', 'こと', 'もの',
+    'それ', 'あれ', 'これ', 'よう', 'ため', 'さん', 'せる', 'から', 'ので', 'まで',
+    'など', 'て', 'に', 'を', 'は', 'が', 'の', 'と', 'も', 'で', 'だ', 'な', 'か',
+    'ね', 'よ', 'や', 'じゃ', 'でしょ', 'でしょう', 'ました', 'でした', 'しょう',
+    'てる', 'いる', 'いった', 'られる', 'なかっ', 'ください', 'られ', 'なっ', '思います',
+    'あり', 'なっ', 'あっ', '来', 'あり', 'もう', 'なろ', 'やっ', 'なっ', 'なれ',
+    'でき', 'しまっ', 'みたい', 'ください', 'たら', 'だけ', 'だけど', 'けど', 'でも',
+    'って', '的な', 'たい', 'なく', 'たん', 'こら', 'ところ', 'しか', 'もり',
+    'より', 'なに', 'だっ', 'かも', 'かい', 'ねえ', 'できる', 'なら', 'だろ',
+    'いい', '言わ', '言っ', 'がっ', 'かっ', '行っ', 'まし', 'すぎ', '知っ', '思っ',
+    '見', '見れ', '見せ', 'やっ', 'やれ', 'やろ', 'あっ', 'なっ', '行か', '来', '来れ',
+    'なきゃ', 'そう', 'そんな', 'こんな', 'ほんと', 'たわ', '入っ', '使っ', 'にち',
+    'ませ', 'よね', 'わけ', 'みたい', '感じ', 'うち', '感じ', 'とりあえず', 'ちゃん', 'くん',
+    'めちゃ', 'めっちゃ', 'みたい', 'みたいな',
+    // 指示語・代名詞
+    'この', 'その', 'あの', 'どの', 'ここ', 'そこ', 'あそこ', 'どこ', '私', 'あなた',
+    '彼', '自分', '僕', '俺', 'どう', 'そう', 'こう', 'ああ',
+    // 一般的すぎる単語
+    '思う', 'いう', '感じ', 'やつ', 'なんか', 'みんな', 'マジ', '本当', '普通', 'なん', '人',
+    '感じ', '為', '事', '物', '者', '方', '一', '二', '三', '四', '五', '六', '七', '八', '九', '十',
+    // 記号・その他
+    'w', '笑', 'https', 'http', 'jp', 'co', 'com'
+]);
+
+
 const segmenter = new TinySegmenter();
 
 module.exports = {
@@ -18,28 +43,24 @@ module.exports = {
         .setDescription('このチャンネルの最近のメッセージからワードクラウド画像を生成します。'),
     async execute(interaction) {
         await interaction.deferReply({ ephemeral: true });
-        await interaction.editReply({ content: 'ワードクラウドを生成中です...（最大1分程度かかります）' });
+        await interaction.editReply({ content: 'ワードクラウドを生成中です...（最大2分程度かかります）' });
 
         try {
             await interaction.guild.members.fetch();
 
-            let allText = '';
-            // 【修正】分析対象をコマンドが実行されたチャンネルのみにする
-            const targetChannel = interaction.channel;
-            
-            // カテゴリによる除外チェック
-            if (targetChannel.parentId === config.WORDCLOUD_EXCLUDED_CATEGORY_ID || config.EXCLUDED_CHANNELS.includes(targetChannel.id)) {
+            if (interaction.channel.parentId === config.WORDCLOUD_EXCLUDED_CATEGORY_ID || config.EXCLUDED_CHANNELS.includes(interaction.channel.id)) {
                 return interaction.followUp({ content: 'このチャンネルではワードクラウドを生成できません。', ephemeral: true });
             }
 
+            let allText = '';
             let lastId;
-            // チャンネルから最大1000件のメッセージを取得
-            for (let i = 0; i < 10; i++) { // 100件x10回 = 1000件
+            
+            for (let i = 0; i < 20; i++) {
                 const options = { limit: 100 };
                 if (lastId) {
                     options.before = lastId;
                 }
-                const messages = await targetChannel.messages.fetch(options);
+                const messages = await interaction.channel.messages.fetch(options);
                 if (messages.size === 0) {
                     break;
                 }
@@ -80,7 +101,6 @@ module.exports = {
                 }
             });
 
-            // 【修正】TinySegmenterを使って単語を抽出
             const tokens = segmenter.segment(allText);
             tokens.forEach(word => {
                 if (word.length > 1 && !STOP_WORDS.has(word)) {
