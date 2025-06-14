@@ -2,40 +2,24 @@ const { SlashCommandBuilder, AttachmentBuilder, ChannelType } = require('discord
 const { createCanvas } = require('canvas');
 const cloud = require('d3-cloud');
 const TinySegmenter = require('tiny-segmenter');
-const config = require('../config.js');
+const config = require('../config.js'); // config.jsを読み込む
 
-const EXCLUDED_ROLE_ID = '1371467046055055432';
-const PHRASES_TO_COMBINE = ['確認してください', 'よろしくお願いします'];
-
-// 【最重要修正】ストップワードのリストをさらに強化
-const STOP_WORDS = new Set([
-    // 助詞・助動詞・補助動詞など
-    'する', 'いる', 'なる', 'れる', 'ある', 'ない', 'です', 'ます', 'こと', 'もの',
-    'それ', 'あれ', 'これ', 'よう', 'ため', 'さん', 'せる', 'から', 'ので', 'まで',
-    'など', 'て', 'に', 'を', 'は', 'が', 'の', 'と', 'も', 'で', 'だ', 'な', 'か',
-    'ね', 'よ', 'や', 'じゃ', 'でしょ', 'でしょう', 'ました', 'でした', 'しょう',
-    'てる', 'いる', 'いった', 'られる', 'なかっ', 'ください', 'られ', 'なっ', '思います',
-    'あり', 'なっ', 'あっ', '来', 'あり', 'もう', 'なろ', 'やっ', 'なっ', 'なれ',
-    'でき', 'しまっ', 'みたい', 'ください', 'たら', 'だけ', 'だけど', 'けど', 'でも',
-    'って', '的な', 'たい', 'なく', 'たん', 'こら', 'ところ', 'しか', 'もり',
-    'より', 'なに', 'だっ', 'かも', 'かい', 'ねえ', 'できる', 'なら', 'だろ',
-    'いい', '言わ', '言っ', 'がっ', 'かっ', '行っ', 'まし', 'すぎ', '知っ', '思っ',
-    '見', '見れ', '見せ', 'やっ', 'やれ', 'やろ', 'あっ', 'なっ', '行か', '来', '来れ',
-    'なきゃ', 'そう', 'そんな', 'こんな', 'ほんと', 'たわ', '入っ', '使っ', 'にち',
-    'ませ', 'よね', 'わけ', 'みたい', '感じ', 'うち', '感じ', 'とりあえず', 'ちゃん', 'くん',
-    'めちゃ', 'めっちゃ', 'みたい', 'みたいな',
-    // 指示語・代名詞
-    'この', 'その', 'あの', 'どの', 'ここ', 'そこ', 'あそこ', 'どこ', '私', 'あなた',
-    '彼', '自分', '僕', '俺', 'どう', 'そう', 'こう', 'ああ',
-    // 一般的すぎる単語
-    '思う', 'いう', '感じ', 'やつ', 'なんか', 'みんな', 'マジ', '本当', '普通', 'なん', '人',
-    '感じ', '為', '事', '物', '者', '方', '一', '二', '三', '四', '五', '六', '七', '八', '九', '十',
-    // 記号・その他
-    'w', '笑', 'https', 'http', 'jp', 'co', 'com'
-]);
-
+// 【修正】ローカルの定数を削除し、configから読み込む
+const { STOP_WORDS, PHRASES_TO_COMBINE, WORDCLOUD_EXCLUDED_CATEGORY_ID, WORDCLOUD_EXCLUDED_ROLE_ID } = config;
 
 const segmenter = new TinySegmenter();
+
+function extractWords(text, wordCounts) {
+    const tokens = segmenter.segment(text);
+    tokens.forEach(word => {
+        if (word.length > 1 && !STOP_WORDS.has(word)) {
+             if (!/^[0-9]+$/.test(word)) {
+                 wordCounts[word] = (wordCounts[word] || 0) + 1;
+             }
+        }
+    });
+    return wordCounts;
+}
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -48,7 +32,7 @@ module.exports = {
         try {
             await interaction.guild.members.fetch();
 
-            if (interaction.channel.parentId === config.WORDCLOUD_EXCLUDED_CATEGORY_ID || config.EXCLUDED_CHANNELS.includes(interaction.channel.id)) {
+            if (interaction.channel.parentId === WORDCLOUD_EXCLUDED_CATEGORY_ID || config.EXCLUDED_CHANNELS.includes(interaction.channel.id)) {
                 return interaction.followUp({ content: 'このチャンネルではワードクラウドを生成できません。', ephemeral: true });
             }
 
@@ -57,18 +41,13 @@ module.exports = {
             
             for (let i = 0; i < 20; i++) {
                 const options = { limit: 100 };
-                if (lastId) {
-                    options.before = lastId;
-                }
+                if (lastId) options.before = lastId;
                 const messages = await interaction.channel.messages.fetch(options);
-                if (messages.size === 0) {
-                    break;
-                }
+                if (messages.size === 0) break;
                 
                 for (const msg of messages.values()) {
                     const member = interaction.guild.members.cache.get(msg.author.id);
-                    const hasExcludedRole = member && member.roles.cache.has(EXCLUDED_ROLE_ID);
-
+                    const hasExcludedRole = member && member.roles.cache.has(WORDCLOUD_EXCLUDED_ROLE_ID);
                     if (!msg.author.bot && msg.content && msg.embeds.length === 0 && !hasExcludedRole) {
                         const cleanContent = msg.content
                             .replace(/<@!?&?(\d{17,19})>/g, '') 
@@ -101,14 +80,7 @@ module.exports = {
                 }
             });
 
-            const tokens = segmenter.segment(allText);
-            tokens.forEach(word => {
-                if (word.length > 1 && !STOP_WORDS.has(word)) {
-                     if (!/^[0-9]+$/.test(word)) {
-                         wordCounts[word] = (wordCounts[word] || 0) + 1;
-                     }
-                }
-            });
+            wordCounts = extractWords(allText, wordCounts);
             
             const words = Object.entries(wordCounts)
                 .map(([text, size]) => ({ text, size }))
@@ -141,7 +113,6 @@ module.exports = {
                     ctx.fillRect(0, 0, 800, 600);
                     ctx.textAlign = 'center';
                     ctx.textBaseline = 'middle';
-
                     drawnWords.forEach(d => {
                         ctx.save();
                         ctx.translate(d.x + 400, d.y + 300);
@@ -151,7 +122,6 @@ module.exports = {
                         ctx.fillText(d.text, 0, 0);
                         ctx.restore();
                     });
-
                     const attachment = new AttachmentBuilder(canvas.toBuffer(), { name: 'wordcloud.png' });
                     await interaction.channel.send({ content: `${interaction.user}さん、お待たせしました！ワードクラウドが完成しました。`, files: [attachment] });
                     await interaction.deleteReply();
