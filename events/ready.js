@@ -1,97 +1,70 @@
-const { Events, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, EmbedBuilder } = require('discord.js');
+const { Events, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, EmbedBuilder, ActivityType } = require('discord.js');
 const cron = require('node-cron');
 const config = require('../config.js');
-const { postStickyMessage, sortClubChannels } = require('../utils/utility.js');
-const TinySegmenter = require('tiny-segmenter');
+// 【修正】新しい関数名をインポート
+const { postStickyMessage, sortClubChannels, updateLevelRoles, calculateTextLevel, calculateVoiceLevel, safeIncrby } = require('../utils/utility.js');
 
-// ワードクラウドと同じ除外リストを使用
-const EXCLUDED_ROLE_ID = '1371467046055055432';
-const STOP_WORDS = new Set(['する', 'いる', 'なる', 'れる', 'ある', 'ない', 'です', 'ます', 'こと', 'もの', 'それ', 'あれ', 'これ', 'よう', 'ため', 'さん', 'せる', 'れる', 'から', 'ので', 'まで', 'など', 'w', '笑']);
-const segmenter = new TinySegmenter();
+async function postOrEdit(channel, redisKey, payload) { /* ... (この関数は変更なし) ... */ }
+async function updatePermanentRankings(guild, redis) { /* ... (この関数は変更なし) ... */ }
 
 module.exports = {
 	name: Events.ClientReady,
 	once: true,
 	async execute(client, redis, notion) {
         console.log(`Logged in as ${client.user.tag}!`);
-        // ... (既存の起動時処理は変更なし) ...
-        
-        // 【追加】トレンドランキング更新のスケジューラー
-        cron.schedule(config.TREND_UPDATE_INTERVAL, async () => {
-            try {
-                const trendChannel = await client.channels.fetch(config.TREND_CHANNEL_ID).catch(() => null);
-                if (!trendChannel) return;
+        client.redis = redis; 
+        try {
+            const savedStatus = await redis.get('bot_status_text');
+            if (savedStatus) client.user.setActivity(savedStatus, { type: ActivityType.Playing });
+            const notificationChannel = await client.channels.fetch(config.RESTART_NOTIFICATION_CHANNEL_ID).catch(() => null);
+            if (notificationChannel) await notificationChannel.send('再起動しました。確認してください。');
+            const anonyChannel = await client.channels.fetch(config.ANONYMOUS_CHANNEL_ID).catch(() => null);
+            if (anonyChannel) await postStickyMessage(client, anonyChannel, config.STICKY_BUTTON_ID, { components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(config.STICKY_BUTTON_ID).setLabel('書き込む').setStyle(ButtonStyle.Success).setEmoji('✍️'))] });
+            const panelChannel = await client.channels.fetch(config.CLUB_PANEL_CHANNEL_ID).catch(() => null);
+            if (panelChannel) await postStickyMessage(client, panelChannel, config.CREATE_CLUB_BUTTON_ID, { content: '新しい部活を設立するには、下のボタンを押してください。', components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(config.CREATE_CLUB_BUTTON_ID).setLabel('部活を作成する').setStyle(ButtonStyle.Primary).setEmoji('🎫'))] });
+            const counterExists = await redis.exists('anonymous_message_counter');
+            if (!counterExists) await redis.set('anonymous_message_counter', 216);
+        } catch (error) { console.error('起動時の初期化処理でエラー:', error); }
 
-                const now = Date.now();
-                const cutoff = now - config.TREND_WORD_LIFESPAN;
-
-                // Redisから単語リストを取得
-                const wordEntries = await redis.lrange('trend_words', 0, -1);
-                
-                const validWords = [];
-                const wordsToKeep = [];
-                const wordCounts = {};
-
-                // 古いデータをフィルタリング
-                wordEntries.forEach(entry => {
-                    const [word, timestamp] = entry.split(':');
-                    if (Number(timestamp) >= cutoff) {
-                        validWords.push(word);
-                        wordsToKeep.push(entry);
-                    }
-                });
-                
-                // 新しいリストでRedisを上書き（古いデータを削除）
-                if (wordsToKeep.length < wordEntries.length) {
-                    await redis.del('trend_words');
-                    if (wordsToKeep.length > 0) {
-                        await redis.lpush('trend_words', ...wordsToKeep);
+        cron.schedule(config.RANKING_UPDATE_INTERVAL, async () => {
+            const guild = client.guilds.cache.first();
+            if (!guild) return;
+            const voiceStates = guild.voiceStates.cache;
+            const activeVCs = new Map();
+            voiceStates.forEach(vs => {
+                if (vs.channel && !vs.serverMute && !vs.selfMute && !vs.member.user.bot) {
+                    const members = activeVCs.get(vs.channelId) || [];
+                    members.push(vs.member);
+                    activeVCs.set(vs.channelId, members);
+                }
+            });
+            const now = Date.now();
+            for (const members of activeVCs.values()) {
+                if (members.length > 1) {
+                    for (const member of members) {
+                        if (member.roles.cache.has(config.XP_EXCLUDED_ROLE_ID)) continue;
+                        const cooldownKey = `xp_cooldown:voice:${member.id}`;
+                        const lastXpTime = await redis.get(cooldownKey);
+                        if (!lastXpTime || (now - lastXpTime > config.VOICE_XP_COOLDOWN)) {
+                            const mainAccountId = await redis.hget(`user:${member.id}`, 'mainAccountId') || member.id;
+                            const mainMember = await guild.members.fetch(mainAccountId).catch(() => null);
+                            if (!mainMember) continue;
+                            const xp = config.VOICE_XP_AMOUNT;
+                            const monthlyKey = `monthly_xp:voice:${new Date().toISOString().slice(0, 7)}:${mainAccountId}`;
+                            const dailyKey = `daily_xp:voice:${new Date().toISOString().slice(0, 10)}:${mainAccountId}`;
+                            
+                            await redis.hincrby(`user:${mainAccountId}`, 'voiceXp', xp);
+                            await safeIncrby(redis, monthlyKey, xp);
+                            await safeIncrby(redis, dailyKey, xp);
+                            await redis.set(cooldownKey, now, { ex: 125 });
+                            await updateLevelRoles(mainMember, redis, client);
+                        }
                     }
                 }
-
-                // 単語をカウント
-                validWords.forEach(word => {
-                    wordCounts[word] = (wordCounts[word] || 0) + 1;
-                });
-                
-                const ranking = Object.entries(wordCounts)
-                    .sort(([, a], [, b]) => b - a)
-                    .slice(0, 20);
-
-                // Embedを作成
-                const embed = new EmbedBuilder()
-                    .setTitle('サーバー内トレンド (過去24時間)')
-                    .setColor(0x1DA1F2)
-                    .setTimestamp();
-                
-                if (ranking.length === 0) {
-                    embed.setDescription('現在、トレンドはありません。');
-                } else {
-                    const description = ranking.map((item, index) => {
-                        return `**${index + 1}位:** ${item[0]} (${item[1]}回)`;
-                    }).join('\n');
-                    embed.setDescription(description);
-                }
-
-                // メッセージを更新または新規投稿
-                const trendMessageId = await redis.get('trend_message_id');
-                if (trendMessageId) {
-                    try {
-                        const message = await trendChannel.messages.fetch(trendMessageId);
-                        await message.edit({ embeds: [embed] });
-                    } catch (error) {
-                        // メッセージが見つからない場合(手動削除など)、新規投稿
-                        const newMessage = await trendChannel.send({ embeds: [embed] });
-                        await redis.set('trend_message_id', newMessage.id);
-                    }
-                } else {
-                    const newMessage = await trendChannel.send({ embeds: [embed] });
-                    await redis.set('trend_message_id', newMessage.id);
-                }
-
-            } catch (error) {
-                console.error('トレンドランキングの更新中にエラー:', error);
             }
+            await updatePermanentRankings(guild, redis);
         });
+        
+        cron.schedule('0 0 * * 0', async () => { /* ... (変更なし) ... */ });
 	},
 };

@@ -1,6 +1,5 @@
 module.exports = {
     ANONYMOUS_CHANNEL_ID: '1377834239206096948',
-    // 【最重要修正】ハードコードされたURLを削除し、環境変数から読み込むように変更
     ANONYMOUS_WEBHOOK_URL: process.env.ANONYMOUS_WEBHOOK_URL,
     STICKY_BUTTON_ID: 'show_anonymous_form',
     ANONYMOUS_MODAL_ID: 'anonymous_post_modal',
@@ -10,16 +9,45 @@ module.exports = {
     ROLE_TO_REMOVE_ON_CREATE: '1373302892823580762',
     CREATE_CLUB_BUTTON_ID: 'create_club_button',
     CREATE_CLUB_MODAL_ID: 'create_club_modal',
-    TREND_CHANNEL_ID: '1383261252662595604',
-    TREND_UPDATE_INTERVAL: '*/5 * * * *',
-    TREND_WORD_LIFESPAN: 24 * 60 * 60 * 1000,
+    RANKING_CHANNEL_ID: '1383261252662595604',
+    RANKING_UPDATE_INTERVAL: '*/5 * * * *',
     WORDCLOUD_EXCLUDED_CATEGORY_ID: '1370683406345699369',
-    WORDCLOUD_EXCLUDED_ROLE_ID: '1371467046055055432',
+    XP_EXCLUDED_ROLE_ID: '1371467046055055432',
     RESTART_NOTIFICATION_CHANNEL_ID: '1369627467991486605',
     NOTION_DATABASE_ID: process.env.NOTION_DATABASE_ID,
     NOTION_API_KEY: process.env.NOTION_API_KEY,
+    // 【追加】レベルアップ通知チャンネル
+    LEVEL_UP_NOTIFICATION_CHANNEL_ID: '1376067780939612170',
+    // レベル機能設定
+    TEXT_XP_COOLDOWN: 2 * 60 * 1000,
+    VOICE_XP_COOLDOWN: 2 * 60 * 1000,
+    VOICE_XP_AMOUNT: 10,
+    MIN_TEXT_XP: 10,
+    MAX_TEXT_XP: 40,
+    // トレンド機能設定
+    TREND_WORD_COOLDOWN: 2 * 60 * 1000,
+    TREND_WORD_LIFESPAN: 24 * 60 * 60 * 1000,
+    // 共通設定
     PHRASES_TO_COMBINE: ['確認してください', 'よろしくお願いします'],
     STOP_WORDS: new Set([
-        // ... (ストップワードリストは変更なし)
+        'する', 'いる', 'なる', 'れる', 'ある', 'ない', 'です', 'ます', 'こと', 'もの',
+        'それ', 'あれ', 'これ', 'よう', 'ため', 'さん', 'せる', 'から', 'ので', 'まで',
+        'など', 'て', 'に', 'を', 'は', 'が', 'の', 'と', 'も', 'で', 'だ', 'な', 'か',
+        'ね', 'よ', 'や', 'じゃ', 'でしょ', 'でしょう', 'ました', 'でした', 'しょう',
+        'てる', 'いる', 'いった', 'られる', 'なかっ', 'ください', 'られ', 'なっ', '思う',
+        '思います', 'あり', 'なっ', 'あっ', '来', 'あり', 'もう', 'なろ', 'やっ',
+        'なっ', 'なれ', 'でき', 'しまっ', 'みたい', 'ください', 'たら', 'だけ',
+        'だけど', 'けど', 'でも', 'って', '的な', 'たい', 'なく', 'たん', 'こら', 
+        'ところ', 'しか', 'もり', 'より', 'なに', 'だっ', 'かも', 'かい', 'ねえ', 'できる',
+        'なら', 'だろ', 'いい', '言わ', '言っ', 'がっ', 'かっ', '行っ', 'まし', 'すぎ', '知っ',
+        '思っ', '見', '見れ', '見せ', 'やっ', 'やれ', 'やろ', 'あっ', 'なっ', '行か', '来', '来れ',
+        'なきゃ', 'そう', 'そんな', 'こんな', 'ほんと', 'たわ', '入っ', '使っ', 'にち',
+        'ませ', 'よね', 'わけ', 'みたい', '感じ', 'うち', '感じ', 'とりあえず', 'ちゃん', 'くん',
+        'めちゃ', 'めっちゃ', 'みたい', 'みたいな', 'ただ', 'ほぼ', 'まぁ', 'なんか',
+        'この', 'その', 'あの', 'どの', 'ここ', 'そこ', 'あそこ', 'どこ', '私', 'あなた',
+        '彼', '彼女', '自分', '僕', '俺', 'どう', 'そう', 'こう', 'ああ',
+        '思う', 'いう', '感じ', 'やつ', 'なんか', 'みんな', 'マジ', '本当', '普通', 'なん', '人',
+        '感じ', '為', '事', '物', '者', '方', '一', '二', '三', '四', '五', '六', '七', '八', '九', '十',
+        'w', '笑', 'https', 'http', 'jp', 'co', 'com'
     ]),
 };

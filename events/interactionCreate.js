@@ -1,4 +1,4 @@
-const { Events, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, WebhookClient, PermissionsBitField, ChannelType, ButtonBuilder, ButtonStyle } = require('discord.js');
+const { Events, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, WebhookClient, PermissionsBitField, ChannelType, ButtonBuilder, ButtonStyle, MessageFlags } = require('discord.js');
 const config = require('../config.js');
 const { postStickyMessage } = require('../utils/utility.js');
 
@@ -11,18 +11,20 @@ module.exports = {
         if (!interaction.inGuild()) return;
 
         try {
+            // スラッシュコマンドの処理
             if (interaction.isChatInputCommand()) {
                 const command = interaction.client.commands.get(interaction.commandName);
                 if (!command) return console.error(`No command matching ${interaction.commandName} was found.`);
                 await command.execute(interaction, redis, notion);
             }
+            // ボタンの処理
             else if (interaction.isButton()) {
                 if (interaction.customId === config.STICKY_BUTTON_ID) {
                     const now = Date.now();
                     const userCooldown = cooldowns.get(interaction.user.id);
                     if (userCooldown && now < userCooldown) {
                         const remaining = Math.ceil((userCooldown - now) / 1000);
-                        return interaction.reply({ content: `クールダウン中です。あと ${remaining} 秒お待ちください。`, ephemeral: true });
+                        return interaction.reply({ content: `クールダウン中です。あと ${remaining} 秒お待ちください。`, flags: [MessageFlags.Ephemeral] });
                     }
                     const modal = new ModalBuilder().setCustomId(config.ANONYMOUS_MODAL_ID).setTitle('匿名メッセージ投稿');
                     const messageInput = new TextInputBuilder().setCustomId('messageInput').setLabel('メッセージ内容 (改行不可・140字以内)').setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(140);
@@ -37,9 +39,10 @@ module.exports = {
                     await interaction.showModal(modal);
                 }
             }
+            // フォーム送信の処理
             else if (interaction.isModalSubmit()) {
                 if (interaction.customId === config.ANONYMOUS_MODAL_ID) {
-                    await interaction.deferReply({ ephemeral: true });
+                    await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
                     const messageContent = interaction.fields.getTextInputValue('messageInput');
                     if (messageContent.includes('\n')) {
                         return interaction.editReply({ content: 'エラー: メッセージに改行を含めることはできません。' });
@@ -48,18 +51,19 @@ module.exports = {
                         const newCounter = await redis.incr('anonymous_message_counter');
                         await webhookClient.send({ content: messageContent, username: newCounter.toString(), allowedMentions: { parse: [] } });
                         
-                        // 【最重要修正】ここでSticky Messageを更新
+                        // 【最重要修正】ここでSticky Messageを直接更新
                         const payload = { components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(config.STICKY_BUTTON_ID).setLabel('書き込む').setStyle(ButtonStyle.Success).setEmoji('✍️'))] };
                         await postStickyMessage(interaction.client, interaction.channel, config.STICKY_BUTTON_ID, payload);
-
+                        
                         await interaction.editReply({ content: 'メッセージを匿名で投稿しました。' });
                         cooldowns.set(interaction.user.id, Date.now() + 60 * 1000);
                     } catch (error) {
+                        console.error("Anonymous post error:", error);
                         await interaction.editReply({ content: 'エラーが発生し、メッセージを投稿できませんでした。' });
                     }
                 }
                 if (interaction.customId === config.CREATE_CLUB_MODAL_ID) {
-                    await interaction.deferReply({ ephemeral: true });
+                    await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
                     const clubName = interaction.fields.getTextInputValue('club_name');
                     const clubActivity = interaction.fields.getTextInputValue('club_activity');
                     const creator = interaction.member;
@@ -82,11 +86,6 @@ module.exports = {
                             if(roleToRemove) await creator.roles.remove(roleToRemove);
                         }
                         
-                        const panelChannel = await interaction.client.channels.fetch(config.CLUB_PANEL_CHANNEL_ID).catch(() => null);
-                        if (panelChannel) {
-                           const payload = { content: '新しい部活を設立するには、下のボタンを押してください。', components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(config.CREATE_CLUB_BUTTON_ID).setLabel('部活を作成する').setStyle(ButtonStyle.Primary).setEmoji('🎫'))] };
-                           await postStickyMessage(interaction.client, panelChannel, config.CREATE_CLUB_BUTTON_ID, payload);
-                        }
                         await interaction.editReply({ content: `部活「${clubName}」を設立しました！ ${newChannel} を確認してください。` });
 
                     } catch (error) {
@@ -98,9 +97,9 @@ module.exports = {
         } catch (error) {
             console.error('インタラクション処理中に予期せぬエラーが発生しました:', error);
             if (interaction.replied || interaction.deferred) {
-                await interaction.followUp({ content: 'コマンドの実行中にエラーが発生しました。', ephemeral: true }).catch(() => {});
+                await interaction.followUp({ content: 'コマンドの実行中にエラーが発生しました。', flags: [MessageFlags.Ephemeral] });
             } else {
-                await interaction.reply({ content: 'コマンドの実行中にエラーが発生しました。', ephemeral: true }).catch(() => {});
+                await interaction.reply({ content: 'コマンドの実行中にエラーが発生しました。', flags: [MessageFlags.Ephemeral] });
             }
         }
 	},
