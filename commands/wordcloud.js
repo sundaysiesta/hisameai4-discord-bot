@@ -1,63 +1,45 @@
 const { SlashCommandBuilder, AttachmentBuilder, ChannelType } = require('discord.js');
 const { createCanvas } = require('canvas');
 const cloud = require('d3-cloud');
-const kuromoji = require('kuromoji');
+// 【修正】新しいライブラリをインポート
+const TinySegmenter = require('tiny-segmenter');
 const config = require('../config.js');
 
 const EXCLUDED_ROLE_ID = '1371467046055055432';
 const PHRASES_TO_COMBINE = ['確認してください', 'よろしくお願いします'];
 const STOP_WORDS = new Set(['する', 'いる', 'なる', 'れる', 'ある', 'ない', 'です', 'ます', 'こと', 'もの', 'それ', 'あれ', 'これ', 'よう', 'ため', 'さん', 'せる', 'れる', 'から', 'ので', 'まで', 'など', 'w', '笑']);
 
-function extractWords(tokenizer, text, wordCounts) {
-    const tokens = tokenizer.tokenize(text);
-    tokens.forEach(token => {
-        if (token.pos === '名詞' && token.surface_form.length > 1 && !STOP_WORDS.has(token.surface_form)) {
-            if (!/^[0-9!"#$%&'()*+,-./:;<=>?@[\]^_`{|}~「」『』【】、。！？・’”…]+$/.test(token.surface_form)) {
-                 const word = token.surface_form;
-                 wordCounts[word] = (wordCounts[word] || 0) + 1;
-            }
-        }
-    });
-    return wordCounts;
-}
+// 【修正】新しいライブラリのインスタンスを作成
+const segmenter = new TinySegmenter();
 
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('wordcloud')
         .setDescription('このチャンネルの最近のメッセージからワードクラウド画像を生成します。'),
     async execute(interaction) {
-        // 【修正】応答をephemeralにする
         await interaction.deferReply({ ephemeral: true });
-
-        // 【修正】除外カテゴリのチェック
-        if (interaction.channel.parentId === config.WORDCLOUD_EXCLUDED_CATEGORY_ID) {
-            return interaction.editReply({ content: 'このカテゴリのチャンネルではワードクラウドを生成できません。' });
-        }
-        
-        // 処理中であることをユーザーに伝える
         await interaction.editReply({ content: 'ワードクラウドを生成中です...（最大1分程度かかります）' });
 
         try {
             await interaction.guild.members.fetch();
 
-            const tokenizer = await new Promise((resolve, reject) => {
-                kuromoji.builder({ dicPath: 'node_modules/kuromoji/dict' }).build((err, tokenizer) => {
-                    if (err) return reject(err);
-                    resolve(tokenizer);
-                });
-            });
-
             let allText = '';
-            let fetchedMessages = 0;
-            let lastId;
+            // 【修正】分析対象をコマンドが実行されたチャンネルのみにする
+            const targetChannel = interaction.channel;
             
-            // 【修正】実行されたチャンネルから最大1000件のメッセージを取得する
-            while(fetchedMessages < 1000) {
+            // カテゴリによる除外チェック
+            if (targetChannel.parentId === config.WORDCLOUD_EXCLUDED_CATEGORY_ID || config.EXCLUDED_CHANNELS.includes(targetChannel.id)) {
+                return interaction.followUp({ content: 'このチャンネルではワードクラウドを生成できません。', ephemeral: true });
+            }
+
+            let lastId;
+            // チャンネルから最大1000件のメッセージを取得
+            for (let i = 0; i < 10; i++) { // 100件x10回 = 1000件
                 const options = { limit: 100 };
                 if (lastId) {
                     options.before = lastId;
                 }
-                const messages = await interaction.channel.messages.fetch(options);
+                const messages = await targetChannel.messages.fetch(options);
                 if (messages.size === 0) {
                     break;
                 }
@@ -66,8 +48,8 @@ module.exports = {
                     const member = interaction.guild.members.cache.get(msg.author.id);
                     const hasExcludedRole = member && member.roles.cache.has(EXCLUDED_ROLE_ID);
 
-                    if (!msg.author.bot && msg.content && !hasExcludedRole) {
-                         const cleanContent = msg.content
+                    if (!msg.author.bot && msg.content && msg.embeds.length === 0 && !hasExcludedRole) {
+                        const cleanContent = msg.content
                             .replace(/<@!?&?(\d{17,19})>/g, '') 
                             .replace(/<#(\d{17,19})>/g, '')      
                             .replace(/<a?:[a-zA-Z0-9_]+:(\d{17,19})>/g, '')
@@ -80,10 +62,8 @@ module.exports = {
                         allText += cleanContent + '\n';
                     }
                 }
-                fetchedMessages += messages.size;
                 lastId = messages.last().id;
             }
-
 
             if (allText.trim() === '') {
                 return interaction.followUp({ content: '分析できるメッセージが見つかりませんでした。', ephemeral: true });
@@ -100,7 +80,15 @@ module.exports = {
                 }
             });
 
-            wordCounts = extractWords(tokenizer, allText, wordCounts);
+            // 【修正】TinySegmenterを使って単語を抽出
+            const tokens = segmenter.segment(allText);
+            tokens.forEach(word => {
+                if (word.length > 1 && !STOP_WORDS.has(word)) {
+                     if (!/^[0-9]+$/.test(word)) {
+                         wordCounts[word] = (wordCounts[word] || 0) + 1;
+                     }
+                }
+            });
             
             const words = Object.entries(wordCounts)
                 .map(([text, size]) => ({ text, size }))
@@ -145,9 +133,7 @@ module.exports = {
                     });
 
                     const attachment = new AttachmentBuilder(canvas.toBuffer(), { name: 'wordcloud.png' });
-                    // 【修正】チャンネルに直接送信
                     await interaction.channel.send({ content: `${interaction.user}さん、お待たせしました！ワードクラウドが完成しました。`, files: [attachment] });
-                    // 最初の応答を削除
                     await interaction.deleteReply();
                 });
 
@@ -159,4 +145,3 @@ module.exports = {
         }
     },
 };
-
