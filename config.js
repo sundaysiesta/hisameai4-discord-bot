@@ -23,9 +23,9 @@ module.exports = {
     TREND_WORD_COOLDOWN: 5 * 60 * 1000, // 5分
 
     // 【最重要修正】クールダウン延長に合わせて獲得XP量を調整
-    VOICE_XP_AMOUNT: 25,     // 10 -> 25
-    MIN_TEXT_XP: 25,       // 10 -> 25
-    MAX_TEXT_XP: 100,      // 40 -> 100    TREND_WORD_LIFESPAN: 6 * 60 * 60 * 1000, // 24時間から6時間に変更
+    VOICE_XP_AMOUNT: 25,     // 10 -> 25    MIN_TEXT_XP: 25,       // 10 -> 25
+    MAX_TEXT_XP: 100,      // 40 -> 100
+    TREND_WORD_LIFESPAN: 3 * 60 * 60 * 1000, // 6時間から3時間に変更
     PHRASES_TO_COMBINE: ['確認してください', 'よろしくお願いします'],
     STOP_WORDS: new Set([
         'する', 'いる', 'なる', 'れる', 'ある', 'ない', 'です', 'ます', 'こと', 'もの',

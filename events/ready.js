@@ -145,7 +145,7 @@ async function updatePermanentRankings(guild, redis) {
             if (wordsToKeep.length > 0) await redis.lpush('trend_words', ...wordsToKeep);
         }
         const trendRanking = Object.entries(wordData).map(([word, data]) => ({ word: word, score: data.count * data.users.size })).sort((a, b) => b.score - a.score).slice(0, 20);
-        const trendEmbed = new EmbedBuilder().setTitle('サーバー内トレンド (過去6時間)').setColor(0x1DA1F2).setTimestamp();
+        const trendEmbed = new EmbedBuilder().setTitle('サーバー内トレンド (過去3時間)').setColor(0x1DA1F2).setTimestamp();
         if (trendRanking.length === 0) {
             trendEmbed.setDescription('現在、トレンドはありません。');
         } else {
@@ -215,7 +215,7 @@ module.exports = {
             if (!counterExists) await redis.set('anonymous_message_counter', 216);
         } catch (error) { console.error('起動時の初期化処理でエラー:', error); }
 
-        cron.schedule('*/15 * * * *', async () => {
+        cron.schedule('0 * * * *', async () => {
             const guild = client.guilds.cache.first();
             if (!guild) return;
             const voiceStates = guild.voiceStates.cache;
