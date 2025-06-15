@@ -18,7 +18,6 @@ const commands = [
     { name: 'clearxpdata', description: '破損した可能性のある月間・日間のXPデータをクリアします。(管理者限定・一度だけ使用)' },
     { name: 'migrateprobot', description: 'ProBotのランキングメッセージからXPを一括で引き継ぎます。(管理者限定)', options: [ { name: 'message_id', type: 3, description: 'ProBotのランキングが表示されているメッセージのID', required: true } ] },
     { name: 'setprofilebg', description: 'あなたのプロフィールカードの背景画像を設定します。', options: [{ name: 'url', type: 3, description: '背景に設定したい画像のURL (リセットする場合は "none" と入力)', required: true }] },
-    // 【追加】
     {
         name: 'settempdesc',
         description: 'あなたのプロフィールに表示する仮の説明文を設定します。',
@@ -29,6 +28,16 @@ const commands = [
             required: true,
         }],
     },
+    {
+        name: 'monthlyresult',
+        description: '月間レベルランキングのリザルト画像を生成します。',
+        options: [{
+            name: 'month',
+            type: 3, // STRING
+            description: '対象の月をYYYY-MM形式で指定 (例: 2025-05)。未指定の場合は先月になります。',
+            required: false,
+        }],
+    }
 ].map(command => command);
 
 const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_BOT_TOKEN);
