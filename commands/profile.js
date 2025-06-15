@@ -69,7 +69,8 @@ function formatTitles(titles) {
         if ((i + 1) % 2 === 0 && i < titles.length - 1) {
             formattedString += "\n";
         } else if (i < titles.length - 1) {
-            formattedString += "、 ";
+            // 【修正】読点「、」を半角スペースに変更
+            formattedString += " ";
         }
     }
     return formattedString;
@@ -134,7 +135,6 @@ module.exports = {
             let generationValue = '不明';
             if (generationNames.length > 0 && generationNames[0]?.title) {
                 const genText = generationNames[0].title;
-                // 【最終修正】新しく定義した専用関数を使用
                 const halfWidthText = convertNumbersToHalfWidth(genText);
                 const match = halfWidthText.match(/第(\d+)世代/);
                 generationValue = (match && match[1]) ? `第${toKanjiNumber(parseInt(match[1], 10))}世代` : genText;
@@ -163,8 +163,8 @@ module.exports = {
             const emojiRegex = /[\p{Emoji_Presentation}\p{Emoji}\p{Emoji_Modifier_Base}\p{Emoji_Modifier}\p{Emoji_Component}]/gu;
             let titleValue = 'なし';
             if (titleData.length > 0) {
-                // 【最終修正】新しく定義した専用関数を使用
-                const topThreeTitles = titleData.slice(0, 3).map(item => convertNumbersToHalfWidth(item.title).replace(emojiRegex, '').trim());
+                // 【修正】convertNumbersToHalfWidth の呼び出しを削除
+                const topThreeTitles = titleData.slice(0, 3).map(item => item.title.replace(emojiRegex, '').trim());
                 titleValue = formatTitles(topThreeTitles);
                 if (titleData.length > 3) {
                     titleValue += `、他${titleData.length - 3}個`;
@@ -182,15 +182,22 @@ module.exports = {
 
             const dummyCanvas = createCanvas(1, 1);
             const dummyCtx = dummyCanvas.getContext('2d');
+            
+            // --- 【修正】動的な高さ計算 ---
             dummyCtx.font = '22px "Noto Sans CJK JP"';
+            
+            const titleLineHeight = 35;
+            const titleMaxLines = 3;
+            // 称号の実際の行数を計算
+            const titleLineCount = wrapText(dummyCtx, titleValue, 0, 0, 550, titleLineHeight, titleMaxLines);
             
             const descriptionLineHeight = 32;
             const descriptionMaxLines = 4;
-
             const descriptionLineCount = wrapText(dummyCtx, finalDescription, 0, 0, 934 - 80, descriptionLineHeight, descriptionMaxLines);
             const descriptionBlockHeight = descriptionLineCount > 0 ? (descriptionLineCount * descriptionLineHeight) : descriptionLineHeight;
 
-            const topSectionHeight = 340;
+            // 称号が3行の場合の高さを基準とし、行数が少ない分だけ高さを減らす
+            const topSectionHeight = 340 - ((titleMaxLines - titleLineCount) * titleLineHeight);
             const separatorPadding = 25;
             const bottomMargin = 40;
 
