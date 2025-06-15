@@ -23,10 +23,10 @@ function wrapText(context, text, x, y, maxWidth, lineHeight, maxLines) {
     const lines = text.split('\n');
     let lineCount = 0;
     for (const line of lines) {
-        if (maxLines && lineCount >= maxLines) break;
+        if (maxLines && lineCount >= maxLines) return lineCount; // 行数制限を超えたら終了
         let currentLine = '';
         const words = line.split('');
-        for(let n = 0; n < words.length; n++) {
+        for (let n = 0; n < words.length; n++) {
             const testLine = currentLine + words[n];
             const metrics = context.measureText(testLine);
             if (metrics.width > maxWidth && n > 0) {
@@ -34,7 +34,7 @@ function wrapText(context, text, x, y, maxWidth, lineHeight, maxLines) {
                 currentLine = words[n];
                 y += lineHeight;
                 lineCount++;
-                 if (maxLines && lineCount >= maxLines) return lineCount;
+                if (maxLines && lineCount >= maxLines) return lineCount;
             } else {
                 currentLine = testLine;
             }
@@ -114,8 +114,9 @@ module.exports = {
             const birthplaceValue = getNotionPropertyText(props['出身地']);
             const communityNames = await getNotionRelationTitles(notion, props['界隈']);
             const communityValue = communityNames.length > 0 ? communityNames.join(', ') : '不明';
-            const hazardNames = await getNotionRelationTitles(notion, props['危険等級']);
-            const hazardValue = hazardNames.length > 0 ? hazardNames.join(', ') : 'なし';
+            const hazardValue = await getNotionRelationTitles(notion, props['危険等級']);
+            const hazardValueText = hazardValue.length > 0 ? hazardValue.join(', ') : 'なし';
+
 
             const titleData = await getNotionRelationData(notion, props['称号'], '開催日');
             titleData.sort((a, b) => new Date(b.date) - new Date(a.date));
@@ -142,7 +143,7 @@ module.exports = {
             dummyCtx.font = '22px "Noto Sans CJK JP"';
             const baseHeight = 350;
             const lineHeight = 30;
-            let lineCount = wrapText(dummyCtx, finalDescription, 0, 0, 934 - 40 * 2, lineHeight);
+            let lineCount = wrapText(dummyCtx, finalDescription, 0, 0, 934 - 40 * 2, lineHeight, 2);
             const descriptionHeight = lineCount * lineHeight;
             const canvasHeight = baseHeight + descriptionHeight;
             
@@ -171,8 +172,8 @@ module.exports = {
             ctx.fill();
             
             const avatarSize = 150;
-            const avatarX = margin + 40;
-            const avatarY = margin + 30;
+            const avatarX = margin + 45;
+            const avatarY = margin + 40;
             ctx.save();
             ctx.beginPath();
             ctx.arc(avatarX + avatarSize / 2, avatarY + avatarSize / 2, avatarSize / 2, 0, Math.PI * 2, true);
@@ -188,8 +189,8 @@ module.exports = {
             ctx.lineWidth = 10;
             ctx.stroke();
 
-            ctx.fillStyle = '#FFFFFF';
             const contentStartX = avatarX + avatarSize + 50;
+            ctx.fillStyle = '#FFFFFF';
 
             // 名前
             ctx.font = 'bold 42px "Noto Sans CJK JP"';
@@ -198,10 +199,9 @@ module.exports = {
             // 詳細情報 (3列レイアウト)
             ctx.font = '22px "Noto Sans CJK JP"';
             const detailY = 145;
-            const detailLineHeight = 35;
+            const detailLineHeight = 38;
             const col1X = contentStartX;
-            const col2X = contentStartX + 220;
-            const col3X = contentStartX + 440;
+            const col2X = col1X + 250;
             
             ctx.fillText(`世代: ${generationValue}`, col1X, detailY);
             ctx.fillText(`性別: ${genderValue === 'N/A' ? '不明' : genderValue}`, col1X, detailY + detailLineHeight);
@@ -209,13 +209,14 @@ module.exports = {
 
             ctx.fillText(`出身地: ${birthplaceValue === 'N/A' ? '不明' : birthplaceValue}`, col2X, detailY);
             ctx.fillText(`界隈: ${communityValue}`, col2X, detailY + detailLineHeight);
-            ctx.fillText(`危険等級: ${hazardValue}`, col2X, detailY + detailLineHeight * 2);
-            
-            const titleY = detailY + detailLineHeight * 3 + 10;
+            ctx.fillText(`危険等級: ${hazardValueText}`, col2X, detailY + detailLineHeight * 2);
+
+            // 称号
+            const titleY = detailY + detailLineHeight * 3 + 15;
             ctx.font = 'bold 22px "Noto Sans CJK JP"';
             ctx.fillText('称号:', col1X, titleY);
             ctx.font = '22px "Noto Sans CJK JP"';
-            wrapText(ctx, titleValue, col1X, titleY + 35, 600, 35, 3);
+            wrapText(ctx, titleValue, col1X + 70, titleY, 550, 35, 3);
             
             const separatorY = canvas.height - margin - 50 - descriptionHeight;
             ctx.strokeStyle = '#555';
