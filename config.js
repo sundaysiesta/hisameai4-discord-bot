@@ -16,18 +16,18 @@ module.exports = {
     RESTART_NOTIFICATION_CHANNEL_ID: '1369627467991486605',
     NOTION_DATABASE_ID: process.env.NOTION_DATABASE_ID,
     NOTION_API_KEY: process.env.NOTION_API_KEY,
-    // 【追加】レベルアップ通知チャンネル
-    LEVEL_UP_NOTIFICATION_CHANNEL_ID: '1376067780939612170',
-    // レベル機能設定
-    TEXT_XP_COOLDOWN: 2 * 60 * 1000,
-    VOICE_XP_COOLDOWN: 2 * 60 * 1000,
-    VOICE_XP_AMOUNT: 10,
-    MIN_TEXT_XP: 10,
-    MAX_TEXT_XP: 40,
-    // トレンド機能設定
-    TREND_WORD_COOLDOWN: 2 * 60 * 1000,
+    
+    // クールダウンを延長
+    TEXT_XP_COOLDOWN: 5 * 60 * 1000,    // 5分
+    VOICE_XP_COOLDOWN: 5 * 60 * 1000,   // 5分
+    TREND_WORD_COOLDOWN: 5 * 60 * 1000, // 5分
+
+    // 【最重要修正】クールダウン延長に合わせて獲得XP量を調整
+    VOICE_XP_AMOUNT: 25,     // 10 -> 25
+    MIN_TEXT_XP: 25,       // 10 -> 25
+    MAX_TEXT_XP: 100,      // 40 -> 100
+
     TREND_WORD_LIFESPAN: 24 * 60 * 60 * 1000,
-    // 共通設定
     PHRASES_TO_COMBINE: ['確認してください', 'よろしくお願いします'],
     STOP_WORDS: new Set([
         'する', 'いる', 'なる', 'れる', 'ある', 'ない', 'です', 'ます', 'こと', 'もの',

@@ -1,7 +1,6 @@
 const { ChannelType } = require('discord.js');
 const config = require('../config');
 
-// ロック用のSetを作成
 const levelUpLocks = new Set();
 
 async function postStickyMessage(client, channel, stickyCustomId, createMessagePayload) {
@@ -62,9 +61,8 @@ function getGenerationRoleName(generationText) {
     }
     return roman;
 }
-
 const generateTextXpTable = (maxLevel) => {
-    const table = [0]; // Level 0
+    const table = [0];
     let xpForNextLevel = 35; 
     let increaseAmount = 68;
     let totalXp = 0;
@@ -76,9 +74,7 @@ const generateTextXpTable = (maxLevel) => {
     }
     return table;
 };
-
 const textXpTable = generateTextXpTable(100);
-
 function calculateTextLevel(xp) {
     if (xp <= 0) return 0;
     for (let i = textXpTable.length - 1; i >= 0; i--) {
@@ -88,7 +84,6 @@ function calculateTextLevel(xp) {
     }
     return 0;
 }
-
 function getXpForTextLevel(level) {
     if (level < 0) return 0;
     if (level >= textXpTable.length) {
@@ -98,7 +93,6 @@ function getXpForTextLevel(level) {
     }
     return textXpTable[level];
 }
-
 function calculateVoiceLevel(xp) {
     if (xp <= 0) return 0;
     let level = 0;
@@ -110,10 +104,9 @@ function calculateVoiceLevel(xp) {
         }
         cumulativeXp += requiredForNext;
         level++;
-         if (level > 200) return 200; // 安全停止
+         if (level > 200) return 200;
     }
 }
-
 function getXpForVoiceLevel(level) {
     let totalXp = 0;
     for (let i = 0; i < level; i++) {
@@ -121,61 +114,93 @@ function getXpForVoiceLevel(level) {
     }
     return totalXp;
 }
-
-// 【最重要修正】レベルロールの更新ロジックを全面的に改善
+function getRankInfo(level) {
+    if (level <= 0) return { title: null, level: 0 };
+    if (level >= 100) return { title: 'LEGEND', level: 100 };
+    if (level >= 95) return { title: 'ULTIMATE MASTER II', level: 95 };
+    if (level >= 90) return { title: 'ULTIMATE MASTER I', level: 90 };
+    if (level >= 85) return { title: 'GRAND MASTER II', level: 85 };
+    if (level >= 80) return { title: 'GRAND MASTER I', level: 80 };
+    if (level >= 75) return { title: 'HIGH MASTER II', level: 75 };
+    if (level >= 70) return { title: 'HIGH MASTER I', level: 70 };
+    if (level >= 65) return { title: 'MASTER II', level: 65 };
+    if (level >= 60) return { title: 'MASTER I', level: 60 };
+    if (level >= 55) return { title: 'DIAMOND II', level: 55 };
+    if (level >= 50) return { title: 'DIAMOND I', level: 50 };
+    if (level >= 45) return { title: 'PLATINUM II', level: 45 };
+    if (level >= 40) return { title: 'PLATINUM I', level: 40 };
+    if (level >= 35) return { title: 'GOLD II', level: 35 };
+    if (level >= 30) return { title: 'GOLD I', level: 30 };
+    if (level >= 25) return { title: 'SILVER II', level: 25 };
+    if (level >= 20) return { title: 'SILVER I', level: 20 };
+    if (level >= 15) return { title: 'BRONZE II', level: 15 };
+    if (level >= 10) return { title: 'BRONZE I', level: 10 };
+    if (level >= 5) return { title: 'IRON', level: level };
+    if (level >= 1) return { title: 'ROOKIE', level: level };
+    return { title: null, level: 0 };
+}
 async function updateLevelRoles(member, redis, client) {
     if (!member || !redis || !client) return;
-    
     const mainAccountId = await redis.hget(`user:${member.id}`, 'mainAccountId') || member.id;
-
     if (levelUpLocks.has(mainAccountId)) return;
     levelUpLocks.add(mainAccountId);
-
     try {
         const mainMember = await member.guild.members.fetch(mainAccountId).catch(() => null);
         if (!mainMember) return;
-        
         const textXp = await redis.hget(`user:${mainAccountId}`, 'textXp') || 0;
         const voiceXp = await redis.hget(`user:${mainAccountId}`, 'voiceXp') || 0;
         const textLevel = calculateTextLevel(textXp);
         const voiceLevel = calculateVoiceLevel(voiceXp);
         const newLevel = Math.max(textLevel, voiceLevel);
-
-        const levelRoleRegex = /^Lv\.(\d+)$/;
-        const currentLevelRoles = mainMember.roles.cache.filter(role => levelRoleRegex.test(role.name));
-        const targetRole = mainMember.guild.roles.cache.find(role => role.name === `Lv.${newLevel}`);
-        
+        const rankInfo = getRankInfo(newLevel);
+        if (!rankInfo.title) {
+            const currentLevelRoles = mainMember.roles.cache.filter(role => role.name.includes('Lv.'));
+            if (currentLevelRoles.size > 0) await mainMember.roles.remove(currentLevelRoles);
+            return;
+        }
+        const targetRoleName = `${rankInfo.title} Lv.${rankInfo.level}`;
+        const targetRole = mainMember.guild.roles.cache.find(r => r.name === targetRoleName);
+        const allTitleRanks = ['ROOKIE', 'IRON', 'BRONZE', 'SILVER', 'GOLD', 'PLATINUM', 'DIAMOND', 'MASTER', 'HIGH', 'GRAND', 'ULTIMATE', 'LEGEND'];
+        const currentLevelRoles = mainMember.roles.cache.filter(role => allTitleRanks.some(title => role.name.startsWith(title)) && role.name.includes('Lv.'));
         const rolesToRemove = currentLevelRoles.filter(r => r.id !== targetRole?.id);
         const shouldAddRole = targetRole && !mainMember.roles.cache.has(targetRole.id);
-
-        if (rolesToRemove.size > 0) {
-            await mainMember.roles.remove(rolesToRemove);
-        }
-        if (shouldAddRole) {
-            await mainMember.roles.add(targetRole);
-        }
-
-        // 【修正】レベルアップ通知ロジックを完全に削除
-
+        if (rolesToRemove.size > 0) await mainMember.roles.remove(rolesToRemove);
+        if (shouldAddRole) await mainMember.roles.add(targetRole);
     } catch (error) {
         console.error(`Failed to update level roles for ${member.id}:`, error);
     } finally {
         levelUpLocks.delete(mainAccountId);
     }
 }
-
 async function safeIncrby(redis, key, value) {
-    try {
-        return await redis.incrby(key, value);
-    } catch (e) {
+    try { return await redis.incrby(key, value); }
+    catch (e) {
         if (e.message.includes("WRONGTYPE")) {
             console.log(`Fixing corrupted key ${key}. Deleting and recreating.`);
             await redis.del(key);
             return await redis.incrby(key, value);
-        } else {
-            throw e;
-        }
+        } else { throw e; }
     }
 }
+function toKanjiNumber(num) {
+    const kanjiDigits = ['〇', '一', '二', '三', '四', '五', '六', '七', '八', '九'];
+    const kanjiUnits = ['', '十', '百', '千'];
+    if (num === 0) return kanjiDigits[0];
+    let result = '';
+    const sNum = String(num);
+    for (let i = 0; i < sNum.length; i++) {
+        const digit = parseInt(sNum[i]);
+        const unit = kanjiUnits[sNum.length - 1 - i];
+        if (digit > 0) {
+            if (digit === 1 && unit && (sNum.length - 1 - i) > 0) {
+                result += unit;
+            } else {
+                result += kanjiDigits[digit] + (unit || '');
+            }
+        }
+    }
+    return result;
+}
 
-module.exports = { postStickyMessage, sortClubChannels, getGenerationRoleName, calculateTextLevel, getXpForTextLevel, calculateVoiceLevel, getXpForVoiceLevel, updateLevelRoles, safeIncrby };
+// 【最重要修正】toHalfWidthをエクスポートリストに追加
+module.exports = { postStickyMessage, sortClubChannels, getGenerationRoleName, calculateTextLevel, getXpForTextLevel, calculateVoiceLevel, getXpForVoiceLevel, updateLevelRoles, safeIncrby, toKanjiNumber, toHalfWidth };

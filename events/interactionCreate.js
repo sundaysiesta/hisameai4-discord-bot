@@ -1,6 +1,6 @@
 const { Events, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, WebhookClient, PermissionsBitField, ChannelType, ButtonBuilder, ButtonStyle, MessageFlags } = require('discord.js');
 const config = require('../config.js');
-const { postStickyMessage } = require('../utils/utility.js');
+const { postStickyMessage } = require('../utils/utility.js'); // postStickyMessageをインポート
 
 const cooldowns = new Map();
 const webhookClient = new WebhookClient({ url: config.ANONYMOUS_WEBHOOK_URL });
