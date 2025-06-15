@@ -1,10 +1,13 @@
 const { SlashCommandBuilder, AttachmentBuilder } = require('discord.js');
 const { createCanvas, loadImage } = require('canvas');
-const { getGenerationRoleName, toKanjiNumber, toHalfWidth } = require('../utils/utility.js');
-// 【最重要修正】getNotionRelationTitlesをインポートリストに追加
+// 【修正】toHalfWidth のインポートを削除
+const { getGenerationRoleName, toKanjiNumber } = require('../utils/utility.js');
 const { notion, getNotionPropertyText, getNotionRelationTitles, getNotionRelationData } = require('../utils/notionHelpers.js');
 const config = require('../config.js');
 
+/**
+ * 角丸の四角形を描画するヘルパー関数
+ */
 function drawRoundRect(ctx, x, y, width, height, radius) {
     ctx.beginPath();
     ctx.moveTo(x + radius, y);
@@ -19,33 +22,46 @@ function drawRoundRect(ctx, x, y, width, height, radius) {
     ctx.closePath();
 }
 
+/**
+ * テキストを折り返して描画するヘルパー関数
+ */
 function wrapText(context, text, x, y, maxWidth, lineHeight, maxLines) {
+    const isDummyRun = typeof context.fillText !== 'function';
     const lines = text.split('\n');
     let lineCount = 0;
+
     for (const line of lines) {
-        if (maxLines && lineCount >= maxLines) return lineCount; // 行数制限を超えたら終了
+        if (maxLines && lineCount >= maxLines) break;
         let currentLine = '';
         const words = line.split('');
         for (let n = 0; n < words.length; n++) {
             const testLine = currentLine + words[n];
             const metrics = context.measureText(testLine);
             if (metrics.width > maxWidth && n > 0) {
-                context.fillText(currentLine, x, y);
+                if (!isDummyRun) context.fillText(currentLine, x, y);
                 currentLine = words[n];
                 y += lineHeight;
                 lineCount++;
-                if (maxLines && lineCount >= maxLines) return lineCount;
+                if (maxLines && lineCount >= maxLines) {
+                    currentLine = ''; 
+                    break;
+                }
             } else {
                 currentLine = testLine;
             }
         }
-        context.fillText(currentLine, x, y);
-        y += lineHeight;
-        lineCount++;
+        if (currentLine) {
+             if (!isDummyRun) context.fillText(currentLine, x, y);
+             y += lineHeight;
+             lineCount++;
+        }
     }
     return lineCount;
 }
 
+/**
+ * 称号の配列をフォーマットするヘルパー関数
+ */
 function formatTitles(titles) {
     let formattedString = "";
     for (let i = 0; i < titles.length; i++) {
@@ -57,6 +73,20 @@ function formatTitles(titles) {
         }
     }
     return formattedString;
+}
+
+/**
+ * 【新規追加】このファイル専用の、信頼性の高い数字変換関数
+ * @param {string} str 変換する文字列
+ * @returns {string} 変換後の文字列
+ */
+function convertNumbersToHalfWidth(str) {
+    if (typeof str !== 'string') return '';
+    const fullWidthMap = {
+        '０': '0', '１': '1', '２': '2', '３': '3', '４': '4',
+        '５': '5', '６': '6', '７': '7', '８': '8', '９': '9'
+    };
+    return str.replace(/[０-９]/g, (match) => fullWidthMap[match]);
 }
 
 module.exports = {
@@ -74,6 +104,7 @@ module.exports = {
         let targetUser;
 
         try {
+            // Notionからユーザーデータを取得
             if (nameOption) {
                 const response = await notion.databases.query({ database_id: config.NOTION_DATABASE_ID, filter: { property: '名前', title: { equals: nameOption } } });
                 if (response.results.length === 0) return interaction.editReply(`名前「${nameOption}」のプロフィールは見つかりませんでした。`);
@@ -89,13 +120,15 @@ module.exports = {
 
             const props = notionPage.properties;
             
+            // プロフィール情報の整形
             const nameValue = getNotionPropertyText(props['名前']);
             
             const generationNames = await getNotionRelationData(notion, props['世代']);
             let generationValue = '不明';
             if (generationNames.length > 0 && generationNames[0]?.title) {
                 const genText = generationNames[0].title;
-                const halfWidthText = toHalfWidth(genText);
+                // 【修正】新しく定義した専用関数を使用
+                const halfWidthText = convertNumbersToHalfWidth(genText);
                 const match = halfWidthText.match(/第(\d+)世代/);
                 generationValue = (match && match[1]) ? `第${toKanjiNumber(parseInt(match[1], 10))}世代` : genText;
             }
@@ -123,7 +156,8 @@ module.exports = {
             const emojiRegex = /[\p{Emoji_Presentation}\p{Emoji}\p{Emoji_Modifier_Base}\p{Emoji_Modifier}\p{Emoji_Component}]/gu;
             let titleValue = 'なし';
             if (titleData.length > 0) {
-                const topThreeTitles = titleData.slice(0, 3).map(item => item.title.replace(emojiRegex, '').trim());
+                // 【修正】新しく定義した専用関数を使用
+                const topThreeTitles = titleData.slice(0, 3).map(item => convertNumbersToHalfWidth(item.title).replace(emojiRegex, '').trim());
                 titleValue = formatTitles(topThreeTitles);
                 if (titleData.length > 3) {
                     titleValue += `、他${titleData.length - 3}個`;
@@ -139,14 +173,22 @@ module.exports = {
                 finalDescription = tempDescriptionValue;
             }
 
-            const dummyCtx = createCanvas(1, 1).getContext('2d');
+            const dummyCanvas = createCanvas(1, 1);
+            const dummyCtx = dummyCanvas.getContext('2d');
             dummyCtx.font = '22px "Noto Sans CJK JP"';
-            const baseHeight = 350;
-            const lineHeight = 30;
-            let lineCount = wrapText(dummyCtx, finalDescription, 0, 0, 934 - 40 * 2, lineHeight, 2);
-            const descriptionHeight = lineCount * lineHeight;
-            const canvasHeight = baseHeight + descriptionHeight;
             
+            const descriptionLineHeight = 32;
+            const descriptionMaxLines = 4;
+
+            const descriptionLineCount = wrapText(dummyCtx, finalDescription, 0, 0, 934 - 80, descriptionLineHeight, descriptionMaxLines);
+            const descriptionBlockHeight = descriptionLineCount > 0 ? (descriptionLineCount * descriptionLineHeight) : descriptionLineHeight;
+
+            const topSectionHeight = 340;
+            const separatorPadding = 25;
+            const bottomMargin = 40;
+
+            const canvasHeight = topSectionHeight + separatorPadding + 1 + separatorPadding + descriptionBlockHeight + bottomMargin;
+
             const canvas = createCanvas(934, canvasHeight);
             const ctx = canvas.getContext('2d');
             
@@ -164,7 +206,7 @@ module.exports = {
                 ctx.fillStyle = '#000000';
                 ctx.fillRect(0, 0, canvas.width, canvas.height);
             }
-
+            
             const margin = 20;
             const panelRadius = 25;
             ctx.fillStyle = 'rgba(35, 39, 42, 0.85)';
@@ -192,11 +234,9 @@ module.exports = {
             const contentStartX = avatarX + avatarSize + 50;
             ctx.fillStyle = '#FFFFFF';
 
-            // 名前
             ctx.font = 'bold 42px "Noto Sans CJK JP"';
             ctx.fillText(nameValue, contentStartX, 85);
 
-            // 詳細情報 (3列レイアウト)
             ctx.font = '22px "Noto Sans CJK JP"';
             const detailY = 145;
             const detailLineHeight = 38;
@@ -211,14 +251,13 @@ module.exports = {
             ctx.fillText(`界隈: ${communityValue}`, col2X, detailY + detailLineHeight);
             ctx.fillText(`危険等級: ${hazardValueText}`, col2X, detailY + detailLineHeight * 2);
 
-            // 称号
             const titleY = detailY + detailLineHeight * 3 + 15;
             ctx.font = 'bold 22px "Noto Sans CJK JP"';
             ctx.fillText('称号:', col1X, titleY);
             ctx.font = '22px "Noto Sans CJK JP"';
             wrapText(ctx, titleValue, col1X + 70, titleY, 550, 35, 3);
             
-            const separatorY = canvas.height - margin - 50 - descriptionHeight;
+            const separatorY = topSectionHeight + separatorPadding;
             ctx.strokeStyle = '#555';
             ctx.lineWidth = 1;
             ctx.beginPath();
@@ -227,7 +266,8 @@ module.exports = {
             ctx.stroke();
 
             ctx.font = '22px "Noto Sans CJK JP"';
-            wrapText(ctx, finalDescription, margin + 40, separatorY + 20, canvas.width - (margin * 2) - 80, lineHeight);
+            const descriptionY = separatorY + separatorPadding;
+            wrapText(ctx, finalDescription, margin + 40, descriptionY, canvas.width - (margin * 2) - 80, descriptionLineHeight, descriptionMaxLines);
 
             const attachment = new AttachmentBuilder(canvas.toBuffer(), { name: 'profile-card.png' });
             await interaction.editReply({ files: [attachment] });
