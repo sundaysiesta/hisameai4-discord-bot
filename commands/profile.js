@@ -1,6 +1,6 @@
 const { SlashCommandBuilder, AttachmentBuilder } = require('discord.js');
 const { createCanvas, loadImage } = require('canvas');
-// 【修正】toHalfWidth のインポートを削除
+// utility.js からの toHalfWidth のインポートは削除
 const { getGenerationRoleName, toKanjiNumber } = require('../utils/utility.js');
 const { notion, getNotionPropertyText, getNotionRelationTitles, getNotionRelationData } = require('../utils/notionHelpers.js');
 const config = require('../config.js');
@@ -76,17 +76,24 @@ function formatTitles(titles) {
 }
 
 /**
- * 【新規追加】このファイル専用の、信頼性の高い数字変換関数
+ * 【最終修正】このファイル専用の、最も確実な数字変換関数
  * @param {string} str 変換する文字列
  * @returns {string} 変換後の文字列
  */
 function convertNumbersToHalfWidth(str) {
     if (typeof str !== 'string') return '';
-    const fullWidthMap = {
-        '０': '0', '１': '1', '２': '2', '３': '3', '４': '4',
-        '５': '5', '６': '6', '７': '7', '８': '8', '９': '9'
-    };
-    return str.replace(/[０-９]/g, (match) => fullWidthMap[match]);
+    // １文字ずつ、確実に置換する
+    return str
+        .replace(/０/g, '0')
+        .replace(/１/g, '1')
+        .replace(/２/g, '2')
+        .replace(/３/g, '3')
+        .replace(/４/g, '4')
+        .replace(/５/g, '5')
+        .replace(/６/g, '6')
+        .replace(/７/g, '7')
+        .replace(/８/g, '8')
+        .replace(/９/g, '9');
 }
 
 module.exports = {
@@ -127,7 +134,7 @@ module.exports = {
             let generationValue = '不明';
             if (generationNames.length > 0 && generationNames[0]?.title) {
                 const genText = generationNames[0].title;
-                // 【修正】新しく定義した専用関数を使用
+                // 【最終修正】新しく定義した専用関数を使用
                 const halfWidthText = convertNumbersToHalfWidth(genText);
                 const match = halfWidthText.match(/第(\d+)世代/);
                 generationValue = (match && match[1]) ? `第${toKanjiNumber(parseInt(match[1], 10))}世代` : genText;
@@ -156,7 +163,7 @@ module.exports = {
             const emojiRegex = /[\p{Emoji_Presentation}\p{Emoji}\p{Emoji_Modifier_Base}\p{Emoji_Modifier}\p{Emoji_Component}]/gu;
             let titleValue = 'なし';
             if (titleData.length > 0) {
-                // 【修正】新しく定義した専用関数を使用
+                // 【最終修正】新しく定義した専用関数を使用
                 const topThreeTitles = titleData.slice(0, 3).map(item => convertNumbersToHalfWidth(item.title).replace(emojiRegex, '').trim());
                 titleValue = formatTitles(topThreeTitles);
                 if (titleData.length > 3) {
