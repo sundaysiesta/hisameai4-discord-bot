@@ -145,7 +145,7 @@ async function updatePermanentRankings(guild, redis) {
             if (wordsToKeep.length > 0) await redis.lpush('trend_words', ...wordsToKeep);
         }
         const trendRanking = Object.entries(wordData).map(([word, data]) => ({ word: word, score: data.count * data.users.size })).sort((a, b) => b.score - a.score).slice(0, 20);
-        const trendEmbed = new EmbedBuilder().setTitle('サーバー内トレンド (過去24時間)').setColor(0x1DA1F2).setTimestamp();
+        const trendEmbed = new EmbedBuilder().setTitle('サーバー内トレンド (過去6時間)').setColor(0x1DA1F2).setTimestamp();
         if (trendRanking.length === 0) {
             trendEmbed.setDescription('現在、トレンドはありません。');
         } else {
