@@ -162,30 +162,29 @@ module.exports = {
             const savedStatus = await redis.get('bot_status_text');
             if (savedStatus) client.user.setActivity(savedStatus, { type: ActivityType.Playing });
 
-            // 【修正】再起動通知をEmbed形式に変更し、Gitのコミット情報を含める
+            // 【修正】再起動通知のメッセージを修正
             const notificationChannel = await client.channels.fetch(config.RESTART_NOTIFICATION_CHANNEL_ID).catch(() => null);
             if (notificationChannel) {
-                const commitHash = process.env.GIT_COMMIT_SHA || '不明';
-                // GitHubリポジトリのURLをハードコード（必要に応じて変更してください）
+                // 環境変数名をAPP_COMMIT_SHAに変更
+                const commitHash = process.env.APP_COMMIT_SHA || '不明';
                 const repoUrl = 'https://github.com/sundaysiesta/hisameai4-discord-bot';
                 
                 const embed = new EmbedBuilder()
-                    .setTitle('🤖 Botが再起動しました')
+                    // タイトルの文言を変更
+                    .setTitle('🤖 再起動しました。確認してください。')
                     .setColor(0x3498DB)
-                    .setDescription('新しいバージョンがデプロイされました。')
+                    // 説明文を削除
                     .setTimestamp();
                 
                 if (commitHash !== '不明' && commitHash.length >= 7) {
-                    // コミットハッシュへのリンクをフィールドに追加
-                    embed.addFields({ name: '現在のバージョン (コミット)', value: `[${commitHash.substring(0, 7)}](${repoUrl}/commit/${commitHash})` });
+                    embed.addFields({ name: '現在のバージョン', value: `[${commitHash.substring(0, 7)}](${repoUrl}/commit/${commitHash})` });
                 } else {
-                    embed.addFields({ name: '現在のバージョン (コミット)', value: '`不明`' });
+                    embed.addFields({ name: '現在のバージョン', value: '`不明`' });
                 }
 
                 await notificationChannel.send({ embeds: [embed] });
             }
             
-            // 既存の初期化処理
             const anonyChannel = await client.channels.fetch(config.ANONYMOUS_CHANNEL_ID).catch(() => null);
             if (anonyChannel) await postStickyMessage(client, anonyChannel, config.STICKY_BUTTON_ID, { components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(config.STICKY_BUTTON_ID).setLabel('書き込む').setStyle(ButtonStyle.Success).setEmoji('✍️'))] });
             const panelChannel = await client.channels.fetch(config.CLUB_PANEL_CHANNEL_ID).catch(() => null);
@@ -194,7 +193,7 @@ module.exports = {
             if (!counterExists) await redis.set('anonymous_message_counter', 216);
         } catch (error) { console.error('起動時の初期化処理でエラー:', error); }
 
-        cron.schedule(config.RANKING_UPDATE_INTERVAL, async () => {
+        cron.schedule('*/15 * * * *', async () => {
             const guild = client.guilds.cache.first();
             if (!guild) return;
             const voiceStates = guild.voiceStates.cache;
