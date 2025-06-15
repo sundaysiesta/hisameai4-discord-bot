@@ -20,11 +20,7 @@ jobs:
       - uses: superfly/flyctl-actions/setup-flyctl@master
 
       # 【ここから修正】
-      # 手順1: コミット情報をFly.ioのSecretに設定する
-      - name: Set Commit SHA as Fly.io Secret
-        run: flyctl secrets set APP_COMMIT_SHA=${{ github.sha }} --app hisameai-mark-4
-        env:
-          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      # flyctl secrets set のステップを削除
 
       # 手順2: Fly.ioへデプロイする (--envフラグは削除)
       - name: Deploy to Fly
