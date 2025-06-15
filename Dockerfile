@@ -1,3 +1,4 @@
+ARG GIT_COMMIT_SHA
 # Node.jsの公式イメージをベースにする
 FROM node:18-slim
 
@@ -24,5 +25,6 @@ RUN npm ci --only=production
 # Botの全ソースコードを作業場所にコピー
 COPY . .
 
+ENV GIT_COMMIT_SHA=$GIT_COMMIT_SHA
 # Botを起動するコマンド
 CMD ["node", "index.js"]

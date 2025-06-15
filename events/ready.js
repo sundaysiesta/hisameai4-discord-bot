@@ -35,7 +35,6 @@ async function updatePermanentRankings(guild, redis) {
     try {
         const now = new Date();
         const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-        // 【修正】タイトルに表示する日付文字列を生成
         const titleDate = `${firstDayOfMonth.getMonth() + 1}月${firstDayOfMonth.getDate()}日〜`;
         const monthKey = now.toISOString().slice(0, 7);
 
@@ -69,7 +68,6 @@ async function updatePermanentRankings(guild, redis) {
         let textDesc = top20Text.map((u, i) => `**${i+1}位:** <@${u.userId}> - Lv.${calculateTextLevel(u.xp)} (${u.xp} XP)`).join('\n') || 'まだ誰もXPを獲得していません。';
         let voiceDesc = top20Voice.map((u, i) => `**${i+1}位:** <@${u.userId}> - Lv.${calculateVoiceLevel(u.xp)} (${u.xp} XP)`).join('\n') || 'まだ誰もXPを獲得していません。';
 
-        // 【修正】生成した日付文字列をタイトルに含める
         const levelEmbed = new EmbedBuilder().setTitle(`月間レベルランキング (${titleDate})`).setColor(0xFFD700).addFields(
             { name: '💬 テキスト', value: textDesc, inline: true },
             { name: '🎤 ボイス', value: voiceDesc, inline: true }
@@ -163,8 +161,31 @@ module.exports = {
         try {
             const savedStatus = await redis.get('bot_status_text');
             if (savedStatus) client.user.setActivity(savedStatus, { type: ActivityType.Playing });
+
+            // 【修正】再起動通知をEmbed形式に変更し、Gitのコミット情報を含める
             const notificationChannel = await client.channels.fetch(config.RESTART_NOTIFICATION_CHANNEL_ID).catch(() => null);
-            if (notificationChannel) await notificationChannel.send('再起動しました。確認してください。');
+            if (notificationChannel) {
+                const commitHash = process.env.GIT_COMMIT_SHA || '不明';
+                // GitHubリポジトリのURLをハードコード（必要に応じて変更してください）
+                const repoUrl = 'https://github.com/sundaysiesta/hisameai4-discord-bot';
+                
+                const embed = new EmbedBuilder()
+                    .setTitle('🤖 Botが再起動しました')
+                    .setColor(0x3498DB)
+                    .setDescription('新しいバージョンがデプロイされました。')
+                    .setTimestamp();
+                
+                if (commitHash !== '不明' && commitHash.length >= 7) {
+                    // コミットハッシュへのリンクをフィールドに追加
+                    embed.addFields({ name: '現在のバージョン (コミット)', value: `[${commitHash.substring(0, 7)}](${repoUrl}/commit/${commitHash})` });
+                } else {
+                    embed.addFields({ name: '現在のバージョン (コミット)', value: '`不明`' });
+                }
+
+                await notificationChannel.send({ embeds: [embed] });
+            }
+            
+            // 既存の初期化処理
             const anonyChannel = await client.channels.fetch(config.ANONYMOUS_CHANNEL_ID).catch(() => null);
             if (anonyChannel) await postStickyMessage(client, anonyChannel, config.STICKY_BUTTON_ID, { components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(config.STICKY_BUTTON_ID).setLabel('書き込む').setStyle(ButtonStyle.Success).setEmoji('✍️'))] });
             const panelChannel = await client.channels.fetch(config.CLUB_PANEL_CHANNEL_ID).catch(() => null);
