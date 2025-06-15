@@ -7,6 +7,24 @@ const textXpCooldowns = new Map();
 const trendCooldowns = new Map();
 const segmenter = new TinySegmenter();
 
+// メモリリーク防止のためのクリーンアップ関数
+function cleanupCooldowns() {
+    const now = Date.now();
+    for (const [userId, timestamp] of textXpCooldowns.entries()) {
+        if (now - timestamp > config.TEXT_XP_COOLDOWN * 2) {
+            textXpCooldowns.delete(userId);
+        }
+    }
+    for (const [userId, timestamp] of trendCooldowns.entries()) {
+        if (now - timestamp > config.TREND_WORD_COOLDOWN * 2) {
+            trendCooldowns.delete(userId);
+        }
+    }
+}
+
+// 5分ごとにクリーンアップを実行
+setInterval(cleanupCooldowns, 5 * 60 * 1000);
+
 module.exports = {
 	name: Events.MessageCreate,
 	async execute(message, redis, notion) {
@@ -46,35 +64,42 @@ module.exports = {
 
         // --- トレンド単語集計処理 ---
         try {
-            const lastTrendTime = await redis.get(`trend_cooldown:${userId}`);
-            if (!lastTrendTime || (now - Number(lastTrendTime) > config.TREND_WORD_COOLDOWN)) {
-                const isExcludedChannel = config.EXCLUDED_CHANNELS.includes(message.channel.id) || message.channel.parentId === config.WORDCLOUD_EXCLUDED_CATEGORY_ID;
-                const hasExcludedRole = message.member && message.member.roles.cache.has(config.XP_EXCLUDED_ROLE_ID);
-                if (message.content && !isExcludedChannel && !hasExcludedRole) {
-                     const cleanContent = message.content.replace(/<@!?&?(\d{17,19})>|<#(\d{17,19})>|<a?:[a-zA-Z0-9_]+:(\d{17,19})>|https?:\/\/\S+|```[\s\S]*?```|`[^`]+`|[*_~|]|[!"#$%&'()+,-.\/:;<=>?@[\]^{}~「」『』【】、。！？・’”…]+/g, ' ').replace(/\s+/g, ' ');
-                    let textToProcess = cleanContent;
-                    const foundWords = new Set(); 
-                    config.PHRASES_TO_COMBINE.forEach(phrase => {
-                        const regex = new RegExp(phrase, 'g');
-                        if (regex.test(textToProcess)) {
-                            foundWords.add(phrase);
-                            textToProcess = textToProcess.replace(regex, '');
-                        }
-                    });
-                    const tokens = segmenter.segment(textToProcess);
-                    tokens.forEach(word => {
-                        if (word.length > 1 && !config.STOP_WORDS.has(word)) {
-                             if (!/^[0-9]+$/.test(word)) foundWords.add(word);
-                        }
-                    });
-                    const wordsToStore = Array.from(foundWords).map(word => `${word}:${userId}:${now}`);
-                    if (wordsToStore.length > 0) {
-                        await redis.lpush('trend_words', ...wordsToStore);
-                        await redis.set(`trend_cooldown:${userId}`, now, { ex: 125 });
-                    }
-                }
+            const lastTrendTime = trendCooldowns.get(userId);
+            if (!lastTrendTime || (now - lastTrendTime > config.TREND_WORD_COOLDOWN)) {
+                const content = message.content
+                    .replace(/<@!?&?(\d{17,19})>/g, '')
+                    .replace(/<#(\d{17,19})>/g, '')
+                    .replace(/<a?:[a-zA-Z0-9_]+:(\d{17,19})>/g, '')
+                    .replace(/https?:\/\/\S+/g, '')
+                    .replace(/```[\s\S]*?```/g, '')
+                    .replace(/`[^`]+`/g, '')
+                    .replace(/[*_~|]/g, '')
+                    .replace(/[!"#$%&'()+,-.\/:;<=>?@[\]^{}~「」『』【】、。！？・'"…]+/g, ' ')
+                    .replace(/\s+/g, ' ');
+
+                const words = segmenter.segment(content)
+                    .filter(word => 
+                        word.length > 1 && 
+                        !config.STOP_WORDS.has(word) && 
+                        !/^[a-zA-Z0-9]+$/.test(word) &&
+                        !/^\d+$/.test(word)
+                    );
+
+                const uniqueWords = [...new Set(words)];
+                const pipelineMulti = redis.pipeline();
+                const now = Date.now();
+
+                uniqueWords.forEach(word => {
+                    // トレンドスコアを更新（単語出現回数 * ユーザー数）
+                    pipelineMulti.zadd('trend_words_scores', 'INCR', 1, word);
+                    // ワードの最終更新時刻を設定
+                    pipelineMulti.zadd('trend_words_timestamps', now, word);
+                });
+
+                await pipelineMulti.exec();
+                trendCooldowns.set(userId, now);
             }
-        } catch (error) { console.error("トレンド単語の集計中にエラー:", error); }
+        } catch (error) { console.error('トレンド処理エラー:', error); }
         
         // --- 部活チャンネルのメッセージ数カウント ---
         if (message.channel.parentId === config.CLUB_CATEGORY_ID && !config.EXCLUDED_CHANNELS.includes(message.channel.id)) {

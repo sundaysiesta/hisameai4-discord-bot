@@ -60,9 +60,6 @@ async function updatePermanentRankings(guild, redis) {
     const rankingChannel = await guild.client.channels.fetch(config.RANKING_CHANNEL_ID).catch(() => null);
     if (!rankingChannel) return;
 
-    await guild.members.fetch();
-    await guild.roles.fetch();
-
     let levelMessage, clubMessage, trendMessage;
 
     try {
@@ -81,16 +78,46 @@ async function updatePermanentRankings(guild, redis) {
         }
         const voiceUsers = [];
         for (const key of voiceKeys) {
-             try {
+            try {
                 const xp = await redis.get(key);
                 if (xp !== null && !isNaN(xp)) voiceUsers.push({ userId: key.split(':')[3], xp: Number(xp) });
             } catch (e) { console.error(e); }
         }
+
+        // 上位20名のユーザーIDを取得
         const top20Text = textUsers.sort((a,b)=>b.xp - a.xp).slice(0, 20);
         const top20Voice = voiceUsers.sort((a,b)=>b.xp - a.xp).slice(0, 20);
-        let textDesc = top20Text.map((u, i) => `**${i+1}位:** <@${u.userId}> - Lv.${calculateTextLevel(u.xp)} (${u.xp} XP)`).join('\n') || 'まだ誰もXPを獲得していません。';
-        let voiceDesc = top20Voice.map((u, i) => `**${i+1}位:** <@${u.userId}> - Lv.${calculateVoiceLevel(u.xp)} (${u.xp} XP)`).join('\n') || 'まだ誰もXPを獲得していません。';
-        const levelEmbed = new EmbedBuilder().setTitle(`月間レベルランキング (${titleDate})`).setColor(0xFFD700).addFields({ name: '💬 テキスト', value: textDesc, inline: true },{ name: '🎤 ボイス', value: voiceDesc, inline: true }).setTimestamp();
+        
+        // 必要なユーザーIDのみを収集
+        const neededUserIds = new Set([...top20Text.map(u => u.userId), ...top20Voice.map(u => u.userId)]);
+        
+        // 必要なユーザーのみをフェッチ
+        const memberCache = new Map();
+        for (const userId of neededUserIds) {
+            try {
+                const member = await guild.members.fetch(userId).catch(() => null);
+                if (member) memberCache.set(userId, member);
+            } catch (e) { console.error(`Failed to fetch member ${userId}:`, e); }
+        }
+
+        let textDesc = top20Text.map((u, i) => {
+            const member = memberCache.get(u.userId);
+            return member ? `**${i+1}位:** ${member} - Lv.${calculateTextLevel(u.xp)} (${u.xp} XP)` : null;
+        }).filter(Boolean).join('\n') || 'まだ誰もXPを獲得していません。';
+
+        let voiceDesc = top20Voice.map((u, i) => {
+            const member = memberCache.get(u.userId);
+            return member ? `**${i+1}位:** ${member} - Lv.${calculateVoiceLevel(u.xp)} (${u.xp} XP)` : null;
+        }).filter(Boolean).join('\n') || 'まだ誰もXPを獲得していません。';
+
+        const levelEmbed = new EmbedBuilder()
+            .setTitle(`月間レベルランキング (${titleDate})`)
+            .setColor(0xFFD700)
+            .addFields(
+                { name: '💬 テキスト', value: textDesc, inline: true },
+                { name: '🎤 ボイス', value: voiceDesc, inline: true }
+            )
+            .setTimestamp();
         levelMessage = await postOrEdit(rankingChannel, 'level_ranking_message_id', { embeds: [levelEmbed] });
     } catch (e) { console.error("レベルランキング更新エラー:", e); }
 
@@ -128,28 +155,32 @@ async function updatePermanentRankings(guild, redis) {
     try {
         const now = Date.now();
         const cutoff = now - config.TREND_WORD_LIFESPAN;
-        const wordEntries = await redis.lrange('trend_words', 0, -1);
-        const wordsToKeep = [];
-        const wordData = {};
-        wordEntries.forEach(entry => {
-            const [word, userId, timestamp] = entry.split(':');
-            if (Number(timestamp) >= cutoff) {
-                wordsToKeep.push(entry);
-                if (!wordData[word]) wordData[word] = { count: 0, users: new Set() };
-                wordData[word].count++;
-                wordData[word].users.add(userId);
-            }
-        });
-        if (wordsToKeep.length < wordEntries.length) {
-            await redis.del('trend_words');
-            if (wordsToKeep.length > 0) await redis.lpush('trend_words', ...wordsToKeep);
+        
+        // 期限切れのスコアを削除
+        await redis.zremrangebyscore('trend_words_scores', '-inf', cutoff);
+        
+        // スコアが高い順に上位20件を取得
+        const trendRanking = await redis.zrevrangebyscore('trend_words_scores', '+inf', cutoff, 'WITHSCORES', 'LIMIT', 0, 20);
+        const trendItems = [];
+        
+        // スコアとワードを整形
+        for (let i = 0; i < trendRanking.length; i += 2) {
+            const word = trendRanking[i];
+            const score = parseInt(trendRanking[i + 1]);
+            trendItems.push({ word, score });
         }
-        const trendRanking = Object.entries(wordData).map(([word, data]) => ({ word: word, score: data.count * data.users.size })).sort((a, b) => b.score - a.score).slice(0, 20);
-        const trendEmbed = new EmbedBuilder().setTitle('サーバー内トレンド (過去3時間)').setColor(0x1DA1F2).setTimestamp();
-        if (trendRanking.length === 0) {
+
+        const trendEmbed = new EmbedBuilder()
+            .setTitle('サーバー内トレンド (過去3時間)')
+            .setColor(0x1DA1F2)
+            .setTimestamp();
+
+        if (trendItems.length === 0) {
             trendEmbed.setDescription('現在、トレンドはありません。');
         } else {
-            trendEmbed.setDescription(trendRanking.map((item, index) => `**${index + 1}位:** ${item.word} (スコア: ${item.score})`).join('\n'));
+            trendEmbed.setDescription(
+                trendItems.map((item, index) => `**${index + 1}位:** ${item.word} (スコア: ${item.score})`).join('\n')
+            );
         }
         trendMessage = await postOrEdit(rankingChannel, 'trend_message_id', { embeds: [trendEmbed] });
     } catch (e) { console.error("トレンドランキング更新エラー:", e); }
@@ -220,6 +251,8 @@ module.exports = {
             if (!guild) return;
             const voiceStates = guild.voiceStates.cache;
             const activeVCs = new Map();
+            
+            // VCのXP処理
             voiceStates.forEach(vs => {
                 if (vs.channel && !vs.serverMute && !vs.selfMute && !vs.member.user.bot) {
                     const members = activeVCs.get(vs.channelId) || [];
@@ -253,23 +286,38 @@ module.exports = {
             await updatePermanentRankings(guild, redis);
         });
         
-        cron.schedule('0 0 * * 0', async () => {
+        // 毎日深夜0時にRedisキーのクリーンアップを実行
+        cron.schedule('0 0 * * *', async () => {
             try {
-                const guild = client.guilds.cache.first();
-                if (!guild) return;
-                await sortClubChannels(redis, guild);
-                const category = await guild.channels.fetch(config.CLUB_CATEGORY_ID).catch(() => null);
-                if (!category) return;
-                const clubChannels = category.children.cache.filter(ch => !config.EXCLUDED_CHANNELS.includes(ch.id) && ch.type === ChannelType.GuildText);
-                if (clubChannels.size > 0) {
-                    const redisPipeline = redis.pipeline();
-                    for (const channelId of clubChannels.keys()) {
-                        redisPipeline.set(`weekly_message_count:${channelId}`, 0);
-                    }
-                    await redisPipeline.exec();
+                const now = Date.now();
+                const yesterday = new Date();
+                yesterday.setDate(yesterday.getDate() - 1);
+                const yesterdayKey = yesterday.toISOString().slice(0, 10);
+
+                // 期限切れの日次XPデータを削除
+                const dailyKeys = await redis.keys(`daily_xp:*:${yesterdayKey}:*`);
+                if (dailyKeys.length > 0) {
+                    await redis.del(...dailyKeys);
                 }
-                console.log('部活チャンネルの並び替えとカウンターリセットが完了しました。');
-            } catch (error) { console.error('週次タスク中にエラー:', error); }
+
+                // 期限切れのトレンドデータを削除（3時間以上前）
+                const cutoff = now - config.TREND_WORD_LIFESPAN;
+                await redis.zremrangebyscore('trend_words_scores', '-inf', cutoff);
+                await redis.zremrangebyscore('trend_words_timestamps', '-inf', cutoff);
+
+                // 不要なクールダウンキーを削除
+                const cooldownKeys = await redis.keys('xp_cooldown:*');
+                for (const key of cooldownKeys) {
+                    const timestamp = await redis.get(key);
+                    if (now - timestamp > 24 * 60 * 60 * 1000) {
+                        await redis.del(key);
+                    }
+                }
+
+                console.log('Redisキーのクリーンアップが完了しました。');
+            } catch (error) {
+                console.error('Redisキーのクリーンアップ中にエラー:', error);
+            }
         }, { scheduled: true, timezone: "Asia/Tokyo" });
 	},
 };
