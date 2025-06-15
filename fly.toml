@@ -9,6 +9,7 @@ primary_region = 'nrt'
 [build]
 
 [[vm]]
-  memory = '1gb'
+  # メモリを1gbから512mbに変更してコストを削減
+  memory = '512mb'
   cpu_kind = 'shared'
   cpus = 1
