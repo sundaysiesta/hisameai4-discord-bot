@@ -3,6 +3,40 @@ const cron = require('node-cron');
 const config = require('../config.js');
 const { postStickyMessage, sortClubChannels, updateLevelRoles, calculateTextLevel, calculateVoiceLevel, safeIncrby } = require('../utils/utility.js');
 
+/**
+ * 【新規追加】GitHub APIから最新のコミット情報を取得する関数
+ * @returns {Promise<object|null>} コミット情報 (sha, message, url) または null
+ */
+async function getLatestCommitInfo() {
+  try {
+    const repo = 'sundaysiesta/hisameai4-discord-bot';
+    const branch = 'main';
+    const url = `https://api.github.com/repos/${repo}/commits/${branch}`;
+    
+    // Node.js v18以降に標準搭載されているfetchを使用
+    const response = await fetch(url, {
+      headers: { 'Accept': 'application/vnd.github.v3+json', 'User-Agent': 'HisameAI-Discord-Bot' }
+    });
+    
+    if (!response.ok) {
+      console.error(`GitHub API Error: ${response.status} ${response.statusText}`);
+      return null;
+    }
+    
+    const commitData = await response.json();
+    return {
+      sha: commitData.sha,
+      // コミットメッセージの1行目のみを取得
+      message: commitData.commit.message.split('\n')[0],
+      url: commitData.html_url
+    };
+  } catch (error) {
+    console.error('Failed to fetch latest commit info from GitHub:', error);
+    return null;
+  }
+}
+
+
 async function postOrEdit(channel, redisKey, payload) {
     const messageId = await channel.client.redis.get(redisKey);
     let message;
@@ -31,51 +65,35 @@ async function updatePermanentRankings(guild, redis) {
 
     let levelMessage, clubMessage, trendMessage;
 
-    // --- レベルランキング ---
     try {
         const now = new Date();
         const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
         const titleDate = `${firstDayOfMonth.getMonth() + 1}月${firstDayOfMonth.getDate()}日〜`;
         const monthKey = now.toISOString().slice(0, 7);
-
         const textKeys = await redis.keys(`monthly_xp:text:${monthKey}:*`);
         const voiceKeys = await redis.keys(`monthly_xp:voice:${monthKey}:*`);
-        
         const textUsers = [];
         for (const key of textKeys) {
             try {
                 const xp = await redis.get(key);
                 if (xp !== null && !isNaN(xp)) textUsers.push({ userId: key.split(':')[3], xp: Number(xp) });
-            } catch (e) {
-                if (e.message.includes("WRONGTYPE")) console.log(`Corrupted key ${key} found during ranking update. It will be fixed on next user activity.`);
-                else console.error(e);
-            }
+            } catch (e) { console.error(e); }
         }
         const voiceUsers = [];
         for (const key of voiceKeys) {
              try {
                 const xp = await redis.get(key);
                 if (xp !== null && !isNaN(xp)) voiceUsers.push({ userId: key.split(':')[3], xp: Number(xp) });
-            } catch (e) {
-                if (e.message.includes("WRONGTYPE")) console.log(`Corrupted key ${key} found during ranking update. It will be fixed on next user activity.`);
-                else console.error(e);
-            }
+            } catch (e) { console.error(e); }
         }
-
         const top20Text = textUsers.sort((a,b)=>b.xp - a.xp).slice(0, 20);
         const top20Voice = voiceUsers.sort((a,b)=>b.xp - a.xp).slice(0, 20);
-        
         let textDesc = top20Text.map((u, i) => `**${i+1}位:** <@${u.userId}> - Lv.${calculateTextLevel(u.xp)} (${u.xp} XP)`).join('\n') || 'まだ誰もXPを獲得していません。';
         let voiceDesc = top20Voice.map((u, i) => `**${i+1}位:** <@${u.userId}> - Lv.${calculateVoiceLevel(u.xp)} (${u.xp} XP)`).join('\n') || 'まだ誰もXPを獲得していません。';
-
-        const levelEmbed = new EmbedBuilder().setTitle(`月間レベルランキング (${titleDate})`).setColor(0xFFD700).addFields(
-            { name: '💬 テキスト', value: textDesc, inline: true },
-            { name: '🎤 ボイス', value: voiceDesc, inline: true }
-        ).setTimestamp();
+        const levelEmbed = new EmbedBuilder().setTitle(`月間レベルランキング (${titleDate})`).setColor(0xFFD700).addFields({ name: '💬 テキスト', value: textDesc, inline: true },{ name: '🎤 ボイス', value: voiceDesc, inline: true }).setTimestamp();
         levelMessage = await postOrEdit(rankingChannel, 'level_ranking_message_id', { embeds: [levelEmbed] });
     } catch (e) { console.error("レベルランキング更新エラー:", e); }
 
-    // --- 部活ランキング ---
     try {
         const clubCategory = await guild.channels.fetch(config.CLUB_CATEGORY_ID).catch(() => null);
         let clubRankingEmbed = new EmbedBuilder().setTitle('部活アクティブランキング (週間)').setColor(0x82E0AA).setTimestamp();
@@ -107,7 +125,6 @@ async function updatePermanentRankings(guild, redis) {
         clubMessage = await postOrEdit(rankingChannel, 'club_ranking_message_id', { embeds: [clubRankingEmbed] });
     } catch(e) { console.error("部活ランキング更新エラー:", e); }
     
-    // --- トレンドランキング ---
     try {
         const now = Date.now();
         const cutoff = now - config.TREND_WORD_LIFESPAN;
@@ -137,17 +154,13 @@ async function updatePermanentRankings(guild, redis) {
         trendMessage = await postOrEdit(rankingChannel, 'trend_message_id', { embeds: [trendEmbed] });
     } catch (e) { console.error("トレンドランキング更新エラー:", e); }
     
-    // --- リンクボタン ---
     try {
         const payload = { content: '各ランキングへ移動:', components: [] };
         const linkButtons = new ActionRowBuilder();
         if (levelMessage) linkButtons.addComponents(new ButtonBuilder().setLabel('レベルランキングへ').setStyle(ButtonStyle.Link).setURL(levelMessage.url));
         if (clubMessage) linkButtons.addComponents(new ButtonBuilder().setLabel('部活ランキングへ').setStyle(ButtonStyle.Link).setURL(clubMessage.url));
         if (trendMessage) linkButtons.addComponents(new ButtonBuilder().setLabel('トレンドへ').setStyle(ButtonStyle.Link).setURL(trendMessage.url));
-
-        if (linkButtons.components.length > 0) {
-            payload.components.push(linkButtons);
-        }
+        if (linkButtons.components.length > 0) payload.components.push(linkButtons);
         await postOrEdit(rankingChannel, 'ranking_links_message_id', payload);
     } catch(e){ console.error("リンクボタン更新エラー:", e); }
 }
@@ -162,28 +175,37 @@ module.exports = {
             const savedStatus = await redis.get('bot_status_text');
             if (savedStatus) client.user.setActivity(savedStatus, { type: ActivityType.Playing });
 
-            // 【修正】再起動通知のメッセージを修正
+            // 【ここから修正】
             const notificationChannel = await client.channels.fetch(config.RESTART_NOTIFICATION_CHANNEL_ID).catch(() => null);
             if (notificationChannel) {
-                // 環境変数名をAPP_COMMIT_SHAに変更
-                const commitHash = process.env.APP_COMMIT_SHA || '不明';
-                const repoUrl = 'https://github.com/sundaysiesta/hisameai4-discord-bot';
+                // GitHub APIから最新のコミット情報を取得
+                const commitInfo = await getLatestCommitInfo();
                 
                 const embed = new EmbedBuilder()
-                    // タイトルの文言を変更
                     .setTitle('🤖 再起動しました。確認してください。')
                     .setColor(0x3498DB)
-                    // 説明文を削除
                     .setTimestamp();
                 
-                if (commitHash !== '不明' && commitHash.length >= 7) {
-                    embed.addFields({ name: '現在のバージョン', value: `[${commitHash.substring(0, 7)}](${repoUrl}/commit/${commitHash})` });
+                if (commitInfo) {
+                    // 取得した情報をEmbedに追加
+                    embed.addFields(
+                        { 
+                            name: '現在のバージョン', 
+                            value: `[${commitInfo.sha.substring(0, 7)}](${commitInfo.url})` 
+                        },
+                        {
+                            name: '最新の変更内容',
+                            value: `\`\`\`${commitInfo.message}\`\`\``
+                        }
+                    );
                 } else {
-                    embed.addFields({ name: '現在のバージョン', value: '`不明`' });
+                    // 取得に失敗した場合
+                    embed.addFields({ name: 'バージョン情報', value: '取得に失敗しました。' });
                 }
 
                 await notificationChannel.send({ embeds: [embed] });
             }
+            // 【ここまで修正】
             
             const anonyChannel = await client.channels.fetch(config.ANONYMOUS_CHANNEL_ID).catch(() => null);
             if (anonyChannel) await postStickyMessage(client, anonyChannel, config.STICKY_BUTTON_ID, { components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(config.STICKY_BUTTON_ID).setLabel('書き込む').setStyle(ButtonStyle.Success).setEmoji('✍️'))] });
@@ -219,7 +241,6 @@ module.exports = {
                             const xp = config.VOICE_XP_AMOUNT;
                             const monthlyKey = `monthly_xp:voice:${new Date().toISOString().slice(0, 7)}:${mainAccountId}`;
                             const dailyKey = `daily_xp:voice:${new Date().toISOString().slice(0, 10)}:${mainAccountId}`;
-                            
                             await redis.hincrby(`user:${mainAccountId}`, 'voiceXp', xp);
                             await safeIncrby(redis, monthlyKey, xp);
                             await safeIncrby(redis, dailyKey, xp);
