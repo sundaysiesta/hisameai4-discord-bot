@@ -39,4 +39,3 @@ const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_BOT_TOKEN)
         console.log('スラッシュコマンドの登録が正常に完了しました。');
     } catch (error) { console.error(error); }
 })();
-
