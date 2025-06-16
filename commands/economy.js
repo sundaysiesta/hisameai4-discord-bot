@@ -53,7 +53,7 @@ module.exports = {
 
         try {
             const userKey = `user:${targetUser.id}`;
-            let userData = await redis.hGetAll(userKey);
+            const userData = await redis.hgetall(userKey);
 
             if (Object.keys(userData).length === 0) {
                 userData = {
@@ -63,8 +63,25 @@ module.exports = {
             }
 
             const embed = new EmbedBuilder()
-                .setColor('#00ff00')
+                .setColor('#0099ff')
+                .setTitle(`${targetUser.username} の経済情報`)
+                .addFields(
+                    { name: '残高', value: `${config.COIN_SYMBOL} ${userData.balance.toLocaleString()} ${config.COIN_NAME}`, inline: true },
+                    { name: 'テキストXP', value: `${userData.textXp.toLocaleString()}`, inline: true },
+                    { name: 'ボイスXP', value: `${userData.voiceXp.toLocaleString()}`, inline: true }
+                )
                 .setTimestamp();
+
+            // 税金情報の追加
+            const taxRate = await redis.hget(`user:${targetUser.id}`, 'taxRate');
+            if (taxRate && parseFloat(taxRate) > 0) {
+                const lastTaxPaid = await redis.hget(`user:${targetUser.id}`, 'lastTaxPaid') || '0';
+                const taxAmount = Math.floor(parseInt(userData.balance) * parseFloat(taxRate));
+                embed.addFields(
+                    { name: '税率', value: `${(parseFloat(taxRate) * 100).toFixed(1)}%`, inline: true },
+                    { name: '次回納税額', value: `${config.COIN_SYMBOL} ${taxAmount.toLocaleString()} ${config.COIN_NAME}`, inline: true }
+                );
+            }
 
             if (subcommand === 'set_balance') {
                 userData.balance = amount.toString();

@@ -330,6 +330,111 @@ async function handleVoiceXp(member, xpToGive, redis) {
     }
 }
 
+async function updateRankings(client, redis) {
+    try {
+        const guild = await client.guilds.fetch(config.GUILD_ID);
+        if (!guild) {
+            console.error('ギルドが見つかりません');
+            return;
+        }
+
+        const rankingChannel = await guild.channels.fetch(config.RANKING_CHANNEL_ID);
+        if (!rankingChannel) {
+            console.error('ランキングチャンネルが見つかりません');
+            return;
+        }
+
+        // 月間レベルランキングの更新
+        const now = new Date();
+        const monthKey = now.toISOString().slice(0, 7);
+        const userKeys = await redis.keys('user:*');
+        const users = [];
+
+        for (const key of userKeys) {
+            const userId = key.split(':')[1];
+            const textXp = await redis.hget(key, 'textXp') || '0';
+            const voiceXp = await redis.hget(key, 'voiceXp') || '0';
+            const totalXp = parseInt(textXp) + parseInt(voiceXp);
+            if (totalXp > 0) {
+                users.push({ userId, xp: totalXp });
+            }
+        }
+
+        users.sort((a, b) => b.xp - a.xp);
+        const top20 = users.slice(0, 20);
+
+        const embed = new EmbedBuilder()
+            .setColor('#0099ff')
+            .setTitle(`${monthKey} 月間レベルランキング`)
+            .setTimestamp();
+
+        let description = '';
+        for (let i = 0; i < top20.length; i++) {
+            const user = top20[i];
+            const member = await guild.members.fetch(user.userId).catch(() => null);
+            const username = member ? member.displayName : '不明なユーザー';
+            const textLevel = calculateTextLevel(parseInt(await redis.hget(`user:${user.userId}`, 'textXp') || '0'));
+            const voiceLevel = calculateVoiceLevel(parseInt(await redis.hget(`user:${user.userId}`, 'voiceXp') || '0'));
+            description += `${i + 1}. ${username}: テキストLv.${textLevel} + ボイスLv.${voiceLevel} = 合計Lv.${textLevel + voiceLevel}\n`;
+        }
+
+        if (description === '') {
+            description = 'データがありません。';
+        }
+
+        embed.setDescription(description);
+
+        // ロメコインランキングの作成
+        const coinUsers = [];
+        for (const key of userKeys) {
+            const userId = key.split(':')[1];
+            const mainAccountId = await redis.hget(key, 'mainAccountId');
+            if (!mainAccountId || mainAccountId === userId) {
+                const balance = await redis.hget(key, 'balance');
+                if (balance && parseInt(balance) > 0) {
+                    coinUsers.push({ userId, balance: parseInt(balance) });
+                }
+            }
+        }
+
+        coinUsers.sort((a, b) => b.balance - a.balance);
+        const top20Coin = coinUsers.slice(0, 20);
+
+        const coinEmbed = new EmbedBuilder()
+            .setColor('#ffd700')
+            .setTitle('ロメコインランキング')
+            .setTimestamp();
+
+        let coinDescription = '';
+        for (let i = 0; i < top20Coin.length; i++) {
+            const user = top20Coin[i];
+            const member = await guild.members.fetch(user.userId).catch(() => null);
+            const username = member ? member.displayName : '不明なユーザー';
+            coinDescription += `${i + 1}. ${username}: ${config.COIN_SYMBOL} ${user.balance.toLocaleString()} ${config.COIN_NAME}\n`;
+        }
+
+        if (coinDescription === '') {
+            coinDescription = 'データがありません。';
+        }
+
+        coinEmbed.setDescription(coinDescription);
+
+        // 古いランキングメッセージを削除
+        const messages = await rankingChannel.messages.fetch({ limit: 10 });
+        for (const message of messages.values()) {
+            if (message.author.id === client.user.id) {
+                await message.delete().catch(console.error);
+            }
+        }
+
+        // 新しいランキングを送信
+        await rankingChannel.send({ embeds: [embed, coinEmbed] });
+
+    } catch (error) {
+        console.error('ランキング更新エラー:', error);
+    }
+}
+
 module.exports = {
 	name: Events.ClientReady,
 	once: true,
