@@ -62,15 +62,13 @@ async function updatePermanentRankings(guild, redis, notion) {
             console.error('ギルドが未定義です');
             return;
         }
-        if (!guild.client || !guild.client.channels || typeof guild.client.channels.fetch !== 'function') {
-            console.error('guild.client.channels.fetchが未定義です');
-            return;
+        let rankingChannel = guild.client.channels.cache.get('1383261252662595604');
+        if (!rankingChannel && guild.client.channels && typeof guild.client.channels.fetch === 'function') {
+            rankingChannel = await guild.client.channels.fetch('1383261252662595604').catch(e => {
+                console.error('ランキングチャンネルの取得に失敗:', e);
+                return null;
+            });
         }
-        // ランキングチャンネルを確実に取得
-        const rankingChannel = await guild.client.channels.fetch('1383261252662595604').catch(e => {
-            console.error('ランキングチャンネルの取得に失敗:', e);
-            return null;
-        });
         if (!rankingChannel) {
             console.error('ランキングチャンネルが見つかりません。');
             return;
@@ -400,7 +398,8 @@ module.exports = {
             const anonyChannel = await client.channels.fetch(config.ANONYMOUS_CHANNEL_ID).catch(() => null);
             if (anonyChannel) {
                 const payload = {
-                    components: [
+                    components:
+                    [
                         new ActionRowBuilder()
                             .addComponents(
                                 new ButtonBuilder()
