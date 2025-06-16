@@ -94,6 +94,14 @@ async function updatePermanentRankings(guild, redis, notion) {
                 }
             } catch (e) { 
                 console.error(`[ランキング] テキストXP取得エラー (キー: ${key}):`, e);
+                // エラーが発生した場合、キーを削除して再初期化
+                try {
+                    await redis.del(key);
+                    await redis.set(key, '0', { ex: 60 * 60 * 24 * 32 });
+                    console.log(`[ランキング] テキストXPキーを再初期化しました: ${key}`);
+                } catch (delError) {
+                    console.error(`[ランキング] テキストXPキーの再初期化に失敗: ${key}`, delError);
+                }
             }
         }
         const voiceUsers = [];
@@ -108,6 +116,14 @@ async function updatePermanentRankings(guild, redis, notion) {
                 }
             } catch (e) { 
                 console.error(`[ランキング] ボイスXP取得エラー (キー: ${key}):`, e);
+                // エラーが発生した場合、キーを削除して再初期化
+                try {
+                    await redis.del(key);
+                    await redis.set(key, '0', { ex: 60 * 60 * 24 * 32 });
+                    console.log(`[ランキング] ボイスXPキーを再初期化しました: ${key}`);
+                } catch (delError) {
+                    console.error(`[ランキング] ボイスXPキーの再初期化に失敗: ${key}`, delError);
+                }
             }
         }
 
@@ -374,11 +390,11 @@ module.exports = {
                                     ]);
 
                                     if (!monthlyExists) {
-                                        await redis.set(monthlyKey, '0');
+                                        await redis.set(monthlyKey, '0', { ex: 60 * 60 * 24 * 32 });  // 32日で期限切れ
                                         console.log(`[ボイスXP] ${mainMember.user.tag} の月間XPデータを初期化しました`);
                                     }
                                     if (!dailyExists) {
-                                        await redis.set(dailyKey, '0');
+                                        await redis.set(dailyKey, '0', { ex: 60 * 60 * 24 * 2 });    // 2日で期限切れ
                                         console.log(`[ボイスXP] ${mainMember.user.tag} の日間XPデータを初期化しました`);
                                     }
 
@@ -386,9 +402,7 @@ module.exports = {
                                     await Promise.all([
                                         redis.hincrby(userKey, 'voiceXp', xp),
                                         redis.incrby(monthlyKey, xp),
-                                        redis.incrby(dailyKey, xp),
-                                        redis.expire(monthlyKey, 60 * 60 * 24 * 32),  // 32日
-                                        redis.expire(dailyKey, 60 * 60 * 24 * 2)      // 2日
+                                        redis.incrby(dailyKey, xp)
                                     ]);
 
                                     await redis.set(cooldownKey, now, { ex: 125 });
