@@ -47,22 +47,30 @@ const client = new Client({
     }
 });
 
-// Redis接続のエラーハンドリング
-const redis = new Redis({
-    url: process.env.UPSTASH_REDIS_REST_URL,
-    token: process.env.UPSTASH_REDIS_REST_TOKEN,
-});
-
-redis.on('error', (error) => {
-    console.error('Redis接続エラー:', error);
-    // エラーをログに記録した後、再接続を試みる
+// Redis接続の設定
+let redis;
+try {
+    redis = new Redis({
+        url: process.env.UPSTASH_REDIS_REST_URL,
+        token: process.env.UPSTASH_REDIS_REST_TOKEN,
+    });
+    console.log('Redis接続を初期化しました。');
+} catch (error) {
+    console.error('Redis接続の初期化に失敗しました:', error);
+    // エラーをログに記録した後、5秒待って再試行
     setTimeout(() => {
-        console.log('Redisへの再接続を試みます...');
-        redis.connect().catch(err => {
-            console.error('Redisへの再接続に失敗しました:', err);
-        });
+        console.log('Redis接続の再試行を開始します...');
+        try {
+            redis = new Redis({
+                url: process.env.UPSTASH_REDIS_REST_URL,
+                token: process.env.UPSTASH_REDIS_REST_TOKEN,
+            });
+            console.log('Redis接続の再試行が成功しました。');
+        } catch (err) {
+            console.error('Redis接続の再試行に失敗しました:', err);
+        }
     }, 5000);
-});
+}
 
 // Redisクライアントをグローバルに設定
 client.redis = redis;
