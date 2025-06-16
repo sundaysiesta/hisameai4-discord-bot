@@ -2,29 +2,43 @@ const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, Butt
 const { calculateTextLevel, calculateVoiceLevel } = require('../utils/utility.js');
 const config = require('../config.js');
 
-const createLeaderboardEmbed = async (users, page, totalPages, title, type) => {
-    const start = page * 10;
-    const end = start + 10;
-    const currentUsers = users.slice(start, end);
+async function createLeaderboardEmbed(users, page, totalPages, title, type) {
+    const startIndex = page * 10;
+    const endIndex = Math.min(startIndex + 10, users.length);
+    const pageUsers = users.slice(startIndex, endIndex);
 
-    const descriptionPromises = currentUsers.map(async (u, i) => {
-        if (type === 'coin') {
-            return `**${start + i + 1}位:** <@${u.userId}> - ${config.COIN_SYMBOL} ${u.xp.toLocaleString()} ${config.COIN_NAME}`;
-        } else {
-            const level = type === 'text' ? calculateTextLevel(u.xp) : calculateVoiceLevel(u.xp);
-            return `**${start + i + 1}位:** <@${u.userId}> - Lv.${level} (${u.xp.toLocaleString()} XP)`;
-        }
-    });
-
-    const description = (await Promise.all(descriptionPromises)).join('\n');
-
-    return new EmbedBuilder()
+    const embed = new EmbedBuilder()
+        .setColor('#0099ff')
         .setTitle(title)
-        .setDescription(description || 'データがありません。')
-        .setColor(type === 'coin' ? 0xFFD700 : 0xFFA500)
-        .setFooter({ text: `ページ ${page + 1} / ${totalPages}` })
         .setTimestamp();
-};
+
+    let description = '';
+    for (let i = 0; i < pageUsers.length; i++) {
+        const user = pageUsers[i];
+        const rank = startIndex + i + 1;
+        const userData = await client.users.fetch(user.userId).catch(() => null);
+        const username = userData ? userData.username : '不明なユーザー';
+        
+        let xpDisplay;
+        if (type === 'coin') {
+            xpDisplay = `${config.COIN_SYMBOL} ${user.xp.toLocaleString()} ${config.COIN_NAME}`;
+        } else {
+            const level = type === 'text' ? calculateTextLevel(user.xp) : calculateVoiceLevel(user.xp);
+            xpDisplay = `レベル ${level} (${user.xp.toLocaleString()} XP)`;
+        }
+        
+        description += `${rank}. ${username}: ${xpDisplay}\n`;
+    }
+
+    if (description === '') {
+        description = 'データがありません。';
+    }
+
+    embed.setDescription(description);
+    embed.setFooter({ text: `ページ ${page + 1}/${totalPages}` });
+
+    return embed;
+}
 
 module.exports = {
     data: new SlashCommandBuilder()

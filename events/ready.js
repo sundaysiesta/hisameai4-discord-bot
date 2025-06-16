@@ -216,47 +216,51 @@ async function updatePermanentRankings(guild, redis, notion) {
 async function handleVoiceXp(member, xpToGive, redis) {
     if (!member || member.roles.cache.has(config.XP_EXCLUDED_ROLE_ID)) return;
 
-    const mainAccountId = await redis.hget(`user:${member.id}`, 'mainAccountId') || member.id;
-    const userKey = `user:${mainAccountId}`;
-    const monthlyKey = `monthly_xp:voice:${new Date().toISOString().slice(0, 7)}:${mainAccountId}`;
-    const dailyKey = `daily_xp:voice:${new Date().toISOString().slice(0, 10)}:${mainAccountId}`;
+    try {
+        const mainAccountId = await redis.hget(`user:${member.id}`, 'mainAccountId') || member.id;
+        const userKey = `user:${mainAccountId}`;
+        const monthlyKey = `monthly_xp:voice:${new Date().toISOString().slice(0, 7)}:${mainAccountId}`;
+        const dailyKey = `daily_xp:voice:${new Date().toISOString().slice(0, 10)}:${mainAccountId}`;
 
-    // 各キーの存在確認と初期化を個別に実行
-    const [userData, monthlyExists, dailyExists] = await Promise.all([
-        redis.hgetall(userKey),
-        redis.exists(monthlyKey),
-        redis.exists(dailyKey)
-    ]);
+        // 各キーの存在確認と初期化を個別に実行
+        const [userData, monthlyExists, dailyExists] = await Promise.all([
+            redis.hgetall(userKey),
+            redis.exists(monthlyKey),
+            redis.exists(dailyKey)
+        ]);
 
-    // ユーザーデータの初期化（必要な場合）
-    if (!userData || Object.keys(userData).length === 0) {
-        await redis.hset(userKey, {
-            textXp: '0',
-            voiceXp: '0',
-            balance: '0',
-            bank: '0'
-        });
+        // ユーザーデータの初期化（必要な場合）
+        if (!userData || Object.keys(userData).length === 0) {
+            await redis.hset(userKey, {
+                textXp: '0',
+                voiceXp: '0',
+                balance: '0',
+                bank: '0'
+            });
+        }
+
+        // 月間・日間XPの初期化（必要な場合）
+        if (!monthlyExists) {
+            await redis.set(monthlyKey, '0');
+        }
+        if (!dailyExists) {
+            await redis.set(dailyKey, '0');
+        }
+
+        // XPとロメコインの更新（個別に実行して確実性を高める）
+        const multi = redis.multi();
+        multi.hincrby(userKey, 'voiceXp', xpToGive);
+        multi.hincrby(userKey, 'balance', xpToGive); // 同額のロメコインを付与
+        multi.incrby(monthlyKey, xpToGive);
+        multi.incrby(dailyKey, xpToGive);
+        multi.expire(monthlyKey, 60 * 60 * 24 * 32);  // 32日
+        multi.expire(dailyKey, 60 * 60 * 24 * 2);     // 2日
+        await multi.exec();
+
+        await updateLevelRoles(member, redis, member.client);
+    } catch (error) {
+        console.error('ボイスXP付与エラー:', error);
     }
-
-    // 月間・日間XPの初期化（必要な場合）
-    if (!monthlyExists) {
-        await redis.set(monthlyKey, '0');
-    }
-    if (!dailyExists) {
-        await redis.set(dailyKey, '0');
-    }
-
-    // XPとロメコインの更新（個別に実行して確実性を高める）
-    await Promise.all([
-        redis.hincrby(userKey, 'voiceXp', xpToGive),
-        redis.hincrby(userKey, 'balance', xpToGive), // 同額のロメコインを付与
-        redis.incrby(monthlyKey, xpToGive),
-        redis.incrby(dailyKey, xpToGive),
-        redis.expire(monthlyKey, 60 * 60 * 24 * 32),  // 32日
-        redis.expire(dailyKey, 60 * 60 * 24 * 2)      // 2日
-    ]);
-
-    await updateLevelRoles(member, redis, member.client);
 }
 
 module.exports = {

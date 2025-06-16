@@ -12,17 +12,17 @@ module.exports = {
         try {
             const mainAccountId = await redis.hget(`user:${userId}`, 'mainAccountId') || userId;
             const lastDaily = await redis.hget(`user:${mainAccountId}`, 'lastDaily');
-            const now = Date.now();
+            const now = new Date();
+            const today = now.toDateString();
 
             // 0時にリセットされるように、日付を比較
             const lastDailyDate = lastDaily ? new Date(parseInt(lastDaily)).toDateString() : null;
-            const currentDate = new Date().toDateString();
 
-            if (lastDailyDate === currentDate) {
+            if (lastDailyDate === today) {
                 const nextReset = new Date();
                 nextReset.setDate(nextReset.getDate() + 1);
                 nextReset.setHours(0, 0, 0, 0);
-                const remainingTime = nextReset.getTime() - now;
+                const remainingTime = nextReset.getTime() - now.getTime();
                 const hours = Math.floor(remainingTime / (60 * 60 * 1000));
                 const minutes = Math.floor((remainingTime % (60 * 60 * 1000)) / (60 * 1000));
 
@@ -41,7 +41,7 @@ module.exports = {
             
             // Redisでのトランザクション処理
             const multi = redis.multi();
-            multi.hset(`user:${mainAccountId}`, 'lastDaily', now.toString());
+            multi.hset(`user:${mainAccountId}`, 'lastDaily', now.getTime().toString());
             multi.hincrby(`user:${mainAccountId}`, 'balance', amount);
             await multi.exec();
 
