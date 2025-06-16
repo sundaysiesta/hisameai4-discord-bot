@@ -150,29 +150,23 @@ async function updatePermanentRankings(guild, redis) {
         clubMessage = await postOrEdit(rankingChannel, 'club_ranking_message_id', { embeds: [clubRankingEmbed] });
     } catch(e) { console.error("部活ランキング更新エラー:", e); }
       try {
+        // --- トレンドワードのリスト型対応 ---
+        const trendEntries = await redis.lrange('trend_words', 0, -1);
+        const trendItemsMap = new Map();
         const now = Date.now();
         const cutoff = now - config.TREND_WORD_LIFESPAN;
-        
-        // 古いタイムスタンプを持つワードを削除
-        const timestamps = await redis.hgetall('trend_words_timestamps');
-        const words = await redis.hgetall('trend_words');
-        const trendItems = [];
-        
-        for (const [word, timestamp] of Object.entries(timestamps)) {
-            if (Number(timestamp) >= cutoff) {
-                const score = Number(words[word] || 0);
-                if (score > 0) {
-                    trendItems.push({ word, score });
-                }
-            } else {
-                // 期限切れのワードを削除
-                await redis.hdel('trend_words', word);
-                await redis.hdel('trend_words_timestamps', word);
-            }
+        for (const entry of trendEntries) {
+            // entry形式: word:userId:timestamp
+            const [word, userId, timestamp] = entry.split(':');
+            if (!word || !timestamp) continue;
+            if (Number(timestamp) < cutoff) continue;
+            if (!trendItemsMap.has(word)) trendItemsMap.set(word, 0);
+            trendItemsMap.set(word, trendItemsMap.get(word) + 1);
         }
-        
         // スコアで降順ソート
-        trendItems.sort((a, b) => b.score - a.score);
+        const trendItems = Array.from(trendItemsMap.entries())
+            .map(([word, score]) => ({ word, score }))
+            .sort((a, b) => b.score - a.score);
 
         const trendEmbed = new EmbedBuilder()
             .setTitle('サーバー内トレンド (過去3時間)')
