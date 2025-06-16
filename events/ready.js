@@ -56,23 +56,19 @@ async function postOrEdit(channel, redisKey, payload) {
     return message;
 }
 
-async function updatePermanentRankings(guild, redis, notion) {
+async function updatePermanentRankings(client, redis, notion) {
     try {
+        // クライアントからギルドを取得
+        const guild = await client.guilds.fetch(config.GUILD_ID);
         if (!guild) {
             console.error('ギルドが見つかりません。');
             return;
         }
 
         // ランキングチャンネルを確実に取得
-        let rankingChannel;
-        try {
-            rankingChannel = await guild.channels.fetch('1383261252662595604');
-            if (!rankingChannel) {
-                console.error('ランキングチャンネルが見つかりません。');
-                return;
-            }
-        } catch (error) {
-            console.error('ランキングチャンネルの取得に失敗:', error);
+        const rankingChannel = await guild.channels.fetch('1383261252662595604');
+        if (!rankingChannel) {
+            console.error('ランキングチャンネルが見つかりません。');
             return;
         }
 
@@ -160,7 +156,7 @@ async function updatePermanentRankings(guild, redis, notion) {
                 return member ? `**${i+1}位:** ${member} - Lv.${calculateVoiceLevel(u.xp)} (${u.xp.toLocaleString()} XP)` : null;
             }).filter(Boolean).join('\n') || 'まだ誰もXPを獲得していません。';
 
-            // 月間ランキングの更新
+            // ランキングの更新
             const levelEmbed = new EmbedBuilder()
                 .setTitle(`月間レベルランキング (${titleDate})`)
                 .setColor(0xFFD700)
@@ -450,43 +446,8 @@ module.exports = {
             // 定期的なランキング更新（1時間ごと）
             cron.schedule('0 * * * *', async () => {
                 try {
-                    const currentGuild = await client.guilds.fetch(config.GUILD_ID).catch(() => null);
-                    if (!currentGuild) {
-                        console.error('定期更新: ギルドが見つかりません。');
-                        return;
-                    }
-
-                    // ボイスチャンネルの状態を取得
-                    const voiceStates = currentGuild.voiceStates.cache;
-                    const activeVCs = new Map();
-                    
-                    // VCのXP処理
-                    voiceStates.forEach(vs => {
-                        if (vs.channel && !vs.serverMute && !vs.selfMute && !vs.member.user.bot) {
-                            const members = activeVCs.get(vs.channelId) || [];
-                            members.push(vs.member);
-                            activeVCs.set(vs.channelId, members);
-                        }
-                    });
-
-                    const now = Date.now();
-                    for (const members of activeVCs.values()) {
-                        if (members.length > 1) {
-                            for (const member of members) {
-                                if (member.roles.cache.has(config.XP_EXCLUDED_ROLE_ID)) continue;
-                                const cooldownKey = `xp_cooldown:voice:${member.id}`;
-                                const lastXpTime = await redis.get(cooldownKey);
-                                if (!lastXpTime || (now - lastXpTime > config.VOICE_XP_COOLDOWN)) {
-                                    const xp = config.VOICE_XP_AMOUNT;
-                                    await handleVoiceXp(member, xp, redis);
-                                    await redis.set(cooldownKey, now, { EX: 125 });
-                                }
-                            }
-                        }
-                    }
-
                     // ランキングの更新
-                    await updatePermanentRankings(currentGuild, redis, notion);
+                    await updatePermanentRankings(client, redis, notion);
                 } catch (error) {
                     console.error('定期ランキング更新でエラーが発生しました:', error);
                 }
