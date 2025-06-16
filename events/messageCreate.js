@@ -48,12 +48,18 @@ module.exports = {
                     if (mainMember) {
                         const xpToGive = Math.floor(Math.random() * (config.MAX_TEXT_XP - config.MIN_TEXT_XP + 1)) + config.MIN_TEXT_XP;
                         
+                        await redis.hincrby(`user:${mainAccountId}`, 'textXp', xpToGive);
+
+                        // 月間・日間XPの更新
                         const monthlyKey = `monthly_xp:text:${new Date().toISOString().slice(0, 7)}:${mainAccountId}`;
                         const dailyKey = `daily_xp:text:${new Date().toISOString().slice(0, 10)}:${mainAccountId}`;
-                        
-                        await redis.hincrby(`user:${mainAccountId}`, 'textXp', xpToGive);
-                        await safeIncrby(redis, monthlyKey, xpToGive);
-                        await safeIncrby(redis, dailyKey, xpToGive);
+
+                        // キーが存在しない場合は0で初期化
+                        if (!await redis.exists(monthlyKey)) await redis.set(monthlyKey, '0');
+                        if (!await redis.exists(dailyKey)) await redis.set(dailyKey, '0');
+
+                        await redis.incrby(monthlyKey, xpToGive);
+                        await redis.incrby(dailyKey, xpToGive);
                         
                         textXpCooldowns.set(userId, now);
                         await updateLevelRoles(mainMember, redis, message.client);
@@ -85,25 +91,24 @@ module.exports = {
                         !/^\d+$/.test(word)
                     );
 
+                // 重複を排除
                 const uniqueWords = [...new Set(words)];
-                const pipelineMulti = redis.pipeline();
-                const now = Date.now().toString();
+                const timestamp = Date.now().toString();
 
                 for (const word of uniqueWords) {
-                    // ワードの出現回数をインクリメント
-                    pipelineMulti.hincrby('trend_words', word, 1);
-                    // ワードの最終更新時刻を設定
-                    pipelineMulti.hset('trend_words_timestamps', word, now);
+                    await redis.lpush('trend_words', `${word}:${userId}:${timestamp}`);
                 }
 
-                await pipelineMulti.exec();
-                trendCooldowns.set(userId, Date.now());
+                trendCooldowns.set(userId, now);
             }
         } catch (error) { console.error('トレンド処理エラー:', error); }
         
         // --- 部活チャンネルのメッセージ数カウント ---
         if (message.channel.parentId === config.CLUB_CATEGORY_ID && !config.EXCLUDED_CHANNELS.includes(message.channel.id)) {
-            await redis.incr(`weekly_message_count:${message.channel.id}`);
+            const key = `weekly_message_count:${message.channel.id}`;
+            // キーが存在しない場合は0で初期化
+            if (!await redis.exists(key)) await redis.set(key, '0');
+            await redis.incr(key);
         }
 	},
 };

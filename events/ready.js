@@ -134,20 +134,11 @@ async function updatePermanentRankings(guild, redis) {
              clubRanking.sort((a, b) => (b.count !== a.count) ? b.count - a.count : a.position - b.position);
              if (clubRanking.length === 0) {
                  clubRankingEmbed.setDescription('現在、活動中の部活はありません。');
-             } else {                 const descriptionPromises = clubRanking.map(async (club, i) => {
-                     const leaderRoleId = await redis.get(`leader_roles:${club.id}`);
+             } else {                 const descriptionPromises = clubRanking.map(async (club, i) => {                     const leaderRoleId = await redis.get(`leader_roles:${club.id}`);
                      let leaderMention = '未設定';
                      if (leaderRoleId) {
-                         try {
-                             const role = await guild.roles.fetch(leaderRoleId);
-                             if (role) {
-                                 await guild.members.fetch();
-                                 leaderMention = role.members.size > 0 ? role.members.map(m => m.toString()).join(', ') : '不在';
-                             }
-                         } catch (e) {
-                             console.error(`Error fetching leader role for club ${club.id}:`, e);
-                             leaderMention = 'エラー';
-                         }
+                         const role = guild.roles.cache.get(leaderRoleId);
+                         if (role) leaderMention = role.members.size > 0 ? role.members.map(m => m.toString()).join(', ') : '不在';
                      }
                      return `**${i + 1}位:** <#${club.id}>  **部長:** ${leaderMention}`;
                  });
