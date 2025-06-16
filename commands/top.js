@@ -69,7 +69,7 @@ module.exports = {
             for(const key of userKeys) {
                 const userId = key.split(':')[1];
                 const mainAccountId = await redis.hget(key, 'mainAccountId');
-                if (!mainAccountId || mainAccountId === userId) {  // メインアカウントのみを集計
+                if (!mainAccountId || mainAccountId === userId) {
                     const balance = await redis.hget(key, 'balance');
                     if (balance) {
                         users.push({ userId, xp: Number(balance) });

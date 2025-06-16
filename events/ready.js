@@ -344,6 +344,14 @@ async function updateRankings(client, redis) {
             return;
         }
 
+        // 古いランキングメッセージを削除
+        const messages = await rankingChannel.messages.fetch({ limit: 10 });
+        for (const message of messages.values()) {
+            if (message.author.id === client.user.id) {
+                await message.delete().catch(console.error);
+            }
+        }
+
         // 月間レベルランキングの更新
         const now = new Date();
         const monthKey = now.toISOString().slice(0, 7);
@@ -419,16 +427,9 @@ async function updateRankings(client, redis) {
 
         coinEmbed.setDescription(coinDescription);
 
-        // 古いランキングメッセージを削除
-        const messages = await rankingChannel.messages.fetch({ limit: 10 });
-        for (const message of messages.values()) {
-            if (message.author.id === client.user.id) {
-                await message.delete().catch(console.error);
-            }
-        }
-
         // 新しいランキングを送信
         await rankingChannel.send({ embeds: [embed, coinEmbed] });
+        console.log('ランキングを更新しました');
 
     } catch (error) {
         console.error('ランキング更新エラー:', error);
