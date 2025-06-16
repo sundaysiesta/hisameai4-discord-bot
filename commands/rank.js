@@ -175,11 +175,11 @@ module.exports = {
             ctx.textAlign = 'right';
             
             // テキストXP
-            const textXpDisplay = `${formatXp(textXp)} / ${formatXp(xpForNextText - xpForCurrentText)} XP`;
+            const textXpDisplay = `${formatXp(textXp)} / ${formatXp(xpForNextText)} XP`;
             ctx.fillText(textXpDisplay, contentX + barWidth - 5, 135);
             
             // ボイスXP
-            const voiceXpDisplay = `${formatXp(voiceXp)} / ${formatXp(xpForNextVoice - xpForCurrentVoice)} XP`;
+            const voiceXpDisplay = `${formatXp(voiceXp)} / ${formatXp(xpForNextVoice)} XP`;
             ctx.fillText(voiceXpDisplay, contentX + barWidth - 5, 215);
 
             // サーバーアイコンを右上に追加
