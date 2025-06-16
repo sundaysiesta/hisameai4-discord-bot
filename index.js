@@ -18,9 +18,19 @@ const client = new Client({
 const redis = new Redis({
   url: process.env.UPSTASH_REDIS_REST_URL,
   token: process.env.UPSTASH_REDIS_REST_TOKEN,
+  maxRetriesPerRequest: 5,
+  enableReadyCheck: true,
+  connectTimeout: 30000,
 });
 const notion = new NotionClient({ auth: process.env.NOTION_API_KEY });
 
+// メッセージキャッシュの制限を設定
+client.options.messageCacheMaxSize = 100;
+client.options.messageCacheLifetime = 300; // 5分
+client.options.messageSweepInterval = 300; // 5分
+
+// イベントリスナーの制限を設定
+client.setMaxListeners(20);
 
 // --- コマンドハンドリング ---
 client.commands = new Collection();

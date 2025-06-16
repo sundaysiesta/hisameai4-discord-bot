@@ -67,8 +67,21 @@ async function updatePermanentRankings(guild, redis, notion) {
         const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
         const titleDate = `${firstDayOfMonth.getMonth() + 1}月${firstDayOfMonth.getDate()}日〜`;
         const monthKey = now.toISOString().slice(0, 7);
-        const textKeys = await redis.keys(`monthly_xp:text:${monthKey}:*`);
-        const voiceKeys = await redis.keys(`monthly_xp:voice:${monthKey}:*`);
+        
+        // Redisキーの一括取得を最適化
+        let textKeys = [], voiceKeys = [];
+        try {
+            [textKeys, voiceKeys] = await Promise.all([
+                redis.keys(`monthly_xp:text:${monthKey}:*`),
+                redis.keys(`monthly_xp:voice:${monthKey}:*`)
+            ]);
+        } catch (error) {
+            console.error('Redis keys fetch error:', error);
+            // 個別に取得を試みる
+            textKeys = await redis.keys(`monthly_xp:text:${monthKey}:*`).catch(() => []);
+            voiceKeys = await redis.keys(`monthly_xp:voice:${monthKey}:*`).catch(() => []);
+        }
+
         const textUsers = [];
         for (const key of textKeys) {
             try {
@@ -218,6 +231,20 @@ module.exports = {
 	async execute(client, redis, notion) {
         console.log(`Logged in as ${client.user.tag}!`);
         client.redis = redis; 
+
+        // メモリ使用量の監視を追加
+        let lastLogTime = 0;
+        setInterval(() => {
+            const now = Date.now();
+            if (now - lastLogTime >= 5 * 60 * 1000) { // 5分以上経過している場合のみ
+                const used = process.memoryUsage();
+                if (used.heapUsed > 500 * 1024 * 1024) { // 500MB以上使用している場合のみ
+                    console.log(`High memory usage: ${Math.round(used.heapUsed / 1024 / 1024)}MB`);
+                }
+                lastLogTime = now;
+            }
+        }, 60 * 1000); // 1分ごとにチェック
+
         try {
             const savedStatus = await redis.get('bot_status_text');
             if (savedStatus) client.user.setActivity(savedStatus, { type: ActivityType.Playing });
