@@ -58,22 +58,28 @@ async function postOrEdit(channel, redisKey, payload) {
 
 async function updatePermanentRankings(guild, redis, notion) {
     try {
-        if (!guild || !guild.channels) {
-            console.error('ギルドまたはチャンネルマネージャーが利用できません。');
+        // ギルドの存在チェック
+        if (!guild) {
+            console.error('ギルドが利用できません。');
             return;
         }
 
-        // チャンネルの取得方法を修正
+        // チャンネルマネージャーの存在チェック
+        if (!guild.channels) {
+            console.error('チャンネルマネージャーが利用できません。');
+            return;
+        }
+
+        // ランキングチャンネルの取得
         let rankingChannel;
         try {
             rankingChannel = await guild.channels.fetch(config.RANKING_CHANNEL_ID);
+            if (!rankingChannel) {
+                console.error('ランキングチャンネルが見つかりません。');
+                return;
+            }
         } catch (error) {
             console.error('ランキングチャンネルの取得に失敗:', error);
-            return;
-        }
-
-        if (!rankingChannel) {
-            console.error('ランキングチャンネルが見つかりません。');
             return;
         }
 
@@ -139,6 +145,7 @@ async function updatePermanentRankings(guild, redis, notion) {
         } catch (e) { console.error("レベルランキング更新エラー:", e); }
 
         try {
+            // 部活カテゴリの取得
             let clubCategory;
             try {
                 clubCategory = await guild.channels.fetch(config.CLUB_CATEGORY_ID);

@@ -10,14 +10,16 @@ module.exports = {
         const userId = interaction.user.id;
         
         try {
+            // メインアカウントIDの取得
             const mainAccountId = await redis.hget(`user:${userId}`, 'mainAccountId') || userId;
-            const lastDaily = await redis.hget(`user:${mainAccountId}`, 'lastDaily');
             
             // 現在時刻を取得（UTC）
             const now = new Date();
             const nowTime = now.getTime();
             
             // 前回のデイリー時間を取得
+            const lastDaily = await redis.hget(`user:${mainAccountId}`, 'lastDaily');
+            
             if (lastDaily) {
                 const lastDailyTime = parseInt(lastDaily);
                 const timeDiff = nowTime - lastDailyTime;
@@ -45,10 +47,21 @@ module.exports = {
             
             // Redisでのトランザクション処理
             const multi = redis.multi();
+            
+            // 最後のデイリー時間を設定
             multi.hset(`user:${mainAccountId}`, 'lastDaily', nowTime.toString());
+            
+            // 残高を更新
             multi.hincrby(`user:${mainAccountId}`, 'balance', amount);
-            await multi.exec();
+            
+            // トランザクションを実行
+            const results = await multi.exec();
+            
+            if (!results) {
+                throw new Error('トランザクションの実行に失敗しました');
+            }
 
+            // 新しい残高を取得
             const newBalance = await redis.hget(`user:${mainAccountId}`, 'balance');
 
             const embed = new EmbedBuilder()
