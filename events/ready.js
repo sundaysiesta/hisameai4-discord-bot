@@ -198,7 +198,8 @@ async function updatePermanentRankings(client, guild, redis, notion) {
 
         // 部活ランキング
         try {
-            const clubCategory = await guild.channels.fetch(config.CLUB_CATEGORY_ID).catch(() => null);
+            // 部活カテゴリを直接取得
+            const clubCategory = await client.channels.fetch(config.CLUB_CATEGORY_ID).catch(() => null);
             if (!clubCategory) {
                 console.error('部活カテゴリの取得に失敗: カテゴリが見つかりません');
                 return;
@@ -235,26 +236,13 @@ async function updatePermanentRankings(client, guild, redis, notion) {
             console.error('部活ランキングの更新に失敗:', error);
         }
 
-        // トレンドワード
+        // トレンドワード（一時的に無効化）
         try {
-            const trendWords = await redis.zrange('trend_words', 0, 9, { rev: true, withScores: true });
-            if (trendWords.length > 0) {
-                const trendEmbed = new EmbedBuilder()
-                    .setTitle('🔥 トレンドワード')
-                    .setColor('#FFD700')
-                    .setDescription(
-                        trendWords
-                            .filter((_, i) => i % 2 === 0)
-                            .map((word, index) => `${index + 1}. ${word}`)
-                            .join('\n')
-                    )
-                    .setTimestamp();
-
-                trendMessage = await rankingChannel.send({ embeds: [trendEmbed] });
-                await redis.set('trend_message_id', trendMessage.id);
-            }
+            // トレンドワードのキーを一度削除
+            await redis.del('trend_words');
+            console.log('トレンドワードのキーをリセットしました');
         } catch (error) {
-            console.error('トレンドワードの更新に失敗:', error);
+            console.error('トレンドワードのリセットに失敗:', error);
         }
 
         console.log('ランキングの更新が完了しました');
