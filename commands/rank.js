@@ -206,11 +206,11 @@ module.exports = {
             
             // テキストXP
             const textXpDisplay = formatXpProgress(textXp, totalNeededTextXp);
-            ctx.fillText(textXpDisplay, 760, 164);
+            ctx.fillText(textXpDisplay, 760, 125); // Y位置を125に変更（以前の164から）
             
             // ボイスXP
             const voiceXpDisplay = formatXpProgress(voiceXp, totalNeededVoiceXp);
-            ctx.fillText(voiceXpDisplay, 760, 227);
+            ctx.fillText(voiceXpDisplay, 760, 205); // Y位置を205に変更（以前の227から）
 
             const attachment = new AttachmentBuilder(canvas.toBuffer(), { name: 'rank-card.png' });
             await interaction.editReply({ files: [attachment] });
