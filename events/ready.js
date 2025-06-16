@@ -263,17 +263,85 @@ module.exports = {
 	name: Events.ClientReady,
 	once: true,
 	async execute(client, redis, notion) {
-        try {
-            console.log(`ボットが起動しました: ${client.user.tag}`);
+        console.log(`ボットが起動しました: ${client.user.tag}`);
+        client.redis = redis;
 
+        try {
             // ボットのステータスを設定
-            client.user.setPresence({
-                activities: [{ 
-                    name: 'ロメコイン経済システム',
-                    type: ActivityType.Playing
-                }],
-                status: 'online'
-            });
+            const savedStatus = await redis.get('bot_status_text');
+            if (savedStatus) {
+                client.user.setActivity(savedStatus, { type: ActivityType.Playing });
+            } else {
+                client.user.setPresence({
+                    activities: [{ 
+                        name: 'ロメコイン経済システム',
+                        type: ActivityType.Playing
+                    }],
+                    status: 'online'
+                });
+            }
+
+            // 再起動通知
+            const notificationChannel = await client.channels.fetch(config.RESTART_NOTIFICATION_CHANNEL_ID).catch(() => null);
+            if (notificationChannel) {
+                const commitInfo = await getLatestCommitInfo();
+                const embed = new EmbedBuilder()
+                    .setTitle('🤖 再起動しました。確認してください。')
+                    .setColor(0x3498DB)
+                    .setTimestamp();
+
+                if (commitInfo) {
+                    embed.addFields(
+                        { 
+                            name: '現在のバージョン', 
+                            value: `[${commitInfo.sha.substring(0, 7)}](${commitInfo.url})` 
+                        },
+                        {
+                            name: '最新の変更内容',
+                            value: `\`\`\`${commitInfo.message}\`\`\``
+                        }
+                    );
+                } else {
+                    embed.addFields({ name: 'バージョン情報', value: '取得に失敗しました。' });
+                }
+
+                await notificationChannel.send({ embeds: [embed] });
+            }
+
+            // 匿名チャンネルの設定
+            const anonyChannel = await client.channels.fetch(config.ANONYMOUS_CHANNEL_ID).catch(() => null);
+            if (anonyChannel) {
+                await postStickyMessage(client, anonyChannel, config.STICKY_BUTTON_ID, {
+                    components: [new ActionRowBuilder().addComponents(
+                        new ButtonBuilder()
+                            .setCustomId(config.STICKY_BUTTON_ID)
+                            .setLabel('書き込む')
+                            .setStyle(ButtonStyle.Success)
+                            .setEmoji('✍️')
+                    )]
+                });
+            }
+
+            // 部活パネルの設定
+            const panelChannel = await client.channels.fetch(config.CLUB_PANEL_CHANNEL_ID).catch(() => null);
+            if (panelChannel) {
+                await postStickyMessage(client, panelChannel, config.CREATE_CLUB_BUTTON_ID, {
+                    content: '新しい部活を設立するには、下のボタンを押してください。',
+                    components: [new ActionRowBuilder().addComponents(
+                        new ButtonBuilder()
+                            .setCustomId(config.CREATE_CLUB_BUTTON_ID)
+                            .setLabel('部活を作成する')
+                            .setStyle(ButtonStyle.Primary)
+                            .setEmoji('🎫')
+                    )]
+                });
+            }
+
+            // 匿名メッセージカウンターの初期化
+            const counterExists = await redis.exists('anonymous_message_counter');
+            if (!counterExists) {
+                await redis.set('anonymous_message_counter', 216);
+            }
 
             // ランキングの更新を実行
             const guild = await client.guilds.fetch(config.GUILD_ID).catch(error => {
@@ -286,7 +354,7 @@ module.exports = {
                 return;
             }
 
-            // ランキングの更新を実行
+            // 起動時に即時ランキング更新
             await updatePermanentRankings(guild, redis, notion).catch(error => {
                 console.error('ランキングの更新に失敗しました:', error);
             });
@@ -294,6 +362,33 @@ module.exports = {
             // 定期的なランキング更新のスケジュール設定
             cron.schedule('0 */1 * * *', async () => {
                 try {
+                    const voiceStates = guild.voiceStates.cache;
+                    const activeVCs = new Map();
+                    
+                    // VCのXP処理
+                    voiceStates.forEach(vs => {
+                        if (vs.channel && !vs.serverMute && !vs.selfMute && !vs.member.user.bot) {
+                            const members = activeVCs.get(vs.channelId) || [];
+                            members.push(vs.member);
+                            activeVCs.set(vs.channelId, members);
+                        }
+                    });
+
+                    const now = Date.now();
+                    for (const members of activeVCs.values()) {
+                        if (members.length > 1) {
+                            for (const member of members) {
+                                if (member.roles.cache.has(config.XP_EXCLUDED_ROLE_ID)) continue;
+                                const cooldownKey = `xp_cooldown:voice:${member.id}`;
+                                const lastXpTime = await redis.get(cooldownKey);
+                                if (!lastXpTime || (now - lastXpTime > config.VOICE_XP_COOLDOWN)) {
+                                    const xp = config.VOICE_XP_AMOUNT;
+                                    await handleVoiceXp(member, xp, redis);
+                                    await redis.set(cooldownKey, now, { ex: 125 });
+                                }
+                            }
+                        }
+                    }
                     await updatePermanentRankings(guild, redis, notion);
                 } catch (error) {
                     console.error('定期ランキング更新でエラーが発生しました:', error);
@@ -309,11 +404,39 @@ module.exports = {
                 }
             });
 
-            // 最新のコミット情報を取得して表示
-            const commitInfo = await getLatestCommitInfo();
-            if (commitInfo) {
-                console.log(`最新のコミット: ${commitInfo.message} (${commitInfo.sha.slice(0, 7)})`);
-            }
+            // 毎日深夜0時にRedisキーのクリーンアップを実行
+            cron.schedule('0 0 * * *', async () => {
+                try {
+                    const now = Date.now();
+                    const yesterday = new Date();
+                    yesterday.setDate(yesterday.getDate() - 1);
+                    const yesterdayKey = yesterday.toISOString().slice(0, 10);
+
+                    // 期限切れの日次XPデータを削除
+                    const dailyKeys = await redis.keys(`daily_xp:*:${yesterdayKey}:*`);
+                    if (dailyKeys.length > 0) {
+                        await redis.del(...dailyKeys);
+                    }
+
+                    // 期限切れのトレンドデータを削除（3時間以上前）
+                    const cutoff = now - config.TREND_WORD_LIFESPAN;
+                    await redis.zremrangebyscore('trend_words_scores', '-inf', cutoff);
+                    await redis.zremrangebyscore('trend_words_timestamps', '-inf', cutoff);
+
+                    // 不要なクールダウンキーを削除
+                    const cooldownKeys = await redis.keys('xp_cooldown:*');
+                    for (const key of cooldownKeys) {
+                        const timestamp = await redis.get(key);
+                        if (now - timestamp > 24 * 60 * 60 * 1000) {
+                            await redis.del(key);
+                        }
+                    }
+
+                    console.log('Redisキーのクリーンアップが完了しました。');
+                } catch (error) {
+                    console.error('Redisキーのクリーンアップ中にエラー:', error);
+                }
+            }, { scheduled: true, timezone: "Asia/Tokyo" });
 
         } catch (error) {
             console.error('readyイベントの実行中にエラーが発生しました:', error);
