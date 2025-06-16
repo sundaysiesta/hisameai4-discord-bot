@@ -1,123 +1,70 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const config = require('../config.js');
-const { notion } = require('../utils/notionHelpers.js');
 
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('buy')
-        .setDescription('ショップでアイテムを購入します')
-        .addStringOption(option => 
-            option.setName('itemid')
-                .setDescription('購入するアイテムのID')
-                .setRequired(true)
-                .addChoices(
-                    ...config.COIN_ITEMS.map(item => ({
-                        name: item.name,
-                        value: item.id
-                    }))
-                )),
+        .setDescription('ショップから商品を購入します')
+        .addStringOption(option =>
+            option.setName('name')
+                .setDescription('購入する商品名')
+                .setRequired(true)),
     async execute(interaction, redis) {
         await interaction.deferReply();
-        const userId = interaction.user.id;
-        const itemId = interaction.options.getString('itemid');
-        
+
         try {
-            const item = config.COIN_ITEMS.find(i => i.id === itemId);
+            const itemName = interaction.options.getString('name');
+            const item = config.COIN_ITEMS.find(item => item.name === itemName);
+
             if (!item) {
-                return interaction.editReply('指定されたアイテムが見つかりません。');
+                return interaction.editReply('指定された商品が見つかりません。');
             }
 
-            const mainAccountId = await redis.hget(`user:${userId}`, 'mainAccountId') || userId;
-            const balance = await redis.hget(`user:${mainAccountId}`, 'balance') || '0';
+            // ユーザーの所持金を確認
+            const userData = await redis.hGetAll(`user:${interaction.user.id}`);
+            const balance = parseInt(userData.balance || '0');
 
-            if (parseInt(balance) < item.price) {
-                return interaction.editReply(`所持金が足りません。\n必要金額: ${config.COIN_SYMBOL} ${item.price.toLocaleString()} ${config.COIN_NAME}\n所持金: ${config.COIN_SYMBOL} ${parseInt(balance).toLocaleString()} ${config.COIN_NAME}`);
+            if (balance < item.price) {
+                return interaction.editReply(`所持金が足りません。\n必要額: ${config.COIN_SYMBOL} ${item.price.toLocaleString()} ${config.COIN_NAME}\n所持金: ${config.COIN_SYMBOL} ${balance.toLocaleString()} ${config.COIN_NAME}`);
             }
 
-            // アイテム固有の処理
-            let successMessage = '';
-            switch (itemId) {
-                case 'weather_title':
-                case 'lome_master':
-                    // Notionデータベースに称号を追加
-                    try {
-                        const response = await notion.databases.query({
-                            database_id: config.NOTION_DATABASE_ID,
-                            filter: {
-                                property: 'DiscordユーザーID',
-                                rich_text: { equals: userId }
-                            }
-                        });
-
-                        if (response.results.length > 0) {
-                            const pageId = response.results[0].id;
-                            const currentTitles = response.results[0].properties['称号']?.relation || [];
-                            
-                            // 称号データベースに新しい称号を追加
-                            const titlePage = await notion.pages.create({
-                                parent: { database_id: config.NOTION_TITLES_DATABASE_ID },
-                                properties: {
-                                    '名称': { title: [{ text: { content: item.name } }] },
-                                    '開催日': { date: { start: new Date().toISOString().split('T')[0] } }
-                                }
-                            });
-
-                            // ユーザーの称号リストを更新
-                            await notion.pages.update({
-                                page_id: pageId,
-                                properties: {
-                                    '称号': {
-                                        relation: [...currentTitles, { id: titlePage.id }]
-                                    }
-                                }
-                            });
-                        }
-                        successMessage = `${item.name}を購入し、称号に追加しました！`;
-                    } catch (error) {
-                        console.error('称号追加エラー:', error);
-                        return interaction.editReply('称号の追加中にエラーが発生しました。');
-                    }
-                    break;
-
-                case 'custom_role':
-                    // カスタムロールを作成
-                    try {
-                        const role = await interaction.guild.roles.create({
-                            name: `${interaction.user.username}の称号`,
-                            color: 'Random',
-                            reason: 'ロメコインショップでの購入'
-                        });
-                        await interaction.member.roles.add(role);
-                        successMessage = `カスタムロール「${role.name}」を作成し、付与しました！`;
-                    } catch (error) {
-                        console.error('ロール作成エラー:', error);
-                        return interaction.editReply('ロールの作成中にエラーが発生しました。');
-                    }
-                    break;
-
-                default:
-                    successMessage = `${item.name}を購入しました！`;
+            // ロールの存在確認
+            const role = await interaction.guild.roles.fetch(item.roleId).catch(() => null);
+            if (!role) {
+                return interaction.editReply('この商品は現在購入できません。');
             }
 
-            // 購入処理（コインの減算）
-            await redis.hincrby(`user:${mainAccountId}`, 'balance', -item.price);
-            const newBalance = await redis.hget(`user:${mainAccountId}`, 'balance');
+            // ユーザーが既にロールを持っているか確認
+            if (interaction.member.roles.cache.has(item.roleId)) {
+                return interaction.editReply('あなたは既にこの商品を所持しています。');
+            }
+
+            // トランザクションの開始
+            const multi = redis.multi();
+
+            // 所持金を減らす
+            multi.hSet(`user:${interaction.user.id}`, 'balance', balance - item.price);
+
+            // トランザクションの実行
+            await multi.exec();
+
+            // ロールを付与
+            await interaction.member.roles.add(item.roleId);
 
             const embed = new EmbedBuilder()
-                .setColor('#00ff00')
                 .setTitle('購入完了')
-                .setDescription(successMessage)
+                .setColor('#00ff00')
+                .setDescription(`${item.name}を購入しました。`)
                 .addFields(
-                    { name: 'アイテム', value: item.name, inline: true },
-                    { name: '価格', value: `${config.COIN_SYMBOL} ${item.price.toLocaleString()} ${config.COIN_NAME}`, inline: true },
-                    { name: '残高', value: `${config.COIN_SYMBOL} ${parseInt(newBalance).toLocaleString()} ${config.COIN_NAME}`, inline: true }
+                    { name: '支払い金額', value: `${config.COIN_SYMBOL} ${item.price.toLocaleString()} ${config.COIN_NAME}`, inline: true },
+                    { name: '残高', value: `${config.COIN_SYMBOL} ${(balance - item.price).toLocaleString()} ${config.COIN_NAME}`, inline: true }
                 )
                 .setTimestamp();
 
             await interaction.editReply({ embeds: [embed] });
         } catch (error) {
-            console.error('購入エラー:', error);
-            await interaction.editReply('購入処理中にエラーが発生しました。');
+            console.error('商品購入エラー:', error);
+            await interaction.editReply('商品の購入中にエラーが発生しました。');
         }
     },
 };

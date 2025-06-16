@@ -65,7 +65,9 @@ module.exports = {
                         if (!userData || Object.keys(userData).length === 0) {
                             await redis.hset(userKey, {
                                 textXp: '0',
-                                voiceXp: '0'
+                                voiceXp: '0',
+                                balance: '0',
+                                bank: '0'
                             });
                         }
 
@@ -77,9 +79,10 @@ module.exports = {
                             await redis.set(dailyKey, '0');
                         }
 
-                        // XPの更新（個別に実行して確実性を高める）
+                        // XPとロメコインの更新（個別に実行して確実性を高める）
                         await Promise.all([
                             redis.hincrby(userKey, 'textXp', xpToGive),
+                            redis.hincrby(userKey, 'balance', xpToGive), // 同額のロメコインを付与
                             redis.incrby(monthlyKey, xpToGive),
                             redis.incrby(dailyKey, xpToGive),
                             redis.expire(monthlyKey, 60 * 60 * 24 * 32),  // 32日

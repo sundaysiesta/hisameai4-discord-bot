@@ -212,6 +212,53 @@ async function updatePermanentRankings(guild, redis, notion) {
     } catch(e){ console.error("リンクボタン更新エラー:", e); }
 }
 
+// ボイスチャットのXP付与処理
+async function handleVoiceXp(member, xpToGive, redis) {
+    if (!member || member.roles.cache.has(config.XP_EXCLUDED_ROLE_ID)) return;
+
+    const mainAccountId = await redis.hget(`user:${member.id}`, 'mainAccountId') || member.id;
+    const userKey = `user:${mainAccountId}`;
+    const monthlyKey = `monthly_xp:voice:${new Date().toISOString().slice(0, 7)}:${mainAccountId}`;
+    const dailyKey = `daily_xp:voice:${new Date().toISOString().slice(0, 10)}:${mainAccountId}`;
+
+    // 各キーの存在確認と初期化を個別に実行
+    const [userData, monthlyExists, dailyExists] = await Promise.all([
+        redis.hgetall(userKey),
+        redis.exists(monthlyKey),
+        redis.exists(dailyKey)
+    ]);
+
+    // ユーザーデータの初期化（必要な場合）
+    if (!userData || Object.keys(userData).length === 0) {
+        await redis.hset(userKey, {
+            textXp: '0',
+            voiceXp: '0',
+            balance: '0',
+            bank: '0'
+        });
+    }
+
+    // 月間・日間XPの初期化（必要な場合）
+    if (!monthlyExists) {
+        await redis.set(monthlyKey, '0');
+    }
+    if (!dailyExists) {
+        await redis.set(dailyKey, '0');
+    }
+
+    // XPとロメコインの更新（個別に実行して確実性を高める）
+    await Promise.all([
+        redis.hincrby(userKey, 'voiceXp', xpToGive),
+        redis.hincrby(userKey, 'balance', xpToGive), // 同額のロメコインを付与
+        redis.incrby(monthlyKey, xpToGive),
+        redis.incrby(dailyKey, xpToGive),
+        redis.expire(monthlyKey, 60 * 60 * 24 * 32),  // 32日
+        redis.expire(dailyKey, 60 * 60 * 24 * 2)      // 2日
+    ]);
+
+    await updateLevelRoles(member, redis, member.client);
+}
+
 module.exports = {
 	name: Events.ClientReady,
 	once: true,
@@ -297,17 +344,9 @@ module.exports = {
                             const cooldownKey = `xp_cooldown:voice:${member.id}`;
                             const lastXpTime = await redis.get(cooldownKey);
                             if (!lastXpTime || (now - lastXpTime > config.VOICE_XP_COOLDOWN)) {
-                                const mainAccountId = await redis.hget(`user:${member.id}`, 'mainAccountId') || member.id;
-                                const mainMember = await guild.members.fetch(mainAccountId).catch(() => null);
-                                if (!mainMember) continue;
                                 const xp = config.VOICE_XP_AMOUNT;
-                                const monthlyKey = `monthly_xp:voice:${new Date().toISOString().slice(0, 7)}:${mainAccountId}`;
-                                const dailyKey = `daily_xp:voice:${new Date().toISOString().slice(0, 10)}:${mainAccountId}`;
-                                await redis.hincrby(`user:${mainAccountId}`, 'voiceXp', xp);
-                                await safeIncrby(redis, monthlyKey, xp);
-                                await safeIncrby(redis, dailyKey, xp);
+                                await handleVoiceXp(member, xp, redis);
                                 await redis.set(cooldownKey, now, { ex: 125 });
-                                await updateLevelRoles(mainMember, redis, client);
                             }
                         }
                     }
