@@ -57,8 +57,11 @@ async function postOrEdit(channel, redisKey, payload) {
 }
 
 async function updatePermanentRankings(guild, redis, notion) {
-    const rankingChannel = await guild.client.channels.fetch(config.RANKING_CHANNEL_ID).catch(() => null);
-    if (!rankingChannel) return;
+    const rankingChannel = await guild.channels.fetch(config.RANKING_CHANNEL_ID).catch(() => null);
+    if (!rankingChannel) {
+        console.error('ランキングチャンネルが見つかりません。');
+        return;
+    }
 
     let levelMessage, clubMessage, trendMessage;
 
