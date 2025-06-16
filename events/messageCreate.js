@@ -26,8 +26,8 @@ function cleanupCooldowns() {
 setInterval(cleanupCooldowns, 5 * 60 * 1000);
 
 module.exports = {
-	name: Events.MessageCreate,
-	async execute(message, redis, notion) {
+    name: Events.MessageCreate,
+    async execute(message, redis, notion) {
         if (message.webhookId && message.channel.id === config.ANONYMOUS_CHANNEL_ID) {
             const payload = { components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(config.STICKY_BUTTON_ID).setLabel('書き込む').setStyle(ButtonStyle.Success).setEmoji('✍️'))] };
             await postStickyMessage(message.client, message.channel, config.STICKY_BUTTON_ID, payload);
@@ -44,22 +44,41 @@ module.exports = {
                 const lastXpTime = textXpCooldowns.get(userId);
                 if (!lastXpTime || (now - lastXpTime > config.TEXT_XP_COOLDOWN)) {
                     const mainAccountId = await redis.hget(`user:${userId}`, 'mainAccountId') || userId;
+                    if (!mainAccountId) return;
+
                     const mainMember = await message.guild.members.fetch(mainAccountId).catch(() => null);
                     if (mainMember) {
                         const xpToGive = Math.floor(Math.random() * (config.MAX_TEXT_XP - config.MIN_TEXT_XP + 1)) + config.MIN_TEXT_XP;
                         
-                        await redis.hincrby(`user:${mainAccountId}`, 'textXp', xpToGive);
+                        // ユーザーデータの初期化確認
+                        const userKey = `user:${mainAccountId}`;
+                        const exists = await redis.exists(userKey);
+                        if (!exists) {
+                            await redis.hset(userKey, {
+                                textXp: '0',
+                                voiceXp: '0'
+                            });
+                        }
+
+                        await redis.hincrby(userKey, 'textXp', xpToGive);
 
                         // 月間・日間XPの更新
                         const monthlyKey = `monthly_xp:text:${new Date().toISOString().slice(0, 7)}:${mainAccountId}`;
                         const dailyKey = `daily_xp:text:${new Date().toISOString().slice(0, 10)}:${mainAccountId}`;
 
-                        // キーが存在しない場合は0で初期化
-                        if (!await redis.exists(monthlyKey)) await redis.set(monthlyKey, '0');
-                        if (!await redis.exists(dailyKey)) await redis.set(dailyKey, '0');
+                        // 各キーの初期化確認
+                        const [monthlyExists, dailyExists] = await Promise.all([
+                            redis.exists(monthlyKey),
+                            redis.exists(dailyKey)
+                        ]);
 
-                        await redis.incrby(monthlyKey, xpToGive);
-                        await redis.incrby(dailyKey, xpToGive);
+                        if (!monthlyExists) await redis.set(monthlyKey, '0');
+                        if (!dailyExists) await redis.set(dailyKey, '0');
+
+                        await Promise.all([
+                            redis.incrby(monthlyKey, xpToGive),
+                            redis.incrby(dailyKey, xpToGive)
+                        ]);
                         
                         textXpCooldowns.set(userId, now);
                         await updateLevelRoles(mainMember, redis, message.client);
@@ -93,22 +112,23 @@ module.exports = {
 
                 // 重複を排除
                 const uniqueWords = [...new Set(words)];
-                const timestamp = Date.now().toString();
-
-                for (const word of uniqueWords) {
-                    await redis.lpush('trend_words', `${word}:${userId}:${timestamp}`);
+                if (uniqueWords.length > 0) {
+                    const timestamp = Date.now().toString();
+                    const trendEntries = uniqueWords.map(word => `${word}:${userId}:${timestamp}`);
+                    await redis.lpush('trend_words', ...trendEntries);
+                    trendCooldowns.set(userId, now);
                 }
-
-                trendCooldowns.set(userId, now);
             }
         } catch (error) { console.error('トレンド処理エラー:', error); }
         
         // --- 部活チャンネルのメッセージ数カウント ---
-        if (message.channel.parentId === config.CLUB_CATEGORY_ID && !config.EXCLUDED_CHANNELS.includes(message.channel.id)) {
-            const key = `weekly_message_count:${message.channel.id}`;
-            // キーが存在しない場合は0で初期化
-            if (!await redis.exists(key)) await redis.set(key, '0');
-            await redis.incr(key);
-        }
-	},
+        try {
+            if (message.channel.parentId === config.CLUB_CATEGORY_ID && !config.EXCLUDED_CHANNELS.includes(message.channel.id)) {
+                const key = `weekly_message_count:${message.channel.id}`;
+                const exists = await redis.exists(key);
+                if (!exists) await redis.set(key, '0');
+                await redis.incr(key);
+            }
+        } catch (error) { console.error('部活メッセージカウントエラー:', error); }
+    },
 };
