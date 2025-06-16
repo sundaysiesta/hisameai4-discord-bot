@@ -38,6 +38,9 @@ redis.on('error', (error) => {
     console.error('Redis接続エラー:', error);
 });
 
+// Redisクライアントをグローバルに設定
+client.redis = redis;
+
 const notion = new NotionClient({ auth: process.env.NOTION_API_KEY });
 
 // --- コマンドハンドリング ---
