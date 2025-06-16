@@ -82,19 +82,6 @@ function formatTitles(titles) {
     return formattedString || 'なし';
 }
 
-/**
- * 数字を確実に半角に変換する関数
- * @param {string} str 変換する文字列
- * @returns {string} 変換後の文字列
- */
-function normalizeNumber(str) {
-    if (typeof str !== 'string') return '';
-    // 全角数字を半角に変換
-    return str
-        .replace(/[０-９]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xFEE0))
-        .replace(/[^0-9]/g, ''); // 数字以外を除去
-}
-
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('profile')
@@ -131,21 +118,7 @@ module.exports = {
             const generationNames = await getNotionRelationData(notion, props['世代']);
             let generationValue = '不明';
             if (generationNames.length > 0 && generationNames[0]?.title) {
-                const genText = generationNames[0].title;
-                const match = genText.match(/第[０-９0-9]+世代/);
-                if (match) {
-                    // 数字部分を抽出して変換
-                    const numStr = match[0].replace(/[第世代]/g, '');
-                    const normalizedNum = normalizeNumber(numStr);
-                    const num = parseInt(normalizedNum, 10);
-                    if (!isNaN(num)) {
-                        generationValue = `第${toKanjiNumber(num)}世代`;
-                    } else {
-                        generationValue = genText;
-                    }
-                } else {
-                    generationValue = genText;
-                }
+                generationValue = generationNames[0].title;
             }
 
             let borderColor = '#747F8D';
@@ -172,7 +145,7 @@ module.exports = {
             let titleValue = 'なし';
             
             if (titleData.length > 0) {
-                // 称号の処理をシンプル化
+                // 称号処理（絵文字の削除のみ）
                 const topThreeTitles = titleData
                     .slice(0, 3)
                     .map(item => item.title.replace(emojiRegex, '').trim())

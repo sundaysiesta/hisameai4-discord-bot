@@ -107,13 +107,11 @@ module.exports = {
             const canvas = createCanvas(934, 282);
             const ctx = canvas.getContext('2d');
             
-            // 【修正】背景描画ロジック
             try {
                 if (backgroundUrl) {
                     const background = await loadImage(backgroundUrl);
                     ctx.drawImage(background, 0, 0, canvas.width, canvas.height);
                 } else {
-                    // デフォルトの黒背景
                     ctx.fillStyle = '#000000';
                     ctx.fillRect(0, 0, canvas.width, canvas.height);
                 }
@@ -140,7 +138,8 @@ module.exports = {
 
             ctx.font = 'bold 24px "Noto Sans CJK JP"';
             ctx.fillStyle = '#FFFFFF';
-            ctx.fillText('TEXT', contentX, 125);            ctx.font = 'bold 30px "Noto Sans CJK JP"';
+            ctx.fillText('TEXT', contentX, 125);            
+            ctx.font = 'bold 30px "Noto Sans CJK JP"';
             ctx.fillText(`Lv.${textLevel} #${textRank}`, contentX + 80, 125);
             
             ctx.font = 'bold 24px "Noto Sans CJK JP"';
@@ -148,7 +147,8 @@ module.exports = {
             ctx.fillText('VOICE', contentX, 205);
             ctx.font = 'bold 30px "Noto Sans CJK JP"';
             ctx.fillText(`Lv.${voiceLevel} #${voiceRank}`, contentX + 100, 205);
-              // テキストとプログレスバーを描画
+
+            // テキストとプログレスバーを描画
             const barWidth = canvas.width - contentX - margin - 30;
             ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
             drawRoundRect(ctx, contentX, 145, barWidth, 20, 10);
@@ -167,7 +167,22 @@ module.exports = {
                 ctx.fillStyle = '#32CD32';
                 drawRoundRect(ctx, contentX, 225, barWidth * percentVoice, 20, 10);
                 ctx.fill();
-            }            // XPテキストは formatXpProgress で描画するので削除// サーバーアイコンを右上に追加
+            }
+
+            // XPテキストの描画
+            ctx.fillStyle = '#FFFFFF';
+            ctx.font = '16px "Noto Sans CJK JP"';
+            ctx.textAlign = 'right';
+            
+            // テキストXP
+            const textXpDisplay = `${formatXp(textXp)} / ${formatXp(xpForNextText - xpForCurrentText)} XP`;
+            ctx.fillText(textXpDisplay, contentX + barWidth - 5, 135);
+            
+            // ボイスXP
+            const voiceXpDisplay = `${formatXp(voiceXp)} / ${formatXp(xpForNextVoice - xpForCurrentVoice)} XP`;
+            ctx.fillText(voiceXpDisplay, contentX + barWidth - 5, 215);
+
+            // サーバーアイコンを右上に追加
             const serverIconSize = 48;
             const serverIconX = canvas.width - margin - serverIconSize - 10;
             const serverIconY = margin + 10;
@@ -199,19 +214,6 @@ module.exports = {
             ctx.lineWidth = 10;
             ctx.stroke();
             
-            // XPテキストの描画
-            ctx.fillStyle = '#FFFFFF';
-            ctx.font = '23px "Noto Sans CJK JP"';
-            ctx.textAlign = 'right';
-            
-            // テキストXP
-            const textXpDisplay = formatXpProgress(textXp, totalNeededTextXp);
-            ctx.fillText(textXpDisplay, 760, 125); // Y位置を125に変更（以前の164から）
-            
-            // ボイスXP
-            const voiceXpDisplay = formatXpProgress(voiceXp, totalNeededVoiceXp);
-            ctx.fillText(voiceXpDisplay, 760, 205); // Y位置を205に変更（以前の227から）
-
             const attachment = new AttachmentBuilder(canvas.toBuffer(), { name: 'rank-card.png' });
             await interaction.editReply({ files: [attachment] });
 
