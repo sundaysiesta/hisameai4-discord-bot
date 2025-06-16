@@ -334,15 +334,53 @@ module.exports = {
                                     console.log(`[ボイスXP] ${member.user.tag} のメインアカウントが見つかりません`);
                                     continue;
                                 }
-                                const xp = config.VOICE_XP_AMOUNT;
-                                const monthlyKey = `monthly_xp:voice:${new Date().toISOString().slice(0, 7)}:${mainAccountId}`;
-                                const dailyKey = `daily_xp:voice:${new Date().toISOString().slice(0, 10)}:${mainAccountId}`;
-                                await redis.hincrby(`user:${mainAccountId}`, 'voiceXp', xp);
-                                await safeIncrby(redis, monthlyKey, xp);
-                                await safeIncrby(redis, dailyKey, xp);
-                                await redis.set(cooldownKey, now, { ex: 125 });
-                                await updateLevelRoles(mainMember, redis, client);
-                                console.log(`[ボイスXP] ${member.user.tag} に ${xp} XPを付与しました（メインアカウント: ${mainMember.user.tag}）`);
+
+                                try {
+                                    const xp = config.VOICE_XP_AMOUNT;
+                                    const monthlyKey = `monthly_xp:voice:${new Date().toISOString().slice(0, 7)}:${mainAccountId}`;
+                                    const dailyKey = `daily_xp:voice:${new Date().toISOString().slice(0, 10)}:${mainAccountId}`;
+
+                                    // ユーザーデータの初期化（必要な場合）
+                                    const userKey = `user:${mainAccountId}`;
+                                    const userData = await redis.hgetall(userKey);
+                                    if (!userData || Object.keys(userData).length === 0) {
+                                        await redis.hset(userKey, {
+                                            textXp: '0',
+                                            voiceXp: '0'
+                                        });
+                                        console.log(`[ボイスXP] ${mainMember.user.tag} のユーザーデータを初期化しました`);
+                                    }
+
+                                    // 月間・日間XPの初期化（必要な場合）
+                                    const [monthlyExists, dailyExists] = await Promise.all([
+                                        redis.exists(monthlyKey),
+                                        redis.exists(dailyKey)
+                                    ]);
+
+                                    if (!monthlyExists) {
+                                        await redis.set(monthlyKey, '0');
+                                        console.log(`[ボイスXP] ${mainMember.user.tag} の月間XPデータを初期化しました`);
+                                    }
+                                    if (!dailyExists) {
+                                        await redis.set(dailyKey, '0');
+                                        console.log(`[ボイスXP] ${mainMember.user.tag} の日間XPデータを初期化しました`);
+                                    }
+
+                                    // XPの更新
+                                    await Promise.all([
+                                        redis.hincrby(userKey, 'voiceXp', xp),
+                                        redis.incrby(monthlyKey, xp),
+                                        redis.incrby(dailyKey, xp),
+                                        redis.expire(monthlyKey, 60 * 60 * 24 * 32),  // 32日
+                                        redis.expire(dailyKey, 60 * 60 * 24 * 2)      // 2日
+                                    ]);
+
+                                    await redis.set(cooldownKey, now, { ex: 125 });
+                                    await updateLevelRoles(mainMember, redis, client);
+                                    console.log(`[ボイスXP] ${member.user.tag} に ${xp} XPを付与しました（メインアカウント: ${mainMember.user.tag}）`);
+                                } catch (error) {
+                                    console.error(`[ボイスXP] ${member.user.tag} のXP付与中にエラー:`, error);
+                                }
                             } else {
                                 console.log(`[ボイスXP] ${member.user.tag} はクールダウン中です（残り: ${Math.ceil((config.VOICE_XP_COOLDOWN - (now - lastXpTime)) / 1000)}秒）`);
                             }

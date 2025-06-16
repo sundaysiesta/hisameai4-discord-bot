@@ -47,47 +47,58 @@ module.exports = {
                     const mainMember = await message.guild.members.fetch(mainAccountId).catch(() => null);
                     if (mainMember) {
                         const xpToGive = Math.floor(Math.random() * (config.MAX_TEXT_XP - config.MIN_TEXT_XP + 1)) + config.MIN_TEXT_XP;
-                        if (!xpToGive || isNaN(xpToGive)) return; // XP値が不正な場合は処理を中断
+                        if (!xpToGive || isNaN(xpToGive)) {
+                            console.log(`[テキストXP] ${mainMember.user.tag} のXP付与をスキップ: 不正なXP値`);
+                            return;
+                        }
 
                         // ユーザーデータの初期化と更新を一連の処理で実行
                         const userKey = `user:${mainAccountId}`;
                         const monthlyKey = `monthly_xp:text:${new Date().toISOString().slice(0, 7)}:${mainAccountId}`;
                         const dailyKey = `daily_xp:text:${new Date().toISOString().slice(0, 10)}:${mainAccountId}`;
 
-                        // 各キーの存在確認と初期化を個別に実行
-                        const [userData, monthlyExists, dailyExists] = await Promise.all([
-                            redis.hgetall(userKey),
-                            redis.exists(monthlyKey),
-                            redis.exists(dailyKey)
-                        ]);
+                        try {
+                            // 各キーの存在確認と初期化を個別に実行
+                            const [userData, monthlyExists, dailyExists] = await Promise.all([
+                                redis.hgetall(userKey),
+                                redis.exists(monthlyKey),
+                                redis.exists(dailyKey)
+                            ]);
 
-                        // ユーザーデータの初期化（必要な場合）
-                        if (!userData || Object.keys(userData).length === 0) {
-                            await redis.hset(userKey, {
-                                textXp: '0',
-                                voiceXp: '0'
-                            });
-                        }
+                            // ユーザーデータの初期化（必要な場合）
+                            if (!userData || Object.keys(userData).length === 0) {
+                                await redis.hset(userKey, {
+                                    textXp: '0',
+                                    voiceXp: '0'
+                                });
+                                console.log(`[テキストXP] ${mainMember.user.tag} のユーザーデータを初期化しました`);
+                            }
 
-                        // 月間・日間XPの初期化（必要な場合）
-                        if (!monthlyExists) {
-                            await redis.set(monthlyKey, '0');
-                        }
-                        if (!dailyExists) {
-                            await redis.set(dailyKey, '0');
-                        }
+                            // 月間・日間XPの初期化（必要な場合）
+                            if (!monthlyExists) {
+                                await redis.set(monthlyKey, '0');
+                                console.log(`[テキストXP] ${mainMember.user.tag} の月間XPデータを初期化しました`);
+                            }
+                            if (!dailyExists) {
+                                await redis.set(dailyKey, '0');
+                                console.log(`[テキストXP] ${mainMember.user.tag} の日間XPデータを初期化しました`);
+                            }
 
-                        // XPの更新（個別に実行して確実性を高める）
-                        await Promise.all([
-                            redis.hincrby(userKey, 'textXp', xpToGive),
-                            redis.incrby(monthlyKey, xpToGive),
-                            redis.incrby(dailyKey, xpToGive),
-                            redis.expire(monthlyKey, 60 * 60 * 24 * 32),  // 32日
-                            redis.expire(dailyKey, 60 * 60 * 24 * 2)      // 2日
-                        ]);
-                        
-                        textXpCooldowns.set(userId, now);
-                        await updateLevelRoles(mainMember, redis, message.client);
+                            // XPの更新（個別に実行して確実性を高める）
+                            await Promise.all([
+                                redis.hincrby(userKey, 'textXp', xpToGive),
+                                redis.incrby(monthlyKey, xpToGive),
+                                redis.incrby(dailyKey, xpToGive),
+                                redis.expire(monthlyKey, 60 * 60 * 24 * 32),  // 32日
+                                redis.expire(dailyKey, 60 * 60 * 24 * 2)      // 2日
+                            ]);
+                            
+                            textXpCooldowns.set(userId, now);
+                            await updateLevelRoles(mainMember, redis, message.client);
+                            console.log(`[テキストXP] ${mainMember.user.tag} に ${xpToGive} XPを付与しました（メインアカウント: ${mainMember.user.tag}）`);
+                        } catch (error) {
+                            console.error(`[テキストXP] ${mainMember.user.tag} のXP付与中にエラー:`, error);
+                        }
                     }
                 }
             }
