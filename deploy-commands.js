@@ -79,6 +79,7 @@ const commands = [
     { name: 'give', description: '他のユーザーにコインを送金します', options: [{ name: 'user', type: 6, description: '送金先のユーザー', required: true }, { name: 'amount', type: 4, description: '送金額', required: true }] },
     { name: 'shop', description: 'アイテムショップを表示します' },
     { name: 'buy', description: 'ショップでアイテムを購入します', options: [{ name: 'itemid', type: 3, description: '購入するアイテムのID', required: true }] },
+    { name: 'syncleader', description: '全ユーザーの部長ロールIDをNotion人物DBに同期します（管理者限定）' },
 ].map(command => command);
 
 const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_BOT_TOKEN);
