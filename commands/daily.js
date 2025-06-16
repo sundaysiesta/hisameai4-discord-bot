@@ -13,31 +13,31 @@ module.exports = {
             // メインアカウントIDの取得
             const mainAccountId = await redis.hget(`user:${userId}`, 'mainAccountId') || userId;
             
-            // 現在時刻を取得（UTC）
+            // 現在時刻を取得（JST）
             const now = new Date();
-            const nowTime = now.getTime();
+            const jstNow = new Date(now.getTime() + (9 * 60 * 60 * 1000)); // UTC+9
+            const today = jstNow.toISOString().split('T')[0]; // YYYY-MM-DD形式
             
-            // 前回のデイリー時間を取得
-            const lastDaily = await redis.get(`daily:${mainAccountId}`);
+            // 前回のデイリー日付を取得
+            const lastDailyDate = await redis.get(`daily:${mainAccountId}`);
             
-            if (lastDaily) {
-                const lastDailyTime = parseInt(lastDaily);
-                const timeDiff = nowTime - lastDailyTime;
+            if (lastDailyDate === today) {
+                // 次の日付まで待つ必要がある
+                const tomorrow = new Date(jstNow);
+                tomorrow.setDate(tomorrow.getDate() + 1);
+                tomorrow.setHours(0, 0, 0, 0);
                 
-                // 24時間（ミリ秒）未満の場合
-                if (timeDiff < 86400000) {
-                    const remainingTime = 86400000 - timeDiff;
-                    const hoursLeft = Math.floor(remainingTime / (60 * 60 * 1000));
-                    const minutesLeft = Math.floor((remainingTime % (60 * 60 * 1000)) / (60 * 1000));
-                    const secondsLeft = Math.floor((remainingTime % (60 * 1000)) / 1000);
+                const remainingTime = tomorrow.getTime() - jstNow.getTime();
+                const hoursLeft = Math.floor(remainingTime / (60 * 60 * 1000));
+                const minutesLeft = Math.floor((remainingTime % (60 * 60 * 1000)) / (60 * 1000));
+                const secondsLeft = Math.floor((remainingTime % (60 * 1000)) / 1000);
 
-                    const embed = new EmbedBuilder()
-                        .setColor('#ff0000')
-                        .setTitle('クールダウン中')
-                        .setDescription(`次のデイリーボーナスまで: ${hoursLeft}時間${minutesLeft}分${secondsLeft}秒`);
+                const embed = new EmbedBuilder()
+                    .setColor('#ff0000')
+                    .setTitle('クールダウン中')
+                    .setDescription(`次のデイリーボーナスまで: ${hoursLeft}時間${minutesLeft}分${secondsLeft}秒`);
 
-                    return interaction.editReply({ embeds: [embed] });
-                }
+                return interaction.editReply({ embeds: [embed] });
             }
 
             // ブースターロールの確認
@@ -48,9 +48,14 @@ module.exports = {
             // Redisでのトランザクション処理
             const multi = redis.multi();
             
-            // 最後のデイリー時間を設定（24時間の有効期限付き）
-            multi.set(`daily:${mainAccountId}`, nowTime.toString());
-            multi.expire(`daily:${mainAccountId}`, 86400);
+            // 最後のデイリー日付を設定（翌日の0時まで有効）
+            const tomorrow = new Date(jstNow);
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            tomorrow.setHours(0, 0, 0, 0);
+            const ttl = Math.floor((tomorrow.getTime() - jstNow.getTime()) / 1000);
+            
+            multi.set(`daily:${mainAccountId}`, today);
+            multi.expire(`daily:${mainAccountId}`, ttl);
             
             // 残高を更新
             multi.hincrby(`user:${mainAccountId}`, 'balance', amount);
