@@ -87,17 +87,17 @@ module.exports = {
 
                 const uniqueWords = [...new Set(words)];
                 const pipelineMulti = redis.pipeline();
-                const now = Date.now();
+                const now = Date.now().toString();
 
-                uniqueWords.forEach(word => {
-                    // トレンドスコアを更新（単語出現回数 * ユーザー数）
-                    pipelineMulti.zadd('trend_words_scores', 'INCR', 1, word);
+                for (const word of uniqueWords) {
+                    // ワードの出現回数をインクリメント
+                    pipelineMulti.hincrby('trend_words', word, 1);
                     // ワードの最終更新時刻を設定
-                    pipelineMulti.zadd('trend_words_timestamps', now, word);
-                });
+                    pipelineMulti.hset('trend_words_timestamps', word, now);
+                }
 
                 await pipelineMulti.exec();
-                trendCooldowns.set(userId, now);
+                trendCooldowns.set(userId, Date.now());
             }
         } catch (error) { console.error('トレンド処理エラー:', error); }
         

@@ -134,13 +134,20 @@ async function updatePermanentRankings(guild, redis) {
              clubRanking.sort((a, b) => (b.count !== a.count) ? b.count - a.count : a.position - b.position);
              if (clubRanking.length === 0) {
                  clubRankingEmbed.setDescription('現在、活動中の部活はありません。');
-             } else {
-                 const descriptionPromises = clubRanking.map(async (club, i) => {
+             } else {                 const descriptionPromises = clubRanking.map(async (club, i) => {
                      const leaderRoleId = await redis.get(`leader_roles:${club.id}`);
                      let leaderMention = '未設定';
                      if (leaderRoleId) {
-                         const role = guild.roles.cache.get(leaderRoleId);
-                         if (role) leaderMention = role.members.size > 0 ? role.members.map(m => m.toString()).join(', ') : '不在';
+                         try {
+                             const role = await guild.roles.fetch(leaderRoleId);
+                             if (role) {
+                                 await guild.members.fetch();
+                                 leaderMention = role.members.size > 0 ? role.members.map(m => m.toString()).join(', ') : '不在';
+                             }
+                         } catch (e) {
+                             console.error(`Error fetching leader role for club ${club.id}:`, e);
+                             leaderMention = 'エラー';
+                         }
                      }
                      return `**${i + 1}位:** <#${club.id}>  **部長:** ${leaderMention}`;
                  });
@@ -151,24 +158,30 @@ async function updatePermanentRankings(guild, redis) {
          }
         clubMessage = await postOrEdit(rankingChannel, 'club_ranking_message_id', { embeds: [clubRankingEmbed] });
     } catch(e) { console.error("部活ランキング更新エラー:", e); }
-    
-    try {
+      try {
         const now = Date.now();
         const cutoff = now - config.TREND_WORD_LIFESPAN;
         
-        // 期限切れのスコアを削除
-        await redis.zremrangebyscore('trend_words_scores', '-inf', cutoff);
-        
-        // スコアが高い順に上位20件を取得
-        const trendRanking = await redis.zrevrangebyscore('trend_words_scores', '+inf', cutoff, 'WITHSCORES', 'LIMIT', 0, 20);
+        // 古いタイムスタンプを持つワードを削除
+        const timestamps = await redis.hgetall('trend_words_timestamps');
+        const words = await redis.hgetall('trend_words');
         const trendItems = [];
         
-        // スコアとワードを整形
-        for (let i = 0; i < trendRanking.length; i += 2) {
-            const word = trendRanking[i];
-            const score = parseInt(trendRanking[i + 1]);
-            trendItems.push({ word, score });
+        for (const [word, timestamp] of Object.entries(timestamps)) {
+            if (Number(timestamp) >= cutoff) {
+                const score = Number(words[word] || 0);
+                if (score > 0) {
+                    trendItems.push({ word, score });
+                }
+            } else {
+                // 期限切れのワードを削除
+                await redis.hdel('trend_words', word);
+                await redis.hdel('trend_words_timestamps', word);
+            }
         }
+        
+        // スコアで降順ソート
+        trendItems.sort((a, b) => b.score - a.score);
 
         const trendEmbed = new EmbedBuilder()
             .setTitle('サーバー内トレンド (過去3時間)')
