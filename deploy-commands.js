@@ -82,16 +82,16 @@ const commands = [
     { name: 'rob', description: '財務部から強盗を試みます' },
     { name: 'shop', description: 'ショップの管理コマンド', options: [
         { name: 'list', type: 1, description: '現在の商品一覧を表示します' },
-        { name: 'add', type: 1, description: '新しい商品を追加します', options: [
+        { name: 'add', type: 1, description: '新しい商品を追加します（管理者限定）', options: [
             { name: 'name', type: 3, description: '商品名', required: true },
             { name: 'price', type: 4, description: '価格', required: true },
             { name: 'description', type: 3, description: '商品の説明', required: true },
             { name: 'role_id', type: 3, description: '付与するロールID', required: true }
         ]},
-        { name: 'remove', type: 1, description: '商品を削除します', options: [
+        { name: 'remove', type: 1, description: '商品を削除します（管理者限定）', options: [
             { name: 'name', type: 3, description: '削除する商品名', required: true }
         ]},
-        { name: 'edit', type: 1, description: '商品の情報を編集します', options: [
+        { name: 'edit', type: 1, description: '商品の情報を編集します（管理者限定）', options: [
             { name: 'name', type: 3, description: '編集する商品名', required: true },
             { name: 'field', type: 3, description: '編集する項目', required: true, choices: [
                 { name: '商品名', value: 'name' },
@@ -103,7 +103,7 @@ const commands = [
         ]}
     ]},
     { name: 'buy', description: 'ショップから商品を購入します', options: [{ name: 'name', type: 3, description: '購入する商品名', required: true }] },
-    { name: 'economy', description: '経済システムの管理コマンド', options: [
+    { name: 'economy', description: '経済システムの管理コマンド（管理者限定）', options: [
         { name: 'reset', type: 1, description: 'ユーザーの所持金と銀行残高をリセットします', options: [
             { name: 'user', type: 6, description: 'リセットするユーザー（指定しない場合は全ユーザー）', required: false }
         ]},

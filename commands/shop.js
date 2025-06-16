@@ -5,7 +5,6 @@ module.exports = {
     data: new SlashCommandBuilder()
         .setName('shop')
         .setDescription('ショップの管理コマンド')
-        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
         .addSubcommand(subcommand =>
             subcommand
                 .setName('list')
@@ -13,7 +12,8 @@ module.exports = {
         .addSubcommand(subcommand =>
             subcommand
                 .setName('add')
-                .setDescription('新しい商品を追加します')
+                .setDescription('新しい商品を追加します（管理者限定）')
+                .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
                 .addStringOption(option =>
                     option.setName('name')
                         .setDescription('商品名')
@@ -34,7 +34,8 @@ module.exports = {
         .addSubcommand(subcommand =>
             subcommand
                 .setName('remove')
-                .setDescription('商品を削除します')
+                .setDescription('商品を削除します（管理者限定）')
+                .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
                 .addStringOption(option =>
                     option.setName('name')
                         .setDescription('削除する商品名')
@@ -42,7 +43,8 @@ module.exports = {
         .addSubcommand(subcommand =>
             subcommand
                 .setName('edit')
-                .setDescription('商品の情報を編集します')
+                .setDescription('商品の情報を編集します（管理者限定）')
+                .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
                 .addStringOption(option =>
                     option.setName('name')
                         .setDescription('編集する商品名')

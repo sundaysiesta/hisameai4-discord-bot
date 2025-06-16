@@ -4,112 +4,104 @@ const config = require('../config.js');
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('economy')
-        .setDescription('経済システムの管理コマンド')
+        .setDescription('経済システムの管理（管理者限定）')
         .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
         .addSubcommand(subcommand =>
             subcommand
-                .setName('reset')
-                .setDescription('全ユーザーの所持金と銀行残高をリセットします')
+                .setName('set_balance')
+                .setDescription('ユーザーの残高を設定します')
                 .addUserOption(option =>
                     option.setName('user')
-                        .setDescription('リセットするユーザー（指定しない場合は全員）')
-                        .setRequired(false)))
-        .addSubcommand(subcommand =>
-            subcommand
-                .setName('set')
-                .setDescription('ユーザーの所持金または銀行残高を設定します')
-                .addUserOption(option =>
-                    option.setName('user')
-                        .setDescription('設定するユーザー')
+                        .setDescription('対象ユーザー')
                         .setRequired(true))
-                .addStringOption(option =>
-                    option.setName('type')
-                        .setDescription('設定する残高の種類')
-                        .setRequired(true)
-                        .addChoices(
-                            { name: '所持金', value: 'balance' },
-                            { name: '銀行残高', value: 'bank' }
-                        ))
                 .addIntegerOption(option =>
                     option.setName('amount')
                         .setDescription('設定する金額')
                         .setRequired(true)
-                        .setMinValue(0))),
+                        .setMinValue(0)))
+        .addSubcommand(subcommand =>
+            subcommand
+                .setName('add_balance')
+                .setDescription('ユーザーの残高を追加します')
+                .addUserOption(option =>
+                    option.setName('user')
+                        .setDescription('対象ユーザー')
+                        .setRequired(true))
+                .addIntegerOption(option =>
+                    option.setName('amount')
+                        .setDescription('追加する金額')
+                        .setRequired(true)
+                        .setMinValue(1)))
+        .addSubcommand(subcommand =>
+            subcommand
+                .setName('remove_balance')
+                .setDescription('ユーザーの残高を削除します')
+                .addUserOption(option =>
+                    option.setName('user')
+                        .setDescription('対象ユーザー')
+                        .setRequired(true))
+                .addIntegerOption(option =>
+                    option.setName('amount')
+                        .setDescription('削除する金額')
+                        .setRequired(true)
+                        .setMinValue(1))),
     async execute(interaction, redis) {
         await interaction.deferReply();
         const subcommand = interaction.options.getSubcommand();
+        const targetUser = interaction.options.getUser('user');
+        const amount = interaction.options.getInteger('amount');
 
         try {
-            if (subcommand === 'reset') {
-                const targetUser = interaction.options.getUser('user');
-                
-                if (targetUser) {
-                    // 特定のユーザーのリセット
-                    const mainAccountId = await redis.hget(`user:${targetUser.id}`, 'mainAccountId') || targetUser.id;
-                    const multi = redis.multi();
-                    multi.hset(`user:${mainAccountId}`, 'balance', config.STARTING_BALANCE);
-                    multi.hset(`user:${mainAccountId}`, 'bank', '0');
-                    await multi.exec();
+            const userKey = `user:${targetUser.id}`;
+            let userData = await redis.hGetAll(userKey);
 
-                    const embed = new EmbedBuilder()
-                        .setColor('#00ff00')
-                        .setTitle('残高リセット完了')
-                        .setDescription(`${targetUser.username}の残高をリセットしました。`)
-                        .addFields(
-                            { name: '所持金', value: `${config.COIN_SYMBOL} ${config.STARTING_BALANCE.toLocaleString()} ${config.COIN_NAME}`, inline: true },
-                            { name: '銀行残高', value: `${config.COIN_SYMBOL} 0 ${config.COIN_NAME}`, inline: true }
-                        )
-                        .setTimestamp();
-
-                    await interaction.editReply({ embeds: [embed] });
-                } else {
-                    // 全ユーザーのリセット
-                    const keys = await redis.keys('user:*');
-                    const multi = redis.multi();
-                    
-                    for (const key of keys) {
-                        if (key.startsWith('user:')) {
-                            multi.hset(key, 'balance', config.STARTING_BALANCE);
-                            multi.hset(key, 'bank', '0');
-                        }
-                    }
-                    
-                    await multi.exec();
-
-                    const embed = new EmbedBuilder()
-                        .setColor('#00ff00')
-                        .setTitle('全ユーザー残高リセット完了')
-                        .setDescription('全ユーザーの残高をリセットしました。')
-                        .addFields(
-                            { name: '初期所持金', value: `${config.COIN_SYMBOL} ${config.STARTING_BALANCE.toLocaleString()} ${config.COIN_NAME}`, inline: true },
-                            { name: '初期銀行残高', value: `${config.COIN_SYMBOL} 0 ${config.COIN_NAME}`, inline: true }
-                        )
-                        .setTimestamp();
-
-                    await interaction.editReply({ embeds: [embed] });
-                }
-            } else if (subcommand === 'set') {
-                const targetUser = interaction.options.getUser('user');
-                const type = interaction.options.getString('type');
-                const amount = interaction.options.getInteger('amount');
-
-                const mainAccountId = await redis.hget(`user:${targetUser.id}`, 'mainAccountId') || targetUser.id;
-                await redis.hset(`user:${mainAccountId}`, type, amount);
-
-                const embed = new EmbedBuilder()
-                    .setColor('#00ff00')
-                    .setTitle('残高設定完了')
-                    .setDescription(`${targetUser.username}の${type === 'balance' ? '所持金' : '銀行残高'}を設定しました。`)
-                    .addFields(
-                        { name: type === 'balance' ? '所持金' : '銀行残高', value: `${config.COIN_SYMBOL} ${amount.toLocaleString()} ${config.COIN_NAME}`, inline: true }
-                    )
-                    .setTimestamp();
-
-                await interaction.editReply({ embeds: [embed] });
+            if (Object.keys(userData).length === 0) {
+                userData = {
+                    balance: '0',
+                    bank: '0'
+                };
             }
+
+            const embed = new EmbedBuilder()
+                .setColor('#00ff00')
+                .setTimestamp();
+
+            if (subcommand === 'set_balance') {
+                userData.balance = amount.toString();
+                embed.setTitle('残高設定完了')
+                    .setDescription(`${targetUser.username}の残高を設定しました。`)
+                    .addFields(
+                        { name: '設定金額', value: `${config.COIN_SYMBOL} ${amount.toLocaleString()} ${config.COIN_NAME}`, inline: true }
+                    );
+            } else if (subcommand === 'add_balance') {
+                const newBalance = parseInt(userData.balance) + amount;
+                userData.balance = newBalance.toString();
+                embed.setTitle('残高追加完了')
+                    .setDescription(`${targetUser.username}の残高を追加しました。`)
+                    .addFields(
+                        { name: '追加金額', value: `${config.COIN_SYMBOL} ${amount.toLocaleString()} ${config.COIN_NAME}`, inline: true },
+                        { name: '新しい残高', value: `${config.COIN_SYMBOL} ${newBalance.toLocaleString()} ${config.COIN_NAME}`, inline: true }
+                    );
+            } else if (subcommand === 'remove_balance') {
+                const currentBalance = parseInt(userData.balance);
+                if (currentBalance < amount) {
+                    return interaction.editReply('残高が不足しています。');
+                }
+                const newBalance = currentBalance - amount;
+                userData.balance = newBalance.toString();
+                embed.setTitle('残高削除完了')
+                    .setDescription(`${targetUser.username}の残高を削除しました。`)
+                    .addFields(
+                        { name: '削除金額', value: `${config.COIN_SYMBOL} ${amount.toLocaleString()} ${config.COIN_NAME}`, inline: true },
+                        { name: '新しい残高', value: `${config.COIN_SYMBOL} ${newBalance.toLocaleString()} ${config.COIN_NAME}`, inline: true }
+                    );
+            }
+
+            await redis.hSet(userKey, userData);
+            await interaction.editReply({ embeds: [embed] });
         } catch (error) {
-            console.error('経済管理エラー:', error);
-            await interaction.editReply('経済管理コマンドの実行中にエラーが発生しました。');
+            console.error('経済システム管理エラー:', error);
+            await interaction.editReply('経済システム管理コマンドの実行中にエラーが発生しました。');
         }
     },
 }; 
