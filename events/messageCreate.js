@@ -47,54 +47,76 @@ module.exports = {
                     const mainMember = await message.guild.members.fetch(mainAccountId).catch(() => null);
                     if (mainMember) {
                         const xpToGive = Math.floor(Math.random() * (config.MAX_TEXT_XP - config.MIN_TEXT_XP + 1)) + config.MIN_TEXT_XP;
-                        if (!xpToGive || isNaN(xpToGive)) return; // XP値が不正な場合は処理を中断
+                        if (!xpToGive || isNaN(xpToGive)) {
+                            console.error(`不正なXP値: ${xpToGive} (MIN: ${config.MIN_TEXT_XP}, MAX: ${config.MAX_TEXT_XP})`);
+                            return;
+                        }
 
                         // ユーザーデータの初期化と更新を一連の処理で実行
                         const userKey = `user:${mainAccountId}`;
                         const monthlyKey = `monthly_xp:text:${new Date().toISOString().slice(0, 7)}:${mainAccountId}`;
                         const dailyKey = `daily_xp:text:${new Date().toISOString().slice(0, 10)}:${mainAccountId}`;
 
-                        // 各キーの存在確認と初期化を個別に実行
-                        const [userData, monthlyExists, dailyExists] = await Promise.all([
-                            redis.hgetall(userKey),
-                            redis.exists(monthlyKey),
-                            redis.exists(dailyKey)
-                        ]);
+                        try {
+                            // 各キーの存在確認と初期化を個別に実行
+                            const [userData, monthlyExists, dailyExists] = await Promise.all([
+                                redis.hgetall(userKey),
+                                redis.exists(monthlyKey),
+                                redis.exists(dailyKey)
+                            ]);
 
-                        // ユーザーデータの初期化（必要な場合）
-                        if (!userData || Object.keys(userData).length === 0) {
-                            await redis.hset(userKey, {
-                                textXp: '0',
-                                voiceXp: '0',
-                                balance: '0',
-                                bank: '0'
-                            });
-                        }
+                            // ユーザーデータの初期化（必要な場合）
+                            if (!userData || Object.keys(userData).length === 0) {
+                                await redis.hset(userKey, {
+                                    textXp: '0',
+                                    voiceXp: '0',
+                                    balance: '0',
+                                    bank: '0'
+                                });
+                                console.log(`ユーザーデータを初期化: ${mainAccountId}`);
+                            }
 
-                        // 月間・日間XPの初期化（必要な場合）
-                        if (!monthlyExists) {
-                            await redis.set(monthlyKey, '0');
-                        }
-                        if (!dailyExists) {
-                            await redis.set(dailyKey, '0');
-                        }
+                            // 月間・日間XPの初期化（必要な場合）
+                            if (!monthlyExists) {
+                                await redis.set(monthlyKey, '0');
+                                console.log(`月間XPキーを初期化: ${monthlyKey}`);
+                            }
+                            if (!dailyExists) {
+                                await redis.set(dailyKey, '0');
+                                console.log(`日間XPキーを初期化: ${dailyKey}`);
+                            }
 
-                        // XPとロメコインの更新（個別に実行して確実性を高める）
-                        await Promise.all([
-                            redis.hincrby(userKey, 'textXp', xpToGive),
-                            redis.hincrby(userKey, 'balance', xpToGive), // 同額のロメコインを付与
-                            redis.incrby(monthlyKey, xpToGive),
-                            redis.incrby(dailyKey, xpToGive),
-                            redis.expire(monthlyKey, 60 * 60 * 24 * 32),  // 32日
-                            redis.expire(dailyKey, 60 * 60 * 24 * 2)      // 2日
-                        ]);
-                        
-                        textXpCooldowns.set(userId, now);
-                        await updateLevelRoles(mainMember, redis, message.client);
+                            // XPとロメコインの更新（個別に実行して確実性を高める）
+                            await Promise.all([
+                                redis.hincrby(userKey, 'textXp', xpToGive),
+                                redis.hincrby(userKey, 'balance', xpToGive), // 同額のロメコインを付与
+                                redis.incrby(monthlyKey, xpToGive),
+                                redis.incrby(dailyKey, xpToGive),
+                                redis.expire(monthlyKey, 60 * 60 * 24 * 32),  // 32日
+                                redis.expire(dailyKey, 60 * 60 * 24 * 2)      // 2日
+                            ]);
+                            
+                            textXpCooldowns.set(userId, now);
+                            await updateLevelRoles(mainMember, redis, message.client);
+                            console.log(`XP付与成功: ${mainAccountId} +${xpToGive}XP`);
+                        } catch (redisError) {
+                            console.error('Redis操作エラー:', redisError);
+                            throw redisError;
+                        }
+                    } else {
+                        console.error(`メンバーが見つかりません: ${mainAccountId}`);
                     }
                 }
             }
-        } catch(error) { console.error('テキストXP付与エラー:', error); }
+        } catch(error) { 
+            console.error('テキストXP付与エラー:', error);
+            console.error('エラーの詳細:', {
+                userId,
+                messageId: message.id,
+                channelId: message.channel.id,
+                guildId: message.guild.id
+            });
+        }
 
         // --- トレンド単語集計処理 ---
         try {
