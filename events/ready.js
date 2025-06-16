@@ -56,20 +56,13 @@ async function postOrEdit(channel, redisKey, payload) {
     return message;
 }
 
-async function updatePermanentRankings(guild, redis, notion) {
+async function updatePermanentRankings(client, guild, redis, notion) {
     try {
         console.log('updatePermanentRankings開始');
         
         // guildが正しく取得できているか確認
         if (!guild) {
             console.error('ギルドが未定義です');
-            return;
-        }
-
-        // クライアントの参照を取得
-        const client = guild.client;
-        if (!client) {
-            console.error('クライアントの参照が取得できません');
             return;
         }
 
@@ -529,7 +522,7 @@ module.exports = {
 
                 // 起動時にランキング更新を実行
                 try {
-                    await updatePermanentRankings(guild, redis, notion);
+                    await updatePermanentRankings(client, guild, redis, notion);
                     console.log('ランキングの更新が完了しました');
                 } catch (error) {
                     console.error('起動時のランキング更新でエラーが発生しました:', error);
@@ -541,7 +534,7 @@ module.exports = {
                         const currentGuild = await client.guilds.fetch(config.GUILD_ID);
                         if (currentGuild) {
                             // ランキングの更新
-                            await updatePermanentRankings(currentGuild, redis, notion);
+                            await updatePermanentRankings(client, currentGuild, redis, notion);
                         } else {
                             console.error('ギルドが見つかりません。');
                         }
@@ -588,7 +581,7 @@ module.exports = {
                     const currentGuild = await client.guilds.fetch(config.GUILD_ID);
                     if (currentGuild) {
                         // ランキングの更新
-                        await updatePermanentRankings(currentGuild, redis, notion);
+                        await updatePermanentRankings(client, currentGuild, redis, notion);
                     } else {
                         console.error('ギルドが見つかりません。');
                     }
