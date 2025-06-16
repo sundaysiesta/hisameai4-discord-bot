@@ -62,6 +62,10 @@ async function updatePermanentRankings(guild, redis, notion) {
             console.error('ギルドが見つかりません。');
             return;
         }
+        if (!guild.channels || typeof guild.channels.fetch !== 'function') {
+            console.error('guild.channelsが未定義、またはfetchが使えません。');
+            return;
+        }
 
         // ランキングチャンネルを確実に取得
         const rankingChannel = await guild.channels.fetch('1383261252662595604');
