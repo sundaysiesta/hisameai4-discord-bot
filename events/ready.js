@@ -379,11 +379,7 @@ module.exports = {
             }
 
             // ランキングの更新を実行
-            const guild = await client.guilds.fetch(config.GUILD_ID).catch(error => {
-                console.error('ギルドの取得に失敗しました:', error);
-                return null;
-            });
-
+            const guild = client.guilds.cache.get(config.GUILD_ID);
             if (!guild) {
                 console.error('ギルドが見つかりません。GUILD_IDを確認してください。');
                 return;
