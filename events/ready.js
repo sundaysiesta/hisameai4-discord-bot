@@ -292,14 +292,21 @@ module.exports = {
                 const now = Date.now();
                 for (const members of activeVCs.values()) {
                     if (members.length > 1) {
+                        console.log(`[ボイスXP] チャンネル内のメンバー数: ${members.length}人`);
                         for (const member of members) {
-                            if (member.roles.cache.has(config.XP_EXCLUDED_ROLE_ID)) continue;
+                            if (member.roles.cache.has(config.XP_EXCLUDED_ROLE_ID)) {
+                                console.log(`[ボイスXP] ${member.user.tag} はXP除外ロールを持っているためスキップ`);
+                                continue;
+                            }
                             const cooldownKey = `xp_cooldown:voice:${member.id}`;
                             const lastXpTime = await redis.get(cooldownKey);
                             if (!lastXpTime || (now - lastXpTime > config.VOICE_XP_COOLDOWN)) {
                                 const mainAccountId = await redis.hget(`user:${member.id}`, 'mainAccountId') || member.id;
                                 const mainMember = await guild.members.fetch(mainAccountId).catch(() => null);
-                                if (!mainMember) continue;
+                                if (!mainMember) {
+                                    console.log(`[ボイスXP] ${member.user.tag} のメインアカウントが見つかりません`);
+                                    continue;
+                                }
                                 const xp = config.VOICE_XP_AMOUNT;
                                 const monthlyKey = `monthly_xp:voice:${new Date().toISOString().slice(0, 7)}:${mainAccountId}`;
                                 const dailyKey = `daily_xp:voice:${new Date().toISOString().slice(0, 10)}:${mainAccountId}`;
@@ -308,8 +315,13 @@ module.exports = {
                                 await safeIncrby(redis, dailyKey, xp);
                                 await redis.set(cooldownKey, now, { ex: 125 });
                                 await updateLevelRoles(mainMember, redis, client);
+                                console.log(`[ボイスXP] ${member.user.tag} に ${xp} XPを付与しました（メインアカウント: ${mainMember.user.tag}）`);
+                            } else {
+                                console.log(`[ボイスXP] ${member.user.tag} はクールダウン中です（残り: ${Math.ceil((config.VOICE_XP_COOLDOWN - (now - lastXpTime)) / 1000)}秒）`);
                             }
                         }
+                    } else {
+                        console.log(`[ボイスXP] チャンネル内のメンバーが1人以下のためXP付与をスキップ`);
                     }
                 }
                 await updatePermanentRankings(guild, redis, notion);
