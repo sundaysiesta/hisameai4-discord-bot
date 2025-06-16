@@ -144,10 +144,12 @@ module.exports = {
             let titleValue = 'なし';
             
             if (titleData.length > 0) {
-                // 称号処理（絵文字のみを削除）
+                // 称号処理（絵文字のみを削除、数字やアルファベットは残す）
+                // サロゲートペア範囲（絵文字の多くが該当）を除去
+                const emojiSurrogateRegex = /[\uD800-\uDBFF][\uDC00-\uDFFF]/g;
                 const topThreeTitles = titleData
                     .slice(0, 3)
-                    .map(item => item.title.replace(/[\p{Emoji_Presentation}\p{Emoji}\p{Emoji_Modifier_Base}\p{Emoji_Modifier}\p{Emoji_Component}]/gu, '').trim())
+                    .map(item => item.title.replace(emojiSurrogateRegex, '').trim())
                     .filter(Boolean);
 
                 titleValue = formatTitles(topThreeTitles);
