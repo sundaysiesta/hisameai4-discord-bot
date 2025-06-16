@@ -112,7 +112,7 @@ async function updatePermanentRankings(client, guild, redis, notion) {
 
         // レベルランキング
         try {
-            const levelRanking = await redis.zRange('user_levels', 0, 9, { REV: true, WITHSCORES: true });
+            const levelRanking = await redis.zrange('user_levels', 0, 9, { rev: true, withScores: true });
             const levelMembers = await Promise.all(
                 levelRanking
                     .filter((_, i) => i % 2 === 0)
@@ -155,7 +155,7 @@ async function updatePermanentRankings(client, guild, redis, notion) {
 
         // コインランキング
         try {
-            const coinRanking = await redis.zRange('user_coins', 0, 9, { REV: true, WITHSCORES: true });
+            const coinRanking = await redis.zrange('user_coins', 0, 9, { rev: true, withScores: true });
             const coinMembers = await Promise.all(
                 coinRanking
                     .filter((_, i) => i % 2 === 0)
@@ -237,7 +237,7 @@ async function updatePermanentRankings(client, guild, redis, notion) {
 
         // トレンドワード
         try {
-            const trendWords = await redis.zRange('trend_words', 0, 9, { REV: true, WITHSCORES: true });
+            const trendWords = await redis.zrange('trend_words', 0, 9, { rev: true, withScores: true });
             if (trendWords.length > 0) {
                 const trendEmbed = new EmbedBuilder()
                     .setTitle('🔥 トレンドワード')
