@@ -58,54 +58,69 @@ async function postOrEdit(channel, redisKey, payload) {
 
 async function updatePermanentRankings(guild, redis, notion) {
     try {
-        const rankingChannel = guild.channels.cache.get(config.RANKING_CHANNEL_ID);
-        if (!rankingChannel) {
-            console.error('ランキングチャンネルが見つかりません。');
+        if (!guild) {
+            console.error('ギルドが見つかりません。');
+            return;
+        }
+
+        // ランキングチャンネルを確実に取得
+        let rankingChannel;
+        try {
+            rankingChannel = await guild.channels.fetch('1383261252662595604');
+            if (!rankingChannel) {
+                console.error('ランキングチャンネルが見つかりません。');
+                return;
+            }
+        } catch (error) {
+            console.error('ランキングチャンネルの取得に失敗:', error);
             return;
         }
 
         let levelMessage, coinMessage, clubMessage, trendMessage;
 
         try {
-            const now = new Date();
-            const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-            const titleDate = `${firstDayOfMonth.getMonth() + 1}月${firstDayOfMonth.getDate()}日〜`;
-            const monthKey = now.toISOString().slice(0, 7);
-            
             // メインアカウントのマッピングを作成
             const userKeys = await redis.keys('user:*');
             const mainAccountMap = new Map();
-            for (const key of userKeys) {
+            await Promise.all(userKeys.map(async key => {
                 const userId = key.split(':')[1];
                 const mainAccountId = await redis.hget(key, 'mainAccountId') || userId;
                 mainAccountMap.set(userId, mainAccountId);
-            }
+            }));
 
-            // 月間ランキングデータの取得
-            const textKeys = await redis.keys(`monthly_xp:text:${monthKey}:*`);
-            const voiceKeys = await redis.keys(`monthly_xp:voice:${monthKey}:*`);
+            // 月間のデータを取得
+            const now = new Date();
+            const monthKey = now.toISOString().slice(0, 7);
+            const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+            const titleDate = `${firstDayOfMonth.getMonth() + 1}月${firstDayOfMonth.getDate()}日〜`;
+
+            // テキストとボイスXPの集計
+            const [textKeys, voiceKeys] = await Promise.all([
+                redis.keys(`monthly_xp:text:${monthKey}:*`),
+                redis.keys(`monthly_xp:voice:${monthKey}:*`)
+            ]);
 
             // テキストXPの集計（メインアカウントベース）
             const textUsers = new Map();
-            for (const key of textKeys) {
+            await Promise.all(textKeys.map(async key => {
                 try {
                     const userId = key.split(':')[3];
                     const mainAccountId = mainAccountMap.get(userId) || userId;
                     const xp = Number(await redis.get(key)) || 0;
                     textUsers.set(mainAccountId, (textUsers.get(mainAccountId) || 0) + xp);
                 } catch (e) { console.error('テキストXP集計エラー:', e); }
-            }
+            }));
 
             // ボイスXPの集計（メインアカウントベース）
             const voiceUsers = new Map();
-            for (const key of voiceKeys) {
+            await Promise.all(voiceKeys.map(async key => {
                 try {
                     const userId = key.split(':')[3];
                     const mainAccountId = mainAccountMap.get(userId) || userId;
                     const xp = Number(await redis.get(key)) || 0;
                     voiceUsers.set(mainAccountId, (voiceUsers.get(mainAccountId) || 0) + xp);
                 } catch (e) { console.error('ボイスXP集計エラー:', e); }
-            }
+            }));
 
             // 上位20名の取得
             const top20Text = Array.from(textUsers.entries())
@@ -118,19 +133,21 @@ async function updatePermanentRankings(guild, redis, notion) {
                 .sort((a, b) => b.xp - a.xp)
                 .slice(0, 20);
 
-            // メンバー情報のキャッシュ
-            const neededUserIds = new Set([
+            // メンバー情報を一括取得
+            const memberCache = new Map();
+            const uniqueUserIds = new Set([
                 ...top20Text.map(u => u.userId),
                 ...top20Voice.map(u => u.userId)
             ]);
 
-            const memberCache = new Map();
-            for (const userId of neededUserIds) {
+            await Promise.all(Array.from(uniqueUserIds).map(async userId => {
                 try {
-                    const member = await guild.members.fetch(userId).catch(() => null);
+                    const member = await guild.members.fetch(userId);
                     if (member) memberCache.set(userId, member);
-                } catch (e) { console.error(`メンバー取得エラー ${userId}:`, e); }
-            }
+                } catch (e) { 
+                    console.error(`メンバー取得エラー ${userId}:`, e); 
+                }
+            }));
 
             // ランキング表示の生成
             const textDesc = top20Text.map((u, i) => {
@@ -156,29 +173,29 @@ async function updatePermanentRankings(guild, redis, notion) {
 
             // ロメコインランキングの更新（メインアカウントベース）
             const coinBalances = new Map();
-            for (const key of userKeys) {
+            await Promise.all(userKeys.map(async key => {
                 try {
                     const userId = key.split(':')[1];
                     const mainAccountId = mainAccountMap.get(userId) || userId;
                     const balance = Number(await redis.hget(key, 'balance')) || 0;
                     coinBalances.set(mainAccountId, (coinBalances.get(mainAccountId) || 0) + balance);
                 } catch (e) { console.error('コイン集計エラー:', e); }
-            }
+            }));
 
             const top20Balance = Array.from(coinBalances.entries())
                 .map(([userId, balance]) => ({ userId, balance }))
                 .sort((a, b) => b.balance - a.balance)
                 .slice(0, 20);
 
-            // コインランキング用のメンバー情報更新
-            for (const user of top20Balance) {
+            // コインランキング用のメンバー情報を更新
+            await Promise.all(top20Balance.map(async user => {
                 if (!memberCache.has(user.userId)) {
                     try {
-                        const member = await guild.members.fetch(user.userId).catch(() => null);
+                        const member = await guild.members.fetch(user.userId);
                         if (member) memberCache.set(user.userId, member);
                     } catch (e) { console.error(`コインランキングメンバー取得エラー ${user.userId}:`, e); }
                 }
-            }
+            }));
 
             const balanceDesc = top20Balance.map((u, i) => {
                 const member = memberCache.get(u.userId);
