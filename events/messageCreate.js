@@ -1,6 +1,6 @@
 const { Events, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const config = require('../config.js');
-const { updateLevelRoles, postStickyMessage, safeIncrby } = require('../utils/utility.js');
+const { updateLevelRoles, postStickyMessage } = require('../utils/utility.js');
 const TinySegmenter = require('tiny-segmenter');
 
 const textXpCooldowns = new Map();
@@ -44,8 +44,6 @@ module.exports = {
                 const lastXpTime = textXpCooldowns.get(userId);
                 if (!lastXpTime || (now - lastXpTime > config.TEXT_XP_COOLDOWN)) {
                     const mainAccountId = await redis.hget(`user:${userId}`, 'mainAccountId') || userId;
-                    if (!mainAccountId) return;
-
                     const mainMember = await message.guild.members.fetch(mainAccountId).catch(() => null);
                     if (mainMember) {
                         const xpToGive = Math.floor(Math.random() * (config.MAX_TEXT_XP - config.MIN_TEXT_XP + 1)) + config.MIN_TEXT_XP;
@@ -60,25 +58,33 @@ module.exports = {
                             });
                         }
 
-                        await redis.hincrby(userKey, 'textXp', xpToGive);
+                        const pipeline = redis.pipeline();
+
+                        // TextXPを加算（値が存在しない場合は0として扱う）
+                        pipeline.hincrby(userKey, 'textXp', xpToGive);
 
                         // 月間・日間XPの更新
                         const monthlyKey = `monthly_xp:text:${new Date().toISOString().slice(0, 7)}:${mainAccountId}`;
                         const dailyKey = `daily_xp:text:${new Date().toISOString().slice(0, 10)}:${mainAccountId}`;
 
-                        // 各キーの初期化確認
+                        // 各キーの初期化確認とXP加算をパイプラインに追加
                         const [monthlyExists, dailyExists] = await Promise.all([
                             redis.exists(monthlyKey),
                             redis.exists(dailyKey)
                         ]);
 
-                        if (!monthlyExists) await redis.set(monthlyKey, '0');
-                        if (!dailyExists) await redis.set(dailyKey, '0');
+                        if (!monthlyExists) {
+                            await redis.set(monthlyKey, '0');
+                        }
+                        if (!dailyExists) {
+                            await redis.set(dailyKey, '0');
+                        }
 
-                        await Promise.all([
-                            redis.incrby(monthlyKey, xpToGive),
-                            redis.incrby(dailyKey, xpToGive)
-                        ]);
+                        pipeline.incrby(monthlyKey, xpToGive);
+                        pipeline.incrby(dailyKey, xpToGive);
+
+                        // パイプラインを実行
+                        await pipeline.exec();
                         
                         textXpCooldowns.set(userId, now);
                         await updateLevelRoles(mainMember, redis, message.client);
@@ -122,13 +128,17 @@ module.exports = {
         } catch (error) { console.error('トレンド処理エラー:', error); }
         
         // --- 部活チャンネルのメッセージ数カウント ---
-        try {
-            if (message.channel.parentId === config.CLUB_CATEGORY_ID && !config.EXCLUDED_CHANNELS.includes(message.channel.id)) {
+        if (message.channel.parentId === config.CLUB_CATEGORY_ID && !config.EXCLUDED_CHANNELS.includes(message.channel.id)) {
+            try {
                 const key = `weekly_message_count:${message.channel.id}`;
                 const exists = await redis.exists(key);
-                if (!exists) await redis.set(key, '0');
+                if (!exists) {
+                    await redis.set(key, '0');
+                }
                 await redis.incr(key);
+            } catch (error) {
+                console.error('部活メッセージカウントエラー:', error);
             }
-        } catch (error) { console.error('部活メッセージカウントエラー:', error); }
+        }
     },
 };
