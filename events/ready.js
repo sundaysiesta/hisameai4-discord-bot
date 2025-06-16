@@ -83,7 +83,7 @@ async function updatePermanentRankings(guild, redis, notion) {
             return;
         }
 
-        let levelMessage, clubMessage, trendMessage;
+        let levelMessage, coinMessage, clubMessage, trendMessage;
 
         try {
             const now = new Date();
@@ -142,6 +142,42 @@ async function updatePermanentRankings(guild, redis, notion) {
                 )
                 .setTimestamp();
             levelMessage = await postOrEdit(rankingChannel, 'level_ranking_message_id', { embeds: [levelEmbed] });
+
+            // 常駐ロメコインランキングの追加
+            const allUsers = await redis.keys('user:*');
+            const userBalances = [];
+            for (const key of allUsers) {
+                try {
+                    const userId = key.split(':')[1];
+                    const balance = await redis.hget(key, 'balance');
+                    if (balance !== null && !isNaN(balance)) {
+                        userBalances.push({ userId, balance: Number(balance) });
+                    }
+                } catch (e) { console.error(e); }
+            }
+
+            const top20Balance = userBalances.sort((a,b) => b.balance - a.balance).slice(0, 20);
+            const balanceUserIds = new Set(top20Balance.map(u => u.userId));
+            
+            for (const userId of balanceUserIds) {
+                try {
+                    const member = await guild.members.fetch(userId).catch(() => null);
+                    if (member) memberCache.set(userId, member);
+                } catch (e) { console.error(`Failed to fetch member ${userId}:`, e); }
+            }
+
+            let balanceDesc = top20Balance.map((u, i) => {
+                const member = memberCache.get(u.userId);
+                return member ? `**${i+1}位:** ${member} - ${config.COIN_SYMBOL} ${u.balance.toLocaleString()} ${config.COIN_NAME}` : null;
+            }).filter(Boolean).join('\n') || 'まだ誰もロメコインを所持していません。';
+
+            const coinEmbed = new EmbedBuilder()
+                .setTitle('常駐ロメコインランキング')
+                .setColor(0x3498DB)
+                .setDescription(balanceDesc)
+                .setTimestamp();
+            coinMessage = await postOrEdit(rankingChannel, 'coin_ranking_message_id', { embeds: [coinEmbed] });
+
         } catch (e) { console.error("レベルランキング更新エラー:", e); }
 
         try {
