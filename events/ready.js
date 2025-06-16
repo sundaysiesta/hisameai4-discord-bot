@@ -66,10 +66,17 @@ async function updatePermanentRankings(guild, redis, notion) {
             return;
         }
 
+        // クライアントの参照を取得
+        const client = guild.client;
+        if (!client) {
+            console.error('クライアントの参照が取得できません');
+            return;
+        }
+
         // ギルドのチャンネルを再取得
         try {
             // ギルドを再取得して最新の状態にする
-            const freshGuild = await guild.client.guilds.fetch(guild.id);
+            const freshGuild = await client.guilds.fetch(guild.id);
             if (!freshGuild) {
                 console.error('ギルドの再取得に失敗');
                 return;
@@ -87,7 +94,7 @@ async function updatePermanentRankings(guild, redis, notion) {
         let rankingChannel = null;
         try {
             // チャンネルを直接取得
-            rankingChannel = await guild.client.channels.fetch(config.RANKING_CHANNEL_ID);
+            rankingChannel = await client.channels.fetch(config.RANKING_CHANNEL_ID);
             if (!rankingChannel) {
                 console.error('ランキングチャンネルが見つかりません');
                 return;
@@ -519,6 +526,47 @@ module.exports = {
 
                 console.log('ギルドの取得に成功:', guild.name);
                 console.log('ランキングチャンネルの取得に成功:', rankingChannel.name);
+
+                // 起動時にランキング更新を実行
+                try {
+                    await updatePermanentRankings(guild, redis, notion);
+                    console.log('ランキングの更新が完了しました');
+                } catch (error) {
+                    console.error('起動時のランキング更新でエラーが発生しました:', error);
+                }
+
+                // 定期的なランキング更新（1時間ごと）
+                cron.schedule('0 * * * *', async () => {
+                    try {
+                        const currentGuild = await client.guilds.fetch(config.GUILD_ID);
+                        if (currentGuild) {
+                            // ランキングの更新
+                            await updatePermanentRankings(currentGuild, redis, notion);
+                        } else {
+                            console.error('ギルドが見つかりません。');
+                        }
+                    } catch (error) {
+                        console.error('定期ランキング更新でエラーが発生しました:', error);
+                    }
+                });
+
+                // 部活チャンネルの並び替え（毎日0時）
+                cron.schedule('0 0 * * *', async () => {
+                    try {
+                        const currentGuild = await client.guilds.fetch(config.GUILD_ID);
+                        if (currentGuild) {
+                            await sortClubChannels(redis, currentGuild);
+                        } else {
+                            console.error('ギルドが見つかりません。');
+                        }
+                    } catch (error) {
+                        console.error('部活チャンネルの並び替えでエラーが発生しました:', error);
+                    }
+                }, {
+                    scheduled: true,
+                    timezone: "Asia/Tokyo"
+                });
+
             } catch (error) {
                 console.error('ギルドの取得に失敗:', error);
                 return;
@@ -533,14 +581,6 @@ module.exports = {
             await redis.del('trend_message_id');
             await redis.del('ranking_links_message_id');
             console.log('ランキングメッセージIDをリセットしました');
-
-            // 起動時にランキング更新を実行
-            try {
-                await updatePermanentRankings(guild, redis, notion);
-                console.log('ランキングの更新が完了しました');
-            } catch (error) {
-                console.error('起動時のランキング更新でエラーが発生しました:', error);
-            }
 
             // 定期的なランキング更新（1時間ごと）
             cron.schedule('0 * * * *', async () => {
@@ -561,28 +601,13 @@ module.exports = {
             cron.schedule('0 0 * * *', async () => {
                 try {
                     const currentGuild = await client.guilds.fetch(config.GUILD_ID);
-                    await sortClubChannels(redis, currentGuild);
-                } catch (error) {
-                    console.error('部活チャンネルの並び替えでエラーが発生しました:', error);
-                }
-            }, {
-                scheduled: true,
-                timezone: "Asia/Tokyo"
-            });
-
-            // Redisキーのクリーンアップ（毎日0時）
-            cron.schedule('0 0 * * *', async () => {
-                try {
-                    const now = Date.now();
-                    const keys = await redis.keys('xp_cooldown:*');
-                    for (const key of keys) {
-                        const timestamp = await redis.get(key);
-                        if (now - timestamp > 24 * 60 * 60 * 1000) {
-                            await redis.del(key);
-                        }
+                    if (currentGuild) {
+                        await sortClubChannels(redis, currentGuild);
+                    } else {
+                        console.error('ギルドが見つかりません。');
                     }
                 } catch (error) {
-                    console.error('Redisキーのクリーンアップでエラーが発生しました:', error);
+                    console.error('部活チャンネルの並び替えでエラーが発生しました:', error);
                 }
             }, {
                 scheduled: true,
