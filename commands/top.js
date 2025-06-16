@@ -2,7 +2,7 @@ const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, Butt
 const { calculateTextLevel, calculateVoiceLevel } = require('../utils/utility.js');
 const config = require('../config.js');
 
-async function createLeaderboardEmbed(users, page, totalPages, title, type) {
+async function createLeaderboardEmbed(users, page, totalPages, title, type, client) {
     const startIndex = page * 10;
     const endIndex = Math.min(startIndex + 10, users.length);
     const pageUsers = users.slice(startIndex, endIndex);
@@ -80,7 +80,7 @@ module.exports = {
             const totalPages = Math.max(1, Math.ceil(users.length / 10));
             let page = 0;
 
-            const embed = await createLeaderboardEmbed(users, page, totalPages, 'ロメコインランキング', 'coin');
+            const embed = await createLeaderboardEmbed(users, page, totalPages, 'ロメコインランキング', 'coin', interaction.client);
             const row = new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId('prev').setLabel('前へ').setStyle(ButtonStyle.Primary).setDisabled(true),
                 new ButtonBuilder().setCustomId('next').setLabel('次へ').setStyle(ButtonStyle.Primary).setDisabled(totalPages <= 1)
@@ -95,7 +95,7 @@ module.exports = {
                         if (i.customId === 'prev') page--;
                         else if (i.customId === 'next') page++;
 
-                        const newEmbed = await createLeaderboardEmbed(users, page, totalPages, 'ロメコインランキング', 'coin');
+                        const newEmbed = await createLeaderboardEmbed(users, page, totalPages, 'ロメコインランキング', 'coin', interaction.client);
                         row.components[0].setDisabled(page === 0);
                         row.components[1].setDisabled(page === totalPages - 1);
 
@@ -174,7 +174,7 @@ module.exports = {
             const totalPages = Math.ceil(sortedUsers.length / 10);
             if(totalPages === 0) return interaction.editReply('ランキングデータがありません。');
 
-            const embed = await createLeaderboardEmbed(sortedUsers, page, totalPages, title, type);
+            const embed = await createLeaderboardEmbed(sortedUsers, page, totalPages, title, type, interaction.client);
             const row = new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId('prev_page').setLabel('◀️').setStyle(ButtonStyle.Primary).setDisabled(true),
                 new ButtonBuilder().setCustomId('next_page').setLabel('▶️').setStyle(ButtonStyle.Primary).setDisabled(totalPages <= 1)
@@ -188,7 +188,7 @@ module.exports = {
                 if(i.customId === 'prev_page') page--;
                 else if(i.customId === 'next_page') page++;
                 
-                const newEmbed = await createLeaderboardEmbed(sortedUsers, page, totalPages, title, type);
+                const newEmbed = await createLeaderboardEmbed(sortedUsers, page, totalPages, title, type, interaction.client);
                 row.components[0].setDisabled(page === 0);
                 row.components[1].setDisabled(page >= totalPages - 1);
                 
@@ -199,10 +199,9 @@ module.exports = {
                 row.components.forEach(c => c.setDisabled(true));
                 reply.edit({ components: [row] }).catch(()=>{});
             });
-
         } catch (error) {
-            console.error("Leaderboard error:", error);
-            await interaction.editReply("ランキングの表示中にエラーが発生しました。");
+            console.error('Leaderboard error:', error);
+            await interaction.editReply('ランキングの取得中にエラーが発生しました。');
         }
     },
 };
