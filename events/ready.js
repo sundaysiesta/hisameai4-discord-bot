@@ -58,28 +58,9 @@ async function postOrEdit(channel, redisKey, payload) {
 
 async function updatePermanentRankings(guild, redis, notion) {
     try {
-        // ギルドの存在チェック
-        if (!guild) {
-            console.error('ギルドが利用できません。');
-            return;
-        }
-
-        // チャンネルマネージャーの存在チェック
-        if (!guild.channels) {
-            console.error('チャンネルマネージャーが利用できません。');
-            return;
-        }
-
-        // ランキングチャンネルの取得
-        let rankingChannel;
-        try {
-            rankingChannel = guild.channels.cache.get(config.RANKING_CHANNEL_ID);
-            if (!rankingChannel) {
-                console.error('ランキングチャンネルが見つかりません。');
-                return;
-            }
-        } catch (error) {
-            console.error('ランキングチャンネルの取得に失敗:', error);
+        const rankingChannel = guild.channels.cache.get(config.RANKING_CHANNEL_ID);
+        if (!rankingChannel) {
+            console.error('ランキングチャンネルが見つかりません。');
             return;
         }
 
@@ -90,49 +71,79 @@ async function updatePermanentRankings(guild, redis, notion) {
             const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
             const titleDate = `${firstDayOfMonth.getMonth() + 1}月${firstDayOfMonth.getDate()}日〜`;
             const monthKey = now.toISOString().slice(0, 7);
-            const textKeys = await redis.keys(`monthly_xp:text:${monthKey}:*`);
-            const voiceKeys = await redis.keys(`monthly_xp:voice:${monthKey}:*`);
-            const textUsers = [];
-            for (const key of textKeys) {
-                try {
-                    const xp = await redis.get(key);
-                    if (xp !== null && !isNaN(xp)) textUsers.push({ userId: key.split(':')[3], xp: Number(xp) });
-                } catch (e) { console.error(e); }
-            }
-            const voiceUsers = [];
-            for (const key of voiceKeys) {
-                try {
-                    const xp = await redis.get(key);
-                    if (xp !== null && !isNaN(xp)) voiceUsers.push({ userId: key.split(':')[3], xp: Number(xp) });
-                } catch (e) { console.error(e); }
+            
+            // メインアカウントのマッピングを作成
+            const userKeys = await redis.keys('user:*');
+            const mainAccountMap = new Map();
+            for (const key of userKeys) {
+                const userId = key.split(':')[1];
+                const mainAccountId = await redis.hget(key, 'mainAccountId') || userId;
+                mainAccountMap.set(userId, mainAccountId);
             }
 
-            // 上位20名のユーザーIDを取得
-            const top20Text = textUsers.sort((a,b)=>b.xp - a.xp).slice(0, 20);
-            const top20Voice = voiceUsers.sort((a,b)=>b.xp - a.xp).slice(0, 20);
-            
-            // 必要なユーザーIDのみを収集
-            const neededUserIds = new Set([...top20Text.map(u => u.userId), ...top20Voice.map(u => u.userId)]);
-            
-            // 必要なユーザーのみをフェッチ
+            // 月間ランキングデータの取得
+            const textKeys = await redis.keys(`monthly_xp:text:${monthKey}:*`);
+            const voiceKeys = await redis.keys(`monthly_xp:voice:${monthKey}:*`);
+
+            // テキストXPの集計（メインアカウントベース）
+            const textUsers = new Map();
+            for (const key of textKeys) {
+                try {
+                    const userId = key.split(':')[3];
+                    const mainAccountId = mainAccountMap.get(userId) || userId;
+                    const xp = Number(await redis.get(key)) || 0;
+                    textUsers.set(mainAccountId, (textUsers.get(mainAccountId) || 0) + xp);
+                } catch (e) { console.error('テキストXP集計エラー:', e); }
+            }
+
+            // ボイスXPの集計（メインアカウントベース）
+            const voiceUsers = new Map();
+            for (const key of voiceKeys) {
+                try {
+                    const userId = key.split(':')[3];
+                    const mainAccountId = mainAccountMap.get(userId) || userId;
+                    const xp = Number(await redis.get(key)) || 0;
+                    voiceUsers.set(mainAccountId, (voiceUsers.get(mainAccountId) || 0) + xp);
+                } catch (e) { console.error('ボイスXP集計エラー:', e); }
+            }
+
+            // 上位20名の取得
+            const top20Text = Array.from(textUsers.entries())
+                .map(([userId, xp]) => ({ userId, xp }))
+                .sort((a, b) => b.xp - a.xp)
+                .slice(0, 20);
+
+            const top20Voice = Array.from(voiceUsers.entries())
+                .map(([userId, xp]) => ({ userId, xp }))
+                .sort((a, b) => b.xp - a.xp)
+                .slice(0, 20);
+
+            // メンバー情報のキャッシュ
+            const neededUserIds = new Set([
+                ...top20Text.map(u => u.userId),
+                ...top20Voice.map(u => u.userId)
+            ]);
+
             const memberCache = new Map();
             for (const userId of neededUserIds) {
                 try {
                     const member = await guild.members.fetch(userId).catch(() => null);
                     if (member) memberCache.set(userId, member);
-                } catch (e) { console.error(`Failed to fetch member ${userId}:`, e); }
+                } catch (e) { console.error(`メンバー取得エラー ${userId}:`, e); }
             }
 
-            let textDesc = top20Text.map((u, i) => {
+            // ランキング表示の生成
+            const textDesc = top20Text.map((u, i) => {
                 const member = memberCache.get(u.userId);
-                return member ? `**${i+1}位:** ${member} - Lv.${calculateTextLevel(u.xp)} (${u.xp} XP)` : null;
+                return member ? `**${i+1}位:** ${member} - Lv.${calculateTextLevel(u.xp)} (${u.xp.toLocaleString()} XP)` : null;
             }).filter(Boolean).join('\n') || 'まだ誰もXPを獲得していません。';
 
-            let voiceDesc = top20Voice.map((u, i) => {
+            const voiceDesc = top20Voice.map((u, i) => {
                 const member = memberCache.get(u.userId);
-                return member ? `**${i+1}位:** ${member} - Lv.${calculateVoiceLevel(u.xp)} (${u.xp} XP)` : null;
+                return member ? `**${i+1}位:** ${member} - Lv.${calculateVoiceLevel(u.xp)} (${u.xp.toLocaleString()} XP)` : null;
             }).filter(Boolean).join('\n') || 'まだ誰もXPを獲得していません。';
 
+            // 月間ランキングの更新
             const levelEmbed = new EmbedBuilder()
                 .setTitle(`月間レベルランキング (${titleDate})`)
                 .setColor(0xFFD700)
@@ -143,42 +154,46 @@ async function updatePermanentRankings(guild, redis, notion) {
                 .setTimestamp();
             levelMessage = await postOrEdit(rankingChannel, 'level_ranking_message_id', { embeds: [levelEmbed] });
 
-            // 常駐ロメコインランキングの追加
-            const allUsers = await redis.keys('user:*');
-            const userBalances = [];
-            for (const key of allUsers) {
+            // ロメコインランキングの更新（メインアカウントベース）
+            const coinBalances = new Map();
+            for (const key of userKeys) {
                 try {
                     const userId = key.split(':')[1];
-                    const balance = await redis.hget(key, 'balance');
-                    if (balance !== null && !isNaN(balance)) {
-                        userBalances.push({ userId, balance: Number(balance) });
-                    }
-                } catch (e) { console.error(e); }
+                    const mainAccountId = mainAccountMap.get(userId) || userId;
+                    const balance = Number(await redis.hget(key, 'balance')) || 0;
+                    coinBalances.set(mainAccountId, (coinBalances.get(mainAccountId) || 0) + balance);
+                } catch (e) { console.error('コイン集計エラー:', e); }
             }
 
-            const top20Balance = userBalances.sort((a,b) => b.balance - a.balance).slice(0, 20);
-            const balanceUserIds = new Set(top20Balance.map(u => u.userId));
-            
-            for (const userId of balanceUserIds) {
-                try {
-                    const member = await guild.members.fetch(userId).catch(() => null);
-                    if (member) memberCache.set(userId, member);
-                } catch (e) { console.error(`Failed to fetch member ${userId}:`, e); }
+            const top20Balance = Array.from(coinBalances.entries())
+                .map(([userId, balance]) => ({ userId, balance }))
+                .sort((a, b) => b.balance - a.balance)
+                .slice(0, 20);
+
+            // コインランキング用のメンバー情報更新
+            for (const user of top20Balance) {
+                if (!memberCache.has(user.userId)) {
+                    try {
+                        const member = await guild.members.fetch(user.userId).catch(() => null);
+                        if (member) memberCache.set(user.userId, member);
+                    } catch (e) { console.error(`コインランキングメンバー取得エラー ${user.userId}:`, e); }
+                }
             }
 
-            let balanceDesc = top20Balance.map((u, i) => {
+            const balanceDesc = top20Balance.map((u, i) => {
                 const member = memberCache.get(u.userId);
                 return member ? `**${i+1}位:** ${member} - ${config.COIN_SYMBOL} ${u.balance.toLocaleString()} ${config.COIN_NAME}` : null;
-            }).filter(Boolean).join('\n') || 'まだ誰もロメコインを所持していません。';
+            }).filter(Boolean).join('\n') || 'まだ誰もコインを獲得していません。';
 
             const coinEmbed = new EmbedBuilder()
-                .setTitle('常駐ロメコインランキング')
-                .setColor(0x3498DB)
+                .setTitle('ロメコインランキング')
+                .setColor(0xFFD700)
                 .setDescription(balanceDesc)
                 .setTimestamp();
+
             coinMessage = await postOrEdit(rankingChannel, 'coin_ranking_message_id', { embeds: [coinEmbed] });
 
-        } catch (e) { console.error("レベルランキング更新エラー:", e); }
+        } catch (e) { console.error("レベル・コインランキング更新エラー:", e); }
 
         try {
             // 部活カテゴリの取得
@@ -343,56 +358,43 @@ module.exports = {
             // ボットのステータスを設定
             const savedStatus = await redis.get('bot_status_text');
             if (savedStatus) {
-                client.user.setActivity(savedStatus, { type: ActivityType.Playing });
+                client.user.setPresence({
+                    activities: [{ name: savedStatus, type: ActivityType.Playing }],
+                    status: 'online',
+                });
             } else {
                 client.user.setPresence({
-                    activities: [{ 
-                        name: 'ロメコイン経済システム',
-                        type: ActivityType.Playing
-                    }],
-                    status: 'online'
+                    activities: [{ name: '起動完了', type: ActivityType.Playing }],
+                    status: 'online',
                 });
             }
 
             // 再起動通知
             const notificationChannel = await client.channels.fetch(config.RESTART_NOTIFICATION_CHANNEL_ID).catch(() => null);
             if (notificationChannel) {
-                const commitInfo = await getLatestCommitInfo();
-                const embed = new EmbedBuilder()
-                    .setTitle('🤖 再起動しました。確認してください。')
-                    .setColor(0x3498DB)
-                    .setTimestamp();
-
-                if (commitInfo) {
-                    embed.addFields(
-                        { 
-                            name: '現在のバージョン', 
-                            value: `[${commitInfo.sha.substring(0, 7)}](${commitInfo.url})` 
-                        },
-                        {
-                            name: '最新の変更内容',
-                            value: `\`\`\`${commitInfo.message}\`\`\``
-                        }
-                    );
-                } else {
-                    embed.addFields({ name: 'バージョン情報', value: '取得に失敗しました。' });
-                }
-
-                await notificationChannel.send({ embeds: [embed] });
+                const latestCommit = await getLatestCommitInfo();
+                const commitInfo = latestCommit 
+                    ? `\n最新のコミット: ${latestCommit.message}\nSHA: ${latestCommit.sha}\nURL: ${latestCommit.url}`
+                    : '';
+                await notificationChannel.send(`✅ ボットが再起動しました。${commitInfo}`);
             }
 
             // 匿名チャンネルの設定
             const anonyChannel = await client.channels.fetch(config.ANONYMOUS_CHANNEL_ID).catch(() => null);
             if (anonyChannel) {
-                await postStickyMessage(client, anonyChannel, config.STICKY_BUTTON_ID, {
-                    components: [new ActionRowBuilder().addComponents(
-                        new ButtonBuilder()
-                            .setCustomId(config.STICKY_BUTTON_ID)
-                            .setLabel('書き込む')
-                            .setStyle(ButtonStyle.Success)
-                            .setEmoji('✍️')
-                    )]
-                });
+                const payload = {
+                    components: [
+                        new ActionRowBuilder()
+                            .addComponents(
+                                new ButtonBuilder()
+                                    .setCustomId(config.STICKY_BUTTON_ID)
+                                    .setLabel('書き込む')
+                                    .setStyle(ButtonStyle.Success)
+                                    .setEmoji('✍️')
+                            )
+                    ]
+                };
+                await postStickyMessage(client, anonyChannel, config.STICKY_BUTTON_ID, payload);
             }
 
             // 部活パネルの設定
@@ -416,29 +418,22 @@ module.exports = {
                 await redis.set('anonymous_message_counter', 216);
             }
 
-            // ランキングの更新を実行
-            let guild;
-            try {
-                guild = await client.guilds.fetch(config.GUILD_ID);
-                if (!guild) {
-                    console.error('ギルドが見つかりません。GUILD_IDを確認してください。');
-                    return;
-                }
-            } catch (error) {
-                console.error('ギルドの取得に失敗しました:', error);
+            // 現在のギルドを取得
+            const guild = await client.guilds.fetch(config.GUILD_ID).catch(() => null);
+            if (!guild) {
+                console.error('ギルドが見つかりません。');
                 return;
             }
 
-            // 起動時に即時ランキング更新
+            // 起動時にランキング更新を実行
             await updatePermanentRankings(guild, redis, notion).catch(error => {
-                console.error('ランキングの更新に失敗しました:', error);
+                console.error('起動時のランキング更新でエラーが発生しました:', error);
             });
 
-            // 定期的なランキング更新のスケジュール設定
-            cron.schedule('0 */1 * * *', async () => {
+            // 定期的なランキング更新（1時間ごと）
+            cron.schedule('0 * * * *', async () => {
                 try {
-                    // ギルドの再取得
-                    const currentGuild = await client.guilds.fetch(config.GUILD_ID);
+                    const currentGuild = await client.guilds.fetch(config.GUILD_ID).catch(() => null);
                     if (!currentGuild) {
                         console.error('定期更新: ギルドが見つかりません。');
                         return;
@@ -467,59 +462,50 @@ module.exports = {
                                 if (!lastXpTime || (now - lastXpTime > config.VOICE_XP_COOLDOWN)) {
                                     const xp = config.VOICE_XP_AMOUNT;
                                     await handleVoiceXp(member, xp, redis);
-                                    await redis.set(cooldownKey, now, { ex: 125 });
+                                    await redis.set(cooldownKey, now, { EX: 125 });
                                 }
                             }
                         }
                     }
+
+                    // ランキングの更新
                     await updatePermanentRankings(currentGuild, redis, notion);
                 } catch (error) {
                     console.error('定期ランキング更新でエラーが発生しました:', error);
                 }
             });
 
-            // 部活チャンネルの並び替え
+            // 部活チャンネルの並び替え（毎日0時）
             cron.schedule('0 0 * * *', async () => {
                 try {
-                    await sortClubChannels(guild);
+                    const currentGuild = await client.guilds.fetch(config.GUILD_ID);
+                    await sortClubChannels(redis, currentGuild);
                 } catch (error) {
                     console.error('部活チャンネルの並び替えでエラーが発生しました:', error);
                 }
+            }, {
+                scheduled: true,
+                timezone: "Asia/Tokyo"
             });
 
-            // 毎日深夜0時にRedisキーのクリーンアップを実行
+            // Redisキーのクリーンアップ（毎日0時）
             cron.schedule('0 0 * * *', async () => {
                 try {
                     const now = Date.now();
-                    const yesterday = new Date();
-                    yesterday.setDate(yesterday.getDate() - 1);
-                    const yesterdayKey = yesterday.toISOString().slice(0, 10);
-
-                    // 期限切れの日次XPデータを削除
-                    const dailyKeys = await redis.keys(`daily_xp:*:${yesterdayKey}:*`);
-                    if (dailyKeys.length > 0) {
-                        await redis.del(...dailyKeys);
-                    }
-
-                    // 期限切れのトレンドデータを削除（3時間以上前）
-                    const cutoff = now - config.TREND_WORD_LIFESPAN;
-                    await redis.zremrangebyscore('trend_words_scores', '-inf', cutoff);
-                    await redis.zremrangebyscore('trend_words_timestamps', '-inf', cutoff);
-
-                    // 不要なクールダウンキーを削除
-                    const cooldownKeys = await redis.keys('xp_cooldown:*');
-                    for (const key of cooldownKeys) {
+                    const keys = await redis.keys('xp_cooldown:*');
+                    for (const key of keys) {
                         const timestamp = await redis.get(key);
                         if (now - timestamp > 24 * 60 * 60 * 1000) {
                             await redis.del(key);
                         }
                     }
-
-                    console.log('Redisキーのクリーンアップが完了しました。');
                 } catch (error) {
-                    console.error('Redisキーのクリーンアップ中にエラー:', error);
+                    console.error('Redisキーのクリーンアップでエラーが発生しました:', error);
                 }
-            }, { scheduled: true, timezone: "Asia/Tokyo" });
+            }, {
+                scheduled: true,
+                timezone: "Asia/Tokyo"
+            });
 
         } catch (error) {
             console.error('readyイベントの実行中にエラーが発生しました:', error);
