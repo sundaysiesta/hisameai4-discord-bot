@@ -86,15 +86,29 @@ async function updatePermanentRankings(guild, redis, notion) {
         for (const key of textKeys) {
             try {
                 const xp = await redis.get(key);
-                if (xp !== null && !isNaN(xp)) textUsers.push({ userId: key.split(':')[3], xp: Number(xp) });
-            } catch (e) { console.error(e); }
+                if (xp !== null && !isNaN(xp)) {
+                    const userId = key.split(':')[3];
+                    if (userId) {
+                        textUsers.push({ userId, xp: Number(xp) });
+                    }
+                }
+            } catch (e) { 
+                console.error(`[ランキング] テキストXP取得エラー (キー: ${key}):`, e);
+            }
         }
         const voiceUsers = [];
         for (const key of voiceKeys) {
             try {
                 const xp = await redis.get(key);
-                if (xp !== null && !isNaN(xp)) voiceUsers.push({ userId: key.split(':')[3], xp: Number(xp) });
-            } catch (e) { console.error(e); }
+                if (xp !== null && !isNaN(xp)) {
+                    const userId = key.split(':')[3];
+                    if (userId) {
+                        voiceUsers.push({ userId, xp: Number(xp) });
+                    }
+                }
+            } catch (e) { 
+                console.error(`[ランキング] ボイスXP取得エラー (キー: ${key}):`, e);
+            }
         }
 
         // 上位20名のユーザーIDを取得
@@ -110,7 +124,9 @@ async function updatePermanentRankings(guild, redis, notion) {
             try {
                 const member = await guild.members.fetch(userId).catch(() => null);
                 if (member) memberCache.set(userId, member);
-            } catch (e) { console.error(`Failed to fetch member ${userId}:`, e); }
+            } catch (e) { 
+                console.error(`[ランキング] メンバー取得エラー (ID: ${userId}):`, e);
+            }
         }
 
         let textDesc = top20Text.map((u, i) => {
