@@ -51,23 +51,37 @@ module.exports = {
 
     // ロメコイン設定
     COIN_NAME: 'ロメコイン',
-    COIN_SYMBOL: '🪙',
-    DAILY_COIN_MIN: 100,
-    DAILY_COIN_MAX: 200,
-    WORK_COIN_MIN: 25,
-    WORK_COIN_MAX: 75,
-    WORK_COOLDOWN: 30 * 60 * 1000, // 30分
+    COIN_SYMBOL: '<:romecoin2:1384036538513358849>',
+    DAILY_COIN_AMOUNT: 250,
+    DAILY_COIN_BOOSTED_AMOUNT: 500,
     DAILY_COOLDOWN: 24 * 60 * 60 * 1000, // 24時間
+    CRIME_COOLDOWN: 5 * 60 * 1000, // 5分
+    CRIME_COIN_MIN: 50,
+    CRIME_COIN_MAX: 300,
+    CRIME_FINE_MIN: 50,
+    CRIME_FINE_MAX: 100,
+    CRIME_SUCCESS_RATE: 0.5, // 50%の成功率
+    ROB_COOLDOWN: 6 * 60 * 60 * 1000, // 6時間
+    ROB_SUCCESS_RATE: 0.3, // 30%の成功率
+    ROB_MIN_PERCENT: 0.3, // 30%
+    ROB_MAX_PERCENT: 0.6, // 60%
+    TAX_RATE: 0.05, // 5%の税金
+    FINANCE_DEPARTMENT_ID: '1095353742506856552', // 財務省のユーザーID
     STARTING_BALANCE: 1000, // 初期残高
     COIN_COMMANDS: {
-        WORK: ['work', '働く'],
-        DAILY: ['daily', '日課'],
+        DAILY: ['daily', 'デイリー'],
         GIVE: ['give', '送金'],
         BALANCE: ['balance', '残高'],
         LEADERBOARD: ['leaderboard', 'ランキング'],
         SHOP: ['shop', '店'],
         BUY: ['buy', '購入'],
-        ROB: ['rob', '強奪']
+        CRIME: ['crime', '犯罪'],
+        DEPOSIT: ['deposit', '預金'],
+        WITHDRAW: ['withdraw', '引出'],
+        ROB: ['rob', '強奪'],
+        ECONOMY: ['economy', '経済'],
+        SHOP_MANAGE: ['shopmanage', 'ショップ管理'],
+        RESET_ECONOMY: ['reseteco', '経済リセット']
     },
     COIN_ITEMS: [
         { id: 'weather_title', name: '天気予報師の称号', price: 10000, description: '天気予報を見る人の称号' },
