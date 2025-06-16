@@ -16,8 +16,7 @@ async function createLeaderboardEmbed(users, page, totalPages, title, type, clie
     for (let i = 0; i < pageUsers.length; i++) {
         const user = pageUsers[i];
         const rank = startIndex + i + 1;
-        const userData = await client.users.fetch(user.userId).catch(() => null);
-        const username = userData ? userData.username : '不明なユーザー';
+        const mention = `<@${user.userId}>`; // メンションに統一
         
         let xpDisplay;
         if (type === 'coin') {
@@ -27,7 +26,7 @@ async function createLeaderboardEmbed(users, page, totalPages, title, type, clie
             xpDisplay = `Lv.${level} (${user.xp.toLocaleString()} XP)`;
         }
         
-        description += `${rank}. ${username}: ${xpDisplay}\n`;
+        description += `**${rank}位:** ${mention} - ${xpDisplay}\n`;
     }
 
     if (description === '') {
@@ -64,23 +63,39 @@ module.exports = {
         let month = interaction.options.getString('month');
 
         if (type === 'coin') {
-            const users = [];
+            const users = new Map(); // ユーザーデータを一時的に保存するためのMap
             const userKeys = await redis.keys('user:*');
+            
+            // まず全ユーザーの残高を取得
             for(const key of userKeys) {
                 const userId = key.split(':')[1];
-                const mainAccountId = await redis.hget(key, 'mainAccountId');
-                if (!mainAccountId || mainAccountId === userId) {
-                    const balance = await redis.hget(key, 'balance');
-                    if (balance) {
-                        users.push({ userId, xp: Number(balance) });
+                const balance = await redis.hget(key, 'balance');
+                const mainAccountId = await redis.hget(key, 'mainAccountId') || userId;
+                
+                if (balance) {
+                    const currentBalance = Number(balance);
+                    if (users.has(mainAccountId)) {
+                        // メインアカウントが既に存在する場合は残高を加算
+                        const existing = users.get(mainAccountId);
+                        users.set(mainAccountId, {
+                            userId: mainAccountId,
+                            xp: existing.xp + currentBalance
+                        });
+                    } else {
+                        // 新しいエントリーを作成
+                        users.set(mainAccountId, {
+                            userId: mainAccountId,
+                            xp: currentBalance
+                        });
                     }
                 }
             }
-            users.sort((a, b) => b.xp - a.xp);
-            const totalPages = Math.max(1, Math.ceil(users.length / 10));
+
+            const sortedUsers = Array.from(users.values()).sort((a, b) => b.xp - a.xp);
+            const totalPages = Math.max(1, Math.ceil(sortedUsers.length / 10));
             let page = 0;
 
-            const embed = await createLeaderboardEmbed(users, page, totalPages, 'ロメコインランキング', 'coin', interaction.client);
+            const embed = await createLeaderboardEmbed(sortedUsers, page, totalPages, 'ロメコインランキング', 'coin', interaction.client);
             const row = new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId('prev').setLabel('前へ').setStyle(ButtonStyle.Primary).setDisabled(true),
                 new ButtonBuilder().setCustomId('next').setLabel('次へ').setStyle(ButtonStyle.Primary).setDisabled(totalPages <= 1)
@@ -95,12 +110,19 @@ module.exports = {
                         if (i.customId === 'prev') page--;
                         else if (i.customId === 'next') page++;
 
-                        const newEmbed = await createLeaderboardEmbed(users, page, totalPages, 'ロメコインランキング', 'coin', interaction.client);
+                        const newEmbed = await createLeaderboardEmbed(sortedUsers, page, totalPages, 'ロメコインランキング', 'coin', interaction.client);
                         row.components[0].setDisabled(page === 0);
                         row.components[1].setDisabled(page === totalPages - 1);
 
                         await i.update({ embeds: [newEmbed], components: [row] });
+                    } else {
+                        await i.reply({ content: 'このボタンは、コマンドを実行したユーザーのみが使用できます。', ephemeral: true });
                     }
+                });
+
+                collector.on('end', () => {
+                    row.components.forEach(button => button.setDisabled(true));
+                    message.edit({ components: [row] }).catch(() => {});
                 });
             }
             return;
