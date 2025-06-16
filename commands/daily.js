@@ -12,32 +12,25 @@ module.exports = {
         try {
             const mainAccountId = await redis.hget(`user:${userId}`, 'mainAccountId') || userId;
             const lastDaily = await redis.hget(`user:${mainAccountId}`, 'lastDaily');
+            
+            // 現在時刻を取得（UTC）
             const now = new Date();
             
-            // 日本時間に調整（UTC+9）
-            const jstNow = new Date(now.getTime() + (9 * 60 * 60 * 1000));
-            
-            // 今日の0時0分0秒を取得（JST）
-            const today = new Date(jstNow.getFullYear(), jstNow.getMonth(), jstNow.getDate());
-            today.setTime(today.getTime() - (9 * 60 * 60 * 1000)); // UTCに戻す
-            
             // 前回のデイリー時間を取得
-            const lastDailyDate = lastDaily ? new Date(parseInt(lastDaily)) : null;
-            
-            // 前回のデイリーが今日の0時以降かチェック
-            if (lastDailyDate && lastDailyDate >= today) {
-                const nextReset = new Date(today);
-                nextReset.setDate(nextReset.getDate() + 1);
-                const remainingTime = nextReset.getTime() - now.getTime();
-                const hours = Math.floor(remainingTime / (60 * 60 * 1000));
-                const minutes = Math.floor((remainingTime % (60 * 60 * 1000)) / (60 * 1000));
+            if (lastDaily) {
+                const lastDailyDate = new Date(parseInt(lastDaily));
+                const timeDiff = now.getTime() - lastDailyDate.getTime();
+                const hoursLeft = Math.floor((86400000 - timeDiff) / (60 * 60 * 1000));
+                const minutesLeft = Math.floor(((86400000 - timeDiff) % (60 * 60 * 1000)) / (60 * 1000));
+                
+                if (timeDiff < 86400000) { // 24時間（ミリ秒）
+                    const embed = new EmbedBuilder()
+                        .setColor('#ff0000')
+                        .setTitle('クールダウン中')
+                        .setDescription(`次のデイリーボーナスまで: ${hoursLeft}時間${minutesLeft}分`);
 
-                const embed = new EmbedBuilder()
-                    .setColor('#ff0000')
-                    .setTitle('クールダウン中')
-                    .setDescription(`次のデイリーボーナスまで: ${hours}時間${minutes}分`);
-
-                return interaction.editReply({ embeds: [embed] });
+                    return interaction.editReply({ embeds: [embed] });
+                }
             }
 
             // ブースターロールの確認
