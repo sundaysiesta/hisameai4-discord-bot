@@ -59,16 +59,18 @@ async function postOrEdit(channel, redisKey, payload) {
 async function updatePermanentRankings(guild, redis, notion) {
     try {
         if (!guild) {
-            console.error('ギルドが見つかりません。');
+            console.error('ギルドが未定義です');
             return;
         }
-        if (!guild.channels || typeof guild.channels.fetch !== 'function') {
-            console.error('guild.channelsが未定義、またはfetchが使えません。');
+        if (!guild.client || !guild.client.channels || typeof guild.client.channels.fetch !== 'function') {
+            console.error('guild.client.channels.fetchが未定義です');
             return;
         }
-
         // ランキングチャンネルを確実に取得
-        const rankingChannel = await guild.channels.fetch('1383261252662595604');
+        const rankingChannel = await guild.client.channels.fetch('1383261252662595604').catch(e => {
+            console.error('ランキングチャンネルの取得に失敗:', e);
+            return null;
+        });
         if (!rankingChannel) {
             console.error('ランキングチャンネルが見つかりません。');
             return;
