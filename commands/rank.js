@@ -8,6 +8,16 @@ const formatXp = (xp) => {
     return xp.toLocaleString();
 };
 
+/**
+ * XP情報をフォーマットする関数
+ * @param {number} currentXp 現在のXP
+ * @param {number} totalNeededXp 次のレベルまでに必要な合計XP
+ * @returns {string} フォーマットされたXP文字列
+ */
+const formatXpProgress = (currentXp, totalNeededXp) => {
+    return `${formatXp(currentXp)} / ${formatXp(totalNeededXp)}`;
+};
+
 function drawRoundRect(ctx, x, y, width, height, radius) {
     ctx.beginPath();
     ctx.moveTo(x + radius, y);
@@ -63,11 +73,13 @@ module.exports = {
             const xpForNextText = getXpForTextLevel(textLevel + 1);
             const neededText = xpForNextText - xpForCurrentText;
             const percentText = neededText > 0 ? ((textXp - xpForCurrentText) / neededText) : 1;
+            const totalNeededTextXp = xpForNextText;  // 次のレベルまでの合計必要XP
 
             const xpForCurrentVoice = getXpForVoiceLevel(voiceLevel);
             const xpForNextVoice = getXpForVoiceLevel(voiceLevel + 1);
             const neededVoice = xpForNextVoice - xpForCurrentVoice;
             const percentVoice = neededVoice > 0 ? ((voiceXp - xpForCurrentVoice) / neededVoice) : 1;
+            const totalNeededVoiceXp = xpForNextVoice;  // 次のレベルまでの合計必要XP
 
             let borderColor = '#747F8D';
             let backgroundUrl = null;
@@ -192,6 +204,19 @@ module.exports = {
             ctx.lineWidth = 10;
             ctx.stroke();
             
+            // XPテキストの描画
+            ctx.fillStyle = '#FFFFFF';
+            ctx.font = '23px "Noto Sans CJK JP"';
+            ctx.textAlign = 'right';
+            
+            // テキストXP
+            const textXpDisplay = formatXpProgress(textXp, totalNeededTextXp);
+            ctx.fillText(textXpDisplay, 760, 164);
+            
+            // ボイスXP
+            const voiceXpDisplay = formatXpProgress(voiceXp, totalNeededVoiceXp);
+            ctx.fillText(voiceXpDisplay, 760, 227);
+
             const attachment = new AttachmentBuilder(canvas.toBuffer(), { name: 'rank-card.png' });
             await interaction.editReply({ files: [attachment] });
 
