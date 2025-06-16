@@ -47,31 +47,5 @@ module.exports = {
         '思う', 'いう', '感じ', 'やつ', 'なんか', 'みんな', 'マジ', '本当', '普通', 'なん', '人',
         '感じ', '為', '事', '物', '者', '方', '一', '二', '三', '四', '五', '六', '七', '八', '九', '十',
         'w', '笑', 'https', 'http', 'jp', 'co', 'com'
-    ]),
-
-    // ロメコイン設定
-    COIN_NAME: 'ロメコイン',
-    COIN_SYMBOL: '🪙',
-    DAILY_COIN_MIN: 100,
-    DAILY_COIN_MAX: 200,
-    WORK_COIN_MIN: 25,
-    WORK_COIN_MAX: 75,
-    WORK_COOLDOWN: 30 * 60 * 1000, // 30分
-    DAILY_COOLDOWN: 24 * 60 * 60 * 1000, // 24時間
-    STARTING_BALANCE: 1000, // 初期残高
-    COIN_COMMANDS: {
-        WORK: ['work', '働く'],
-        DAILY: ['daily', '日課'],
-        GIVE: ['give', '送金'],
-        BALANCE: ['balance', '残高'],
-        LEADERBOARD: ['leaderboard', 'ランキング'],
-        SHOP: ['shop', '店'],
-        BUY: ['buy', '購入'],
-        ROB: ['rob', '強奪']
-    },
-    COIN_ITEMS: [
-        { id: 'weather_title', name: '天気予報師の称号', price: 10000, description: '天気予報を見る人の称号' },
-        { id: 'lome_master', name: 'ロメの支配者称号', price: 100000, description: 'ロメを支配する者の証' },
-        { id: 'custom_role', name: 'カスタムロール', price: 50000, description: '自分だけのロールを作成できます' }
-    ],
+    ])
 };

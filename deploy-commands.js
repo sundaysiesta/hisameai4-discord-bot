@@ -18,8 +18,7 @@ const commands = [
             required: false, 
             choices: [
                 { name: 'テキスト', value: 'text' }, 
-                { name: 'ボイス', value: 'voice' },
-                { name: 'ロメコイン', value: 'coin' }
+                { name: 'ボイス', value: 'voice' }
             ]
         }, 
         { 

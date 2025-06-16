@@ -8,12 +8,8 @@ const createLeaderboardEmbed = async (users, page, totalPages, title, type) => {
     const currentUsers = users.slice(start, end);
 
     const descriptionPromises = currentUsers.map(async (u, i) => {
-        if (type === 'coin') {
-            return `**${start + i + 1}位:** <@${u.userId}> - ${config.COIN_SYMBOL} ${u.xp.toLocaleString()} ${config.COIN_NAME}`;
-        } else {
-            const level = type === 'text' ? calculateTextLevel(u.xp) : calculateVoiceLevel(u.xp);
-            return `**${start + i + 1}位:** <@${u.userId}> - Lv.${level} (${u.xp.toLocaleString()} XP)`;
-        }
+        const level = type === 'text' ? calculateTextLevel(u.xp) : calculateVoiceLevel(u.xp);
+        return `**${start + i + 1}位:** <@${u.userId}> - Lv.${level} (${u.xp.toLocaleString()} XP)`;
     });
 
     const description = (await Promise.all(descriptionPromises)).join('\n');
@@ -21,7 +17,7 @@ const createLeaderboardEmbed = async (users, page, totalPages, title, type) => {
     return new EmbedBuilder()
         .setTitle(title)
         .setDescription(description || 'データがありません。')
-        .setColor(type === 'coin' ? 0xFFD700 : 0xFFA500)
+        .setColor(0xFFA500)
         .setFooter({ text: `ページ ${page + 1} / ${totalPages}` })
         .setTimestamp();
 };
@@ -36,8 +32,7 @@ module.exports = {
                 .setRequired(false)
                 .addChoices(
                     { name: 'テキスト', value: 'text' },
-                    { name: 'ボイス', value: 'voice' },
-                    { name: 'ロメコイン', value: 'coin' }
+                    { name: 'ボイス', value: 'voice' }
                 ))
         .addStringOption(option => option.setName('duration').setDescription('期間（指定しない場合は全期間）').setRequired(false).addChoices({ name: '日間', value: 'daily' }, { name: '月間', value: 'monthly' }))
         .addStringOption(option => option.setName('date').setDescription('日付 (YYYY-MM-DD形式)').setRequired(false))
@@ -49,50 +44,6 @@ module.exports = {
         let date = interaction.options.getString('date');
         let month = interaction.options.getString('month');
 
-        if (type === 'coin') {
-            const users = [];
-            const userKeys = await redis.keys('user:*');
-            for(const key of userKeys) {
-                const userId = key.split(':')[1];
-                const mainAccountId = await redis.hget(key, 'mainAccountId');
-                if (!mainAccountId || mainAccountId === userId) {  // メインアカウントのみを集計
-                    const balance = await redis.hget(key, 'balance');
-                    if (balance) {
-                        users.push({ userId, xp: Number(balance) });
-                    }
-                }
-            }
-            users.sort((a, b) => b.xp - a.xp);
-            const totalPages = Math.max(1, Math.ceil(users.length / 10));
-            let page = 0;
-
-            const embed = await createLeaderboardEmbed(users, page, totalPages, 'ロメコインランキング', 'coin');
-            const row = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('prev').setLabel('前へ').setStyle(ButtonStyle.Primary).setDisabled(true),
-                new ButtonBuilder().setCustomId('next').setLabel('次へ').setStyle(ButtonStyle.Primary).setDisabled(totalPages <= 1)
-            );
-
-            const message = await interaction.editReply({ embeds: [embed], components: [row] });
-            
-            if (totalPages > 1) {
-                const collector = message.createMessageComponentCollector({ componentType: ComponentType.Button, time: 60000 });
-                collector.on('collect', async i => {
-                    if (i.user.id === interaction.user.id) {
-                        if (i.customId === 'prev') page--;
-                        else if (i.customId === 'next') page++;
-
-                        const newEmbed = await createLeaderboardEmbed(users, page, totalPages, 'ロメコインランキング', 'coin');
-                        row.components[0].setDisabled(page === 0);
-                        row.components[1].setDisabled(page === totalPages - 1);
-
-                        await i.update({ embeds: [newEmbed], components: [row] });
-                    }
-                });
-            }
-            return;
-        }
-
-        // 既存のテキスト・ボイスXPランキング処理
         if (!type) {
             const textUsers = [];
             const voiceUsers = [];
