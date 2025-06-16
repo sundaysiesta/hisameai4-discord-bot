@@ -1,6 +1,5 @@
 const { SlashCommandBuilder, AttachmentBuilder } = require('discord.js');
 const { createCanvas, loadImage } = require('canvas');
-// utility.js からの toHalfWidth のインポートは削除
 const { getGenerationRoleName, toKanjiNumber } = require('../utils/utility.js');
 const { notion, getNotionPropertyText, getNotionRelationTitles, getNotionRelationData } = require('../utils/notionHelpers.js');
 const config = require('../config.js');
@@ -61,24 +60,25 @@ function wrapText(context, text, x, y, maxWidth, lineHeight, maxLines) {
 
 /**
  * 称号の配列をフォーマットするヘルパー関数
- * 数字のフォーマット処理を削除し、シンプルな表示に変更
+ * シンプルな2列表示を行う
  */
 function formatTitles(titles) {
     if (!titles || titles.length === 0) return 'なし';
     
-    // 称号を2列に整形（シンプルな実装）
     let formattedString = '';
     titles.forEach((title, index) => {
-        if (!title) return;
         const trimmedTitle = title.trim();
         if (!trimmedTitle) return;
-        
         formattedString += trimmedTitle;
         if (index < titles.length - 1) {
-            formattedString += (index + 1) % 2 === 0 ? '\n' : ' ';
+            if ((index + 1) % 2 === 0) {
+                formattedString += '\n';
+            } else {
+                formattedString += ' ';
+            }
         }
     });
-    
+
     return formattedString || 'なし';
 }
 
@@ -172,11 +172,11 @@ module.exports = {
             let titleValue = 'なし';
             
             if (titleData.length > 0) {
-                // 称号を整形（シンプル化）
-                const topThreeTitles = titleData.slice(0, 3).map(item => {
-                    const title = item.title.replace(emojiRegex, '').trim();
-                    return title || null;
-                }).filter(Boolean);
+                // 称号の処理をシンプル化
+                const topThreeTitles = titleData
+                    .slice(0, 3)
+                    .map(item => item.title.replace(emojiRegex, '').trim())
+                    .filter(Boolean);
 
                 titleValue = formatTitles(topThreeTitles);
                 if (titleData.length > 3) {

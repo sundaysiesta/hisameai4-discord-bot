@@ -167,12 +167,7 @@ module.exports = {
                 ctx.fillStyle = '#32CD32';
                 drawRoundRect(ctx, contentX, 225, barWidth * percentVoice, 20, 10);
                 ctx.fill();
-            }            ctx.font = '18px "Noto Sans CJK JP"';
-            ctx.fillStyle = '#FFFFFF';
-            ctx.textAlign = 'right';
-            ctx.fillText(`${formatXp(textXp)} / ${formatXp(xpForNextText - xpForCurrentText)} XP`, contentX + barWidth, 135);
-            ctx.fillText(`${formatXp(voiceXp)} / ${formatXp(xpForNextVoice - xpForCurrentVoice)} XP`, contentX + barWidth, 215);
-            ctx.textAlign = 'left';            // サーバーアイコンを右上に追加
+            }            // XPテキストは formatXpProgress で描画するので削除// サーバーアイコンを右上に追加
             const serverIconSize = 48;
             const serverIconX = canvas.width - margin - serverIconSize - 10;
             const serverIconY = margin + 10;

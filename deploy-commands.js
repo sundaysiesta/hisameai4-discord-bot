@@ -38,7 +38,13 @@ const commands = [
             description: '対象の月をYYYY-MM形式で指定 (例: 2025-05)。未指定の場合は先月になります。',
             required: false,
         }],
-    }
+    },
+    { name: 'balance', description: '所持金を確認します', options: [{ name: 'user', type: 6, description: '確認したいユーザー（指定しない場合は自分）', required: false }] },
+    { name: 'daily', description: '日課報酬を受け取ります' },
+    { name: 'work', description: '働いてコインを稼ぎます' },
+    { name: 'give', description: '他のユーザーにコインを送金します', options: [{ name: 'user', type: 6, description: '送金先のユーザー', required: true }, { name: 'amount', type: 4, description: '送金額', required: true }] },
+    { name: 'shop', description: 'アイテムショップを表示します' },
+    { name: 'buy', description: 'ショップでアイテムを購入します', options: [{ name: 'itemid', type: 3, description: '購入するアイテムのID', required: true }] },
 ].map(command => command);
 
 const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_BOT_TOKEN);
