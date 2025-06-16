@@ -141,14 +141,13 @@ module.exports = {
 
             const titleData = await getNotionRelationData(notion, props['称号'], '開催日');
             titleData.sort((a, b) => new Date(b.date) - new Date(a.date));
-            const emojiRegex = /[\p{Emoji_Presentation}\p{Emoji}\p{Emoji_Modifier_Base}\p{Emoji_Modifier}\p{Emoji_Component}]/gu;
             let titleValue = 'なし';
             
             if (titleData.length > 0) {
-                // 称号処理（絵文字の削除のみ）
+                // 称号処理（絵文字のみを削除）
                 const topThreeTitles = titleData
                     .slice(0, 3)
-                    .map(item => item.title.replace(emojiRegex, '').trim())
+                    .map(item => item.title.replace(/[\p{Emoji_Presentation}\p{Emoji}\p{Emoji_Modifier_Base}\p{Emoji_Modifier}\p{Emoji_Component}]/gu, '').trim())
                     .filter(Boolean);
 
                 titleValue = formatTitles(topThreeTitles);
