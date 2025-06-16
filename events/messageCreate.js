@@ -47,44 +47,44 @@ module.exports = {
                     const mainMember = await message.guild.members.fetch(mainAccountId).catch(() => null);
                     if (mainMember) {
                         const xpToGive = Math.floor(Math.random() * (config.MAX_TEXT_XP - config.MIN_TEXT_XP + 1)) + config.MIN_TEXT_XP;
-                        
+                        if (!xpToGive || isNaN(xpToGive)) return; // XP値が不正な場合は処理を中断
+
                         // ユーザーデータの初期化と更新を一連の処理で実行
                         const userKey = `user:${mainAccountId}`;
                         const monthlyKey = `monthly_xp:text:${new Date().toISOString().slice(0, 7)}:${mainAccountId}`;
                         const dailyKey = `daily_xp:text:${new Date().toISOString().slice(0, 10)}:${mainAccountId}`;
 
-                        // Redis Multi/Execを使用してアトミックな操作を実行
-                        const multi = redis.multi();
-
-                        // ユーザーデータの初期化
-                        const userData = await redis.hgetall(userKey);
-                        if (!userData || Object.keys(userData).length === 0) {
-                            multi.hset(userKey, 'textXp', '0', 'voiceXp', '0');
-                        } else {
-                            if (!userData.textXp) multi.hset(userKey, 'textXp', '0');
-                            if (!userData.voiceXp) multi.hset(userKey, 'voiceXp', '0');
-                        }
-
-                        // 月間・日間XPの初期化と更新
-                        const [monthlyExists, dailyExists] = await Promise.all([
+                        // 各キーの存在確認と初期化を個別に実行
+                        const [userData, monthlyExists, dailyExists] = await Promise.all([
+                            redis.hgetall(userKey),
                             redis.exists(monthlyKey),
                             redis.exists(dailyKey)
                         ]);
 
-                        if (!monthlyExists) multi.set(monthlyKey, '0');
-                        if (!dailyExists) multi.set(dailyKey, '0');
+                        // ユーザーデータの初期化（必要な場合）
+                        if (!userData || Object.keys(userData).length === 0) {
+                            await redis.hset(userKey, {
+                                textXp: '0',
+                                voiceXp: '0'
+                            });
+                        }
 
-                        // XPの更新
-                        multi.hincrby(userKey, 'textXp', xpToGive);
-                        multi.incrby(monthlyKey, xpToGive);
-                        multi.incrby(dailyKey, xpToGive);
+                        // 月間・日間XPの初期化（必要な場合）
+                        if (!monthlyExists) {
+                            await redis.set(monthlyKey, '0');
+                        }
+                        if (!dailyExists) {
+                            await redis.set(dailyKey, '0');
+                        }
 
-                        // TTLの設定
-                        multi.expire(monthlyKey, 60 * 60 * 24 * 32); // 32日
-                        multi.expire(dailyKey, 60 * 60 * 24 * 2);    // 2日
-
-                        // すべての操作を実行
-                        await multi.exec();
+                        // XPの更新（個別に実行して確実性を高める）
+                        await Promise.all([
+                            redis.hincrby(userKey, 'textXp', xpToGive),
+                            redis.incrby(monthlyKey, xpToGive),
+                            redis.incrby(dailyKey, xpToGive),
+                            redis.expire(monthlyKey, 60 * 60 * 24 * 32),  // 32日
+                            redis.expire(dailyKey, 60 * 60 * 24 * 2)      // 2日
+                        ]);
                         
                         textXpCooldowns.set(userId, now);
                         await updateLevelRoles(mainMember, redis, message.client);
@@ -116,18 +116,16 @@ module.exports = {
                         !/^\d+$/.test(word)
                     );
 
-                // 重複を排除
-                const uniqueWords = [...new Set(words)];
+                // 重複を排除してから有効な単語のみを抽出
+                const uniqueWords = [...new Set(words)].filter(word => word && word.trim());
                 if (uniqueWords.length > 0) {
                     const timestamp = Date.now().toString();
-                    const multi = redis.multi();
-
-                    // トレンド単語の追加とTTLの設定
-                    const trendEntries = uniqueWords.map(word => `${word}:${userId}:${timestamp}`);
-                    multi.lpush('trend_words', ...trendEntries);
-                    multi.expire('trend_words', config.TREND_WORD_LIFESPAN);
-
-                    await multi.exec();
+                    // 各単語に対して個別に追加する
+                    for (const word of uniqueWords) {
+                        const trendEntry = `${word}:${userId}:${timestamp}`;
+                        await redis.lpush('trend_words', trendEntry);
+                    }
+                    await redis.expire('trend_words', config.TREND_WORD_LIFESPAN);
                     trendCooldowns.set(userId, now);
                 }
             }

@@ -61,24 +61,25 @@ function wrapText(context, text, x, y, maxWidth, lineHeight, maxLines) {
 
 /**
  * 称号の配列をフォーマットするヘルパー関数
+ * 数字のフォーマット処理を削除し、シンプルな表示に変更
  */
 function formatTitles(titles) {
     if (!titles || titles.length === 0) return 'なし';
     
-    // 称号を2列に整形
-    let formattedString = "";
-    for (let i = 0; i < titles.length; i++) {
-        const currentTitle = titles[i].trim();
-        if (!currentTitle) continue;
+    // 称号を2列に整形（シンプルな実装）
+    let formattedString = '';
+    titles.forEach((title, index) => {
+        if (!title) return;
+        const trimmedTitle = title.trim();
+        if (!trimmedTitle) return;
         
-        formattedString += currentTitle;
-        // 最後の要素でない場合のみ区切りを追加
-        if (i < titles.length - 1) {
-            // 2つごとに改行、それ以外はスペースで区切る
-            formattedString += (i + 1) % 2 === 0 ? "\n" : " ";
+        formattedString += trimmedTitle;
+        if (index < titles.length - 1) {
+            formattedString += (index + 1) % 2 === 0 ? '\n' : ' ';
         }
-    }
-    return formattedString;
+    });
+    
+    return formattedString || 'なし';
 }
 
 /**
@@ -169,19 +170,17 @@ module.exports = {
             titleData.sort((a, b) => new Date(b.date) - new Date(a.date));
             const emojiRegex = /[\p{Emoji_Presentation}\p{Emoji}\p{Emoji_Modifier_Base}\p{Emoji_Modifier}\p{Emoji_Component}]/gu;
             let titleValue = 'なし';
+            
             if (titleData.length > 0) {
-                // 称号を整形
-                const topThreeTitles = titleData
-                    .slice(0, 3)
-                    .map(item => {
-                        const title = item.title.replace(emojiRegex, '').trim();
-                        return title ? title : null;
-                    })
-                    .filter(Boolean); // 空の称号を除外
+                // 称号を整形（シンプル化）
+                const topThreeTitles = titleData.slice(0, 3).map(item => {
+                    const title = item.title.replace(emojiRegex, '').trim();
+                    return title || null;
+                }).filter(Boolean);
 
                 titleValue = formatTitles(topThreeTitles);
                 if (titleData.length > 3) {
-                    titleValue += titleData.length > 4 ? `\n他${titleData.length - 3}個` : `、他${titleData.length - 3}個`;
+                    titleValue += `\n他${titleData.length - 3}個`;
                 }
             }
             
