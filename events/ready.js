@@ -399,7 +399,15 @@ module.exports = {
             // 定期的なランキング更新のスケジュール設定
             cron.schedule('0 */1 * * *', async () => {
                 try {
-                    const voiceStates = guild.voiceStates.cache;
+                    // ギルドの再取得
+                    const currentGuild = await client.guilds.fetch(config.GUILD_ID);
+                    if (!currentGuild) {
+                        console.error('定期更新: ギルドが見つかりません。');
+                        return;
+                    }
+
+                    // ボイスチャンネルの状態を取得
+                    const voiceStates = currentGuild.voiceStates.cache;
                     const activeVCs = new Map();
                     
                     // VCのXP処理
@@ -426,7 +434,7 @@ module.exports = {
                             }
                         }
                     }
-                    await updatePermanentRankings(guild, redis, notion);
+                    await updatePermanentRankings(currentGuild, redis, notion);
                 } catch (error) {
                     console.error('定期ランキング更新でエラーが発生しました:', error);
                 }
