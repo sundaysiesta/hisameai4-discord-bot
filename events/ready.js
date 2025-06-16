@@ -58,8 +58,20 @@ async function postOrEdit(channel, redisKey, payload) {
 
 async function updatePermanentRankings(guild, redis, notion) {
     try {
+        if (!guild || !guild.channels) {
+            console.error('ギルドまたはチャンネルマネージャーが利用できません。');
+            return;
+        }
+
         // チャンネルの取得方法を修正
-        const rankingChannel = await guild.channels.fetch(config.RANKING_CHANNEL_ID).catch(() => null);
+        let rankingChannel;
+        try {
+            rankingChannel = await guild.channels.fetch(config.RANKING_CHANNEL_ID);
+        } catch (error) {
+            console.error('ランキングチャンネルの取得に失敗:', error);
+            return;
+        }
+
         if (!rankingChannel) {
             console.error('ランキングチャンネルが見つかりません。');
             return;
@@ -127,7 +139,14 @@ async function updatePermanentRankings(guild, redis, notion) {
         } catch (e) { console.error("レベルランキング更新エラー:", e); }
 
         try {
-            const clubCategory = await guild.channels.fetch(config.CLUB_CATEGORY_ID).catch(() => null);
+            let clubCategory;
+            try {
+                clubCategory = await guild.channels.fetch(config.CLUB_CATEGORY_ID);
+            } catch (error) {
+                console.error('部活カテゴリの取得に失敗:', error);
+                clubCategory = null;
+            }
+
             let clubRankingEmbed = new EmbedBuilder().setTitle('部活アクティブランキング (週間)').setColor(0x82E0AA).setTimestamp();
             if (clubCategory) {
                 await guild.members.fetch(); // 全メンバーをキャッシュ

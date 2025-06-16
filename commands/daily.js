@@ -15,19 +15,24 @@ module.exports = {
             
             // 現在時刻を取得（UTC）
             const now = new Date();
+            const nowTime = now.getTime();
             
             // 前回のデイリー時間を取得
             if (lastDaily) {
-                const lastDailyDate = new Date(parseInt(lastDaily));
-                const timeDiff = now.getTime() - lastDailyDate.getTime();
-                const hoursLeft = Math.floor((86400000 - timeDiff) / (60 * 60 * 1000));
-                const minutesLeft = Math.floor(((86400000 - timeDiff) % (60 * 60 * 1000)) / (60 * 1000));
+                const lastDailyTime = parseInt(lastDaily);
+                const timeDiff = nowTime - lastDailyTime;
                 
-                if (timeDiff < 86400000) { // 24時間（ミリ秒）
+                // 24時間（ミリ秒）未満の場合
+                if (timeDiff < 86400000) {
+                    const remainingTime = 86400000 - timeDiff;
+                    const hoursLeft = Math.floor(remainingTime / (60 * 60 * 1000));
+                    const minutesLeft = Math.floor((remainingTime % (60 * 60 * 1000)) / (60 * 1000));
+                    const secondsLeft = Math.floor((remainingTime % (60 * 1000)) / 1000);
+
                     const embed = new EmbedBuilder()
                         .setColor('#ff0000')
                         .setTitle('クールダウン中')
-                        .setDescription(`次のデイリーボーナスまで: ${hoursLeft}時間${minutesLeft}分`);
+                        .setDescription(`次のデイリーボーナスまで: ${hoursLeft}時間${minutesLeft}分${secondsLeft}秒`);
 
                     return interaction.editReply({ embeds: [embed] });
                 }
@@ -40,7 +45,7 @@ module.exports = {
             
             // Redisでのトランザクション処理
             const multi = redis.multi();
-            multi.hset(`user:${mainAccountId}`, 'lastDaily', now.getTime().toString());
+            multi.hset(`user:${mainAccountId}`, 'lastDaily', nowTime.toString());
             multi.hincrby(`user:${mainAccountId}`, 'balance', amount);
             await multi.exec();
 
