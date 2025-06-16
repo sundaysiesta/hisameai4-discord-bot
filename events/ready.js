@@ -338,7 +338,7 @@ async function updateRankings(client, redis) {
             return;
         }
 
-        const rankingChannel = await guild.channels.fetch(config.RANKING_CHANNEL_ID);
+        const rankingChannel = await guild.channels.fetch('1383261252662595604');
         if (!rankingChannel) {
             console.error('ランキングチャンネルが見つかりません');
             return;

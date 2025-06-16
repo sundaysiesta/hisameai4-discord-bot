@@ -24,7 +24,7 @@ async function createLeaderboardEmbed(users, page, totalPages, title, type, clie
             xpDisplay = `${config.COIN_SYMBOL} ${user.xp.toLocaleString()} ${config.COIN_NAME}`;
         } else {
             const level = type === 'text' ? calculateTextLevel(user.xp) : calculateVoiceLevel(user.xp);
-            xpDisplay = `レベル ${level} (${user.xp.toLocaleString()} XP)`;
+            xpDisplay = `Lv.${level} (${user.xp.toLocaleString()} XP)`;
         }
         
         description += `${rank}. ${username}: ${xpDisplay}\n`;
