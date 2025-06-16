@@ -56,10 +56,8 @@ async function postOrEdit(channel, redisKey, payload) {
     return message;
 }
 
-async function updatePermanentRankings(client, redis, notion) {
+async function updatePermanentRankings(guild, redis, notion) {
     try {
-        // クライアントからギルドを取得
-        const guild = await client.guilds.fetch(config.GUILD_ID);
         if (!guild) {
             console.error('ギルドが見つかりません。');
             return;
@@ -436,9 +434,7 @@ module.exports = {
             if (!guild) {
                 console.error('ギルドが見つかりません。');
                 return;
-            }
-
-            // 起動時にランキング更新を実行
+            }            // 起動時にランキング更新を実行
             await updatePermanentRankings(guild, redis, notion).catch(error => {
                 console.error('起動時のランキング更新でエラーが発生しました:', error);
             });
@@ -446,8 +442,13 @@ module.exports = {
             // 定期的なランキング更新（1時間ごと）
             cron.schedule('0 * * * *', async () => {
                 try {
-                    // ランキングの更新
-                    await updatePermanentRankings(client, redis, notion);
+                    const currentGuild = await client.guilds.fetch(config.GUILD_ID);
+                    if (currentGuild) {
+                        // ランキングの更新
+                        await updatePermanentRankings(currentGuild, redis, notion);
+                    } else {
+                        console.error('ギルドが見つかりません。');
+                    }
                 } catch (error) {
                     console.error('定期ランキング更新でエラーが発生しました:', error);
                 }
