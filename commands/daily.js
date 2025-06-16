@@ -18,7 +18,7 @@ module.exports = {
             const nowTime = now.getTime();
             
             // 前回のデイリー時間を取得
-            const lastDaily = await redis.hget(`user:${mainAccountId}`, 'lastDaily');
+            const lastDaily = await redis.get(`daily:${mainAccountId}`);
             
             if (lastDaily) {
                 const lastDailyTime = parseInt(lastDaily);
@@ -49,8 +49,7 @@ module.exports = {
             const multi = redis.multi();
             
             // 最後のデイリー時間を設定（24時間の有効期限付き）
-            multi.hset(`user:${mainAccountId}`, 'lastDaily', nowTime.toString());
-            multi.expire(`user:${mainAccountId}`, 86400); // 24時間の有効期限
+            multi.set(`daily:${mainAccountId}`, nowTime.toString(), 'EX', 86400);
             
             // 残高を更新
             multi.hincrby(`user:${mainAccountId}`, 'balance', amount);

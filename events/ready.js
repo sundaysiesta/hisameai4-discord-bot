@@ -73,7 +73,7 @@ async function updatePermanentRankings(guild, redis, notion) {
         // ランキングチャンネルの取得
         let rankingChannel;
         try {
-            rankingChannel = await guild.channels.fetch(config.RANKING_CHANNEL_ID);
+            rankingChannel = guild.channels.cache.get(config.RANKING_CHANNEL_ID);
             if (!rankingChannel) {
                 console.error('ランキングチャンネルが見つかりません。');
                 return;
