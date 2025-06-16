@@ -250,44 +250,60 @@ module.exports = {
             if (!counterExists) await redis.set('anonymous_message_counter', 216);
         } catch (error) { console.error('起動時の初期化処理でエラー:', error); }
 
-        cron.schedule('0 * * * *', async () => {
+        // ---【追加】起動時に即時ランキング更新---
+        try {
             const guild = client.guilds.cache.first();
-            if (!guild) return;
-            const voiceStates = guild.voiceStates.cache;
-            const activeVCs = new Map();
-            
-            // VCのXP処理
-            voiceStates.forEach(vs => {
-                if (vs.channel && !vs.serverMute && !vs.selfMute && !vs.member.user.bot) {
-                    const members = activeVCs.get(vs.channelId) || [];
-                    members.push(vs.member);
-                    activeVCs.set(vs.channelId, members);
-                }
-            });
-            const now = Date.now();
-            for (const members of activeVCs.values()) {
-                if (members.length > 1) {
-                    for (const member of members) {
-                        if (member.roles.cache.has(config.XP_EXCLUDED_ROLE_ID)) continue;
-                        const cooldownKey = `xp_cooldown:voice:${member.id}`;
-                        const lastXpTime = await redis.get(cooldownKey);
-                        if (!lastXpTime || (now - lastXpTime > config.VOICE_XP_COOLDOWN)) {
-                            const mainAccountId = await redis.hget(`user:${member.id}`, 'mainAccountId') || member.id;
-                            const mainMember = await guild.members.fetch(mainAccountId).catch(() => null);
-                            if (!mainMember) continue;
-                            const xp = config.VOICE_XP_AMOUNT;
-                            const monthlyKey = `monthly_xp:voice:${new Date().toISOString().slice(0, 7)}:${mainAccountId}`;
-                            const dailyKey = `daily_xp:voice:${new Date().toISOString().slice(0, 10)}:${mainAccountId}`;
-                            await redis.hincrby(`user:${mainAccountId}`, 'voiceXp', xp);
-                            await safeIncrby(redis, monthlyKey, xp);
-                            await safeIncrby(redis, dailyKey, xp);
-                            await redis.set(cooldownKey, now, { ex: 125 });
-                            await updateLevelRoles(mainMember, redis, client);
+            if (guild) {
+                await updatePermanentRankings(guild, redis);
+                console.log('起動時にランキングを即時更新しました。');
+            }
+        } catch (e) {
+            console.error('起動時ランキング即時更新エラー:', e);
+        }
+
+        // ---【修正】cron式を1時間ごとに戻す---
+        cron.schedule('0 * * * *', async () => {
+            try {
+                const guild = client.guilds.cache.first();
+                if (!guild) return;
+                const voiceStates = guild.voiceStates.cache;
+                const activeVCs = new Map();
+                
+                // VCのXP処理
+                voiceStates.forEach(vs => {
+                    if (vs.channel && !vs.serverMute && !vs.selfMute && !vs.member.user.bot) {
+                        const members = activeVCs.get(vs.channelId) || [];
+                        members.push(vs.member);
+                        activeVCs.set(vs.channelId, members);
+                    }
+                });
+                const now = Date.now();
+                for (const members of activeVCs.values()) {
+                    if (members.length > 1) {
+                        for (const member of members) {
+                            if (member.roles.cache.has(config.XP_EXCLUDED_ROLE_ID)) continue;
+                            const cooldownKey = `xp_cooldown:voice:${member.id}`;
+                            const lastXpTime = await redis.get(cooldownKey);
+                            if (!lastXpTime || (now - lastXpTime > config.VOICE_XP_COOLDOWN)) {
+                                const mainAccountId = await redis.hget(`user:${member.id}`, 'mainAccountId') || member.id;
+                                const mainMember = await guild.members.fetch(mainAccountId).catch(() => null);
+                                if (!mainMember) continue;
+                                const xp = config.VOICE_XP_AMOUNT;
+                                const monthlyKey = `monthly_xp:voice:${new Date().toISOString().slice(0, 7)}:${mainAccountId}`;
+                                const dailyKey = `daily_xp:voice:${new Date().toISOString().slice(0, 10)}:${mainAccountId}`;
+                                await redis.hincrby(`user:${mainAccountId}`, 'voiceXp', xp);
+                                await safeIncrby(redis, monthlyKey, xp);
+                                await safeIncrby(redis, dailyKey, xp);
+                                await redis.set(cooldownKey, now, { ex: 125 });
+                                await updateLevelRoles(mainMember, redis, client);
+                            }
                         }
                     }
                 }
+                await updatePermanentRankings(guild, redis);
+            } catch (e) {
+                console.error('ランキング自動更新cronエラー:', e);
             }
-            await updatePermanentRankings(guild, redis);
         });
         
         // 毎日深夜0時にRedisキーのクリーンアップを実行
