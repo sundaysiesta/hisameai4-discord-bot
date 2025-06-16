@@ -49,7 +49,8 @@ module.exports = {
             const multi = redis.multi();
             
             // 最後のデイリー時間を設定（24時間の有効期限付き）
-            multi.set(`daily:${mainAccountId}`, nowTime.toString(), 'EX', 86400);
+            multi.set(`daily:${mainAccountId}`, nowTime.toString());
+            multi.expire(`daily:${mainAccountId}`, 86400);
             
             // 残高を更新
             multi.hincrby(`user:${mainAccountId}`, 'balance', amount);
