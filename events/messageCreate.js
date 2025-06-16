@@ -48,43 +48,43 @@ module.exports = {
                     if (mainMember) {
                         const xpToGive = Math.floor(Math.random() * (config.MAX_TEXT_XP - config.MIN_TEXT_XP + 1)) + config.MIN_TEXT_XP;
                         
-                        // ユーザーデータの初期化確認
+                        // ユーザーデータの初期化と更新を一連の処理で実行
                         const userKey = `user:${mainAccountId}`;
-                        const exists = await redis.exists(userKey);
-                        if (!exists) {
-                            await redis.hset(userKey, {
-                                textXp: '0',
-                                voiceXp: '0'
-                            });
-                        }
-
-                        const pipeline = redis.pipeline();
-
-                        // TextXPを加算（値が存在しない場合は0として扱う）
-                        pipeline.hincrby(userKey, 'textXp', xpToGive);
-
-                        // 月間・日間XPの更新
                         const monthlyKey = `monthly_xp:text:${new Date().toISOString().slice(0, 7)}:${mainAccountId}`;
                         const dailyKey = `daily_xp:text:${new Date().toISOString().slice(0, 10)}:${mainAccountId}`;
 
-                        // 各キーの初期化確認とXP加算をパイプラインに追加
+                        // Redis Multi/Execを使用してアトミックな操作を実行
+                        const multi = redis.multi();
+
+                        // ユーザーデータの初期化
+                        const userData = await redis.hgetall(userKey);
+                        if (!userData || Object.keys(userData).length === 0) {
+                            multi.hset(userKey, 'textXp', '0', 'voiceXp', '0');
+                        } else {
+                            if (!userData.textXp) multi.hset(userKey, 'textXp', '0');
+                            if (!userData.voiceXp) multi.hset(userKey, 'voiceXp', '0');
+                        }
+
+                        // 月間・日間XPの初期化と更新
                         const [monthlyExists, dailyExists] = await Promise.all([
                             redis.exists(monthlyKey),
                             redis.exists(dailyKey)
                         ]);
 
-                        if (!monthlyExists) {
-                            await redis.set(monthlyKey, '0');
-                        }
-                        if (!dailyExists) {
-                            await redis.set(dailyKey, '0');
-                        }
+                        if (!monthlyExists) multi.set(monthlyKey, '0');
+                        if (!dailyExists) multi.set(dailyKey, '0');
 
-                        pipeline.incrby(monthlyKey, xpToGive);
-                        pipeline.incrby(dailyKey, xpToGive);
+                        // XPの更新
+                        multi.hincrby(userKey, 'textXp', xpToGive);
+                        multi.incrby(monthlyKey, xpToGive);
+                        multi.incrby(dailyKey, xpToGive);
 
-                        // パイプラインを実行
-                        await pipeline.exec();
+                        // TTLの設定
+                        multi.expire(monthlyKey, 60 * 60 * 24 * 32); // 32日
+                        multi.expire(dailyKey, 60 * 60 * 24 * 2);    // 2日
+
+                        // すべての操作を実行
+                        await multi.exec();
                         
                         textXpCooldowns.set(userId, now);
                         await updateLevelRoles(mainMember, redis, message.client);
@@ -120,8 +120,14 @@ module.exports = {
                 const uniqueWords = [...new Set(words)];
                 if (uniqueWords.length > 0) {
                     const timestamp = Date.now().toString();
+                    const multi = redis.multi();
+
+                    // トレンド単語の追加とTTLの設定
                     const trendEntries = uniqueWords.map(word => `${word}:${userId}:${timestamp}`);
-                    await redis.lpush('trend_words', ...trendEntries);
+                    multi.lpush('trend_words', ...trendEntries);
+                    multi.expire('trend_words', config.TREND_WORD_LIFESPAN);
+
+                    await multi.exec();
                     trendCooldowns.set(userId, now);
                 }
             }
@@ -134,6 +140,7 @@ module.exports = {
                 const exists = await redis.exists(key);
                 if (!exists) {
                     await redis.set(key, '0');
+                    await redis.expire(key, 60 * 60 * 24 * 8); // 8日
                 }
                 await redis.incr(key);
             } catch (error) {

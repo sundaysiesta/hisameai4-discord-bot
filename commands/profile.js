@@ -63,38 +63,35 @@ function wrapText(context, text, x, y, maxWidth, lineHeight, maxLines) {
  * 称号の配列をフォーマットするヘルパー関数
  */
 function formatTitles(titles) {
+    if (!titles || titles.length === 0) return 'なし';
+    
+    // 称号を2列に整形
     let formattedString = "";
     for (let i = 0; i < titles.length; i++) {
-        formattedString += titles[i];
-        if ((i + 1) % 2 === 0 && i < titles.length - 1) {
-            formattedString += "\n";
-        } else if (i < titles.length - 1) {
-            // 【修正】読点「、」を半角スペースに変更
-            formattedString += " ";
+        const currentTitle = titles[i].trim();
+        if (!currentTitle) continue;
+        
+        formattedString += currentTitle;
+        // 最後の要素でない場合のみ区切りを追加
+        if (i < titles.length - 1) {
+            // 2つごとに改行、それ以外はスペースで区切る
+            formattedString += (i + 1) % 2 === 0 ? "\n" : " ";
         }
     }
     return formattedString;
 }
 
 /**
- * 【最終修正】このファイル専用の、最も確実な数字変換関数
+ * 数字を確実に半角に変換する関数
  * @param {string} str 変換する文字列
  * @returns {string} 変換後の文字列
  */
-function convertNumbersToHalfWidth(str) {
+function normalizeNumber(str) {
     if (typeof str !== 'string') return '';
-    // １文字ずつ、確実に置換する
+    // 全角数字を半角に変換
     return str
-        .replace(/０/g, '0')
-        .replace(/１/g, '1')
-        .replace(/２/g, '2')
-        .replace(/３/g, '3')
-        .replace(/４/g, '4')
-        .replace(/５/g, '5')
-        .replace(/６/g, '6')
-        .replace(/７/g, '7')
-        .replace(/８/g, '8')
-        .replace(/９/g, '9');
+        .replace(/[０-９]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xFEE0))
+        .replace(/[^0-9]/g, ''); // 数字以外を除去
 }
 
 module.exports = {
@@ -130,14 +127,24 @@ module.exports = {
             
             // プロフィール情報の整形
             const nameValue = getNotionPropertyText(props['名前']);
-            
             const generationNames = await getNotionRelationData(notion, props['世代']);
             let generationValue = '不明';
             if (generationNames.length > 0 && generationNames[0]?.title) {
                 const genText = generationNames[0].title;
-                const halfWidthText = convertNumbersToHalfWidth(genText);
-                const match = halfWidthText.match(/第(\d+)世代/);
-                generationValue = (match && match[1]) ? `第${toKanjiNumber(parseInt(match[1], 10))}世代` : genText;
+                const match = genText.match(/第[０-９0-9]+世代/);
+                if (match) {
+                    // 数字部分を抽出して変換
+                    const numStr = match[0].replace(/[第世代]/g, '');
+                    const normalizedNum = normalizeNumber(numStr);
+                    const num = parseInt(normalizedNum, 10);
+                    if (!isNaN(num)) {
+                        generationValue = `第${toKanjiNumber(num)}世代`;
+                    } else {
+                        generationValue = genText;
+                    }
+                } else {
+                    generationValue = genText;
+                }
             }
 
             let borderColor = '#747F8D';
@@ -163,11 +170,18 @@ module.exports = {
             const emojiRegex = /[\p{Emoji_Presentation}\p{Emoji}\p{Emoji_Modifier_Base}\p{Emoji_Modifier}\p{Emoji_Component}]/gu;
             let titleValue = 'なし';
             if (titleData.length > 0) {
-                // 【修正】convertNumbersToHalfWidth の呼び出しを削除
-                const topThreeTitles = titleData.slice(0, 3).map(item => item.title.replace(emojiRegex, '').trim());
+                // 称号を整形
+                const topThreeTitles = titleData
+                    .slice(0, 3)
+                    .map(item => {
+                        const title = item.title.replace(emojiRegex, '').trim();
+                        return title ? title : null;
+                    })
+                    .filter(Boolean); // 空の称号を除外
+
                 titleValue = formatTitles(topThreeTitles);
                 if (titleData.length > 3) {
-                    titleValue += `、他${titleData.length - 3}個`;
+                    titleValue += titleData.length > 4 ? `\n他${titleData.length - 3}個` : `、他${titleData.length - 3}個`;
                 }
             }
             
