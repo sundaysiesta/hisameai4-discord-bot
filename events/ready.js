@@ -68,14 +68,16 @@ async function updatePermanentRankings(guild, redis, notion) {
 
         // ギルドのチャンネルを再取得
         try {
-            await guild.channels.fetch();
+            // ギルドを再取得して最新の状態にする
+            const freshGuild = await guild.client.guilds.fetch(guild.id);
+            if (!freshGuild) {
+                console.error('ギルドの再取得に失敗');
+                return;
+            }
+            guild = freshGuild;
+            console.log('ギルドの再取得に成功:', guild.name);
         } catch (error) {
-            console.error('ギルドのチャンネル取得に失敗:', error);
-            return;
-        }
-
-        if (!guild.channels) {
-            console.error('ギルドのチャンネルが未定義です');
+            console.error('ギルドの再取得に失敗:', error);
             return;
         }
 
@@ -85,7 +87,12 @@ async function updatePermanentRankings(guild, redis, notion) {
         let rankingChannel = null;
         try {
             // チャンネルを直接取得
-            rankingChannel = await guild.channels.fetch(config.RANKING_CHANNEL_ID);
+            rankingChannel = await guild.channels.cache.get(config.RANKING_CHANNEL_ID);
+            if (!rankingChannel) {
+                // キャッシュにない場合は直接取得を試みる
+                rankingChannel = await guild.client.channels.fetch(config.RANKING_CHANNEL_ID);
+            }
+            
             if (!rankingChannel) {
                 console.error('ランキングチャンネルが見つかりません');
                 return;
@@ -495,15 +502,23 @@ module.exports = {
 
                 // ギルドのチャンネルを取得
                 try {
-                    await guild.channels.fetch();
-                    console.log('ギルドのチャンネル取得に成功');
+                    // ギルドを再取得して最新の状態にする
+                    const freshGuild = await client.guilds.fetch(guild.id);
+                    if (!freshGuild) {
+                        console.error('ギルドの再取得に失敗');
+                        return;
+                    }
+                    guild = freshGuild;
+                    console.log('ギルドの再取得に成功:', guild.name);
                 } catch (error) {
-                    console.error('ギルドのチャンネル取得に失敗:', error);
+                    console.error('ギルドの再取得に失敗:', error);
                     return;
                 }
 
                 // ランキングチャンネルの存在確認
-                const rankingChannel = await guild.channels.fetch(config.RANKING_CHANNEL_ID).catch(() => null);
+                const rankingChannel = guild.channels.cache.get(config.RANKING_CHANNEL_ID) || 
+                    await client.channels.fetch(config.RANKING_CHANNEL_ID).catch(() => null);
+                
                 if (!rankingChannel) {
                     console.error('ランキングチャンネルが見つかりません。');
                     return;
