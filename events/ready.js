@@ -447,6 +447,14 @@ module.exports = {
             console.log('ギルドの取得に成功:', guild.name);
             console.log('ランキングチャンネルID:', config.RANKING_CHANNEL_ID);
 
+            // ランキングメッセージIDをリセット
+            await redis.del('level_ranking_message_id');
+            await redis.del('coin_ranking_message_id');
+            await redis.del('club_ranking_message_id');
+            await redis.del('trend_message_id');
+            await redis.del('ranking_links_message_id');
+            console.log('ランキングメッセージIDをリセットしました');
+
             // 起動時にランキング更新を実行
             try {
                 await updatePermanentRankings(guild, redis, notion);
