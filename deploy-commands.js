@@ -58,7 +58,7 @@ const commands = [
         description: 'あなたのプロフィールに表示する仮の説明文を設定します。',
         options: [{
             name: 'description',
-            type: 3, // STRING
+            type: 3,
             description: '設定したい説明文 (リセットする場合は "none" と入力)',
             required: true,
         }],
@@ -68,17 +68,54 @@ const commands = [
         description: '月間レベルランキングのリザルト画像を生成します。',
         options: [{
             name: 'month',
-            type: 3, // STRING
+            type: 3,
             description: '対象の月をYYYY-MM形式で指定 (例: 2025-05)。未指定の場合は先月になります。',
             required: false,
         }],
     },
-    { name: 'balance', description: '所持金を確認します', options: [{ name: 'user', type: 6, description: '確認したいユーザー（指定しない場合は自分）', required: false }] },
+    { name: 'balance', description: '所持金と銀行残高を表示します', options: [{ name: 'user', type: 6, description: '確認したいユーザー（指定しない場合は自分）', required: false }] },
     { name: 'daily', description: '日課報酬を受け取ります' },
-    { name: 'work', description: '働いてコインを稼ぎます' },
+    { name: 'crime', description: '犯罪を犯してコインを稼ぎます' },
     { name: 'give', description: '他のユーザーにコインを送金します', options: [{ name: 'user', type: 6, description: '送金先のユーザー', required: true }, { name: 'amount', type: 4, description: '送金額', required: true }] },
-    { name: 'shop', description: 'アイテムショップを表示します' },
-    { name: 'buy', description: 'ショップでアイテムを購入します', options: [{ name: 'itemid', type: 3, description: '購入するアイテムのID', required: true }] },
+    { name: 'deposit', description: '銀行にコインを預け入れます', options: [{ name: 'amount', type: 4, description: '預け入れる金額', required: true }] },
+    { name: 'withdraw', description: '銀行からコインを引き出します', options: [{ name: 'amount', type: 4, description: '引き出す金額', required: true }] },
+    { name: 'rob', description: '財務部から強盗を試みます' },
+    { name: 'shop', description: 'ショップの管理コマンド', options: [
+        { name: 'list', type: 1, description: '現在の商品一覧を表示します' },
+        { name: 'add', type: 1, description: '新しい商品を追加します', options: [
+            { name: 'name', type: 3, description: '商品名', required: true },
+            { name: 'price', type: 4, description: '価格', required: true },
+            { name: 'description', type: 3, description: '商品の説明', required: true },
+            { name: 'role_id', type: 3, description: '付与するロールID', required: true }
+        ]},
+        { name: 'remove', type: 1, description: '商品を削除します', options: [
+            { name: 'name', type: 3, description: '削除する商品名', required: true }
+        ]},
+        { name: 'edit', type: 1, description: '商品の情報を編集します', options: [
+            { name: 'name', type: 3, description: '編集する商品名', required: true },
+            { name: 'field', type: 3, description: '編集する項目', required: true, choices: [
+                { name: '商品名', value: 'name' },
+                { name: '価格', value: 'price' },
+                { name: '説明', value: 'description' },
+                { name: 'ロールID', value: 'role_id' }
+            ]},
+            { name: 'value', type: 3, description: '新しい値', required: true }
+        ]}
+    ]},
+    { name: 'buy', description: 'ショップから商品を購入します', options: [{ name: 'name', type: 3, description: '購入する商品名', required: true }] },
+    { name: 'economy', description: '経済システムの管理コマンド', options: [
+        { name: 'reset', type: 1, description: 'ユーザーの所持金と銀行残高をリセットします', options: [
+            { name: 'user', type: 6, description: 'リセットするユーザー（指定しない場合は全ユーザー）', required: false }
+        ]},
+        { name: 'set', type: 1, description: 'ユーザーの所持金または銀行残高を設定します', options: [
+            { name: 'user', type: 6, description: '設定するユーザー', required: true },
+            { name: 'type', type: 3, description: '設定する種類', required: true, choices: [
+                { name: '所持金', value: 'balance' },
+                { name: '銀行残高', value: 'bank' }
+            ]},
+            { name: 'amount', type: 4, description: '設定する金額', required: true }
+        ]}
+    ]},
     { name: 'syncleader', description: '全ユーザーの部長ロールIDをNotion人物DBに同期します（管理者限定）' },
 ].map(command => command);
 
