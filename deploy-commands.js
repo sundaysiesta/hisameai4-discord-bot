@@ -74,7 +74,7 @@ const commands = [
         }],
     },
     { name: 'balance', description: '所持金と銀行残高を表示します', options: [{ name: 'user', type: 6, description: '確認したいユーザー（指定しない場合は自分）', required: false }] },
-    { name: 'daily', description: '日課報酬を受け取ります' },
+    { name: 'daily', description: '24時間に1回、デイリーボーナスを受け取ることができます。ブースターの場合は通常より多くのコインを獲得できます。' },
     { name: 'crime', description: '犯罪を犯してコインを稼ぎます' },
     { name: 'give', description: '他のユーザーにコインを送金します', options: [{ name: 'user', type: 6, description: '送金先のユーザー', required: true }, { name: 'amount', type: 4, description: '送金額', required: true }] },
     { name: 'deposit', description: '銀行にコインを預け入れます', options: [{ name: 'amount', type: 4, description: '預け入れる金額', required: true }] },

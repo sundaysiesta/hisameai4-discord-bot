@@ -15,11 +15,11 @@ module.exports = {
             const now = new Date();
             
             // 日本時間に調整（UTC+9）
-            now.setHours(now.getHours() + 9);
+            const jstNow = new Date(now.getTime() + (9 * 60 * 60 * 1000));
             
-            // 今日の0時0分0秒を取得
-            const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-            today.setHours(today.getHours() - 9); // UTCに戻す
+            // 今日の0時0分0秒を取得（JST）
+            const today = new Date(jstNow.getFullYear(), jstNow.getMonth(), jstNow.getDate());
+            today.setTime(today.getTime() - (9 * 60 * 60 * 1000)); // UTCに戻す
             
             // 前回のデイリー時間を取得
             const lastDailyDate = lastDaily ? new Date(parseInt(lastDaily)) : null;
