@@ -128,17 +128,15 @@ module.exports = {
 
             ctx.font = 'bold 24px "Noto Sans CJK JP"';
             ctx.fillStyle = '#FFFFFF';
-            ctx.fillText('TEXT', contentX, 125);
-            ctx.font = 'bold 30px "Noto Sans CJK JP"';
-            ctx.fillText(`Lv.${textLevel} (RANK #${textRank})`, contentX + 80, 125);
+            ctx.fillText('TEXT', contentX, 125);            ctx.font = 'bold 30px "Noto Sans CJK JP"';
+            ctx.fillText(`Lv.${textLevel} #${textRank}`, contentX + 80, 125);
             
             ctx.font = 'bold 24px "Noto Sans CJK JP"';
             ctx.fillStyle = '#FFFFFF';
             ctx.fillText('VOICE', contentX, 205);
             ctx.font = 'bold 30px "Noto Sans CJK JP"';
-            ctx.fillText(`Lv.${voiceLevel} (RANK #${voiceRank})`, contentX + 100, 205);
-            
-            // プログレスバーと XP 表示
+            ctx.fillText(`Lv.${voiceLevel} #${voiceRank}`, contentX + 100, 205);
+              // テキストとプログレスバーを描画
             const barWidth = canvas.width - contentX - margin - 30;
             ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
             drawRoundRect(ctx, contentX, 145, barWidth, 20, 10);
@@ -148,7 +146,8 @@ module.exports = {
                 drawRoundRect(ctx, contentX, 145, barWidth * percentText, 20, 10);
                 ctx.fill();
             }
-            
+
+            // ボイスチャットのプログレスバー
             ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
             drawRoundRect(ctx, contentX, 225, barWidth, 20, 10);
             ctx.fill();
@@ -156,17 +155,13 @@ module.exports = {
                 ctx.fillStyle = '#32CD32';
                 drawRoundRect(ctx, contentX, 225, barWidth * percentVoice, 20, 10);
                 ctx.fill();
-            }
-
-            ctx.font = '18px "Noto Sans CJK JP"';
+            }            ctx.font = '18px "Noto Sans CJK JP"';
             ctx.fillStyle = '#FFFFFF';
             ctx.textAlign = 'right';
-            ctx.fillText(`${formatXp(textXp)} / ${formatXp(xpForNextText)} XP`, contentX + barWidth, 115);
-            ctx.fillText(`${formatXp(voiceXp)} / ${formatXp(xpForNextVoice)} XP`, contentX + barWidth, 195);
-            ctx.textAlign = 'left';
-
-            // サーバーアイコンを右上に追加
-            const serverIconSize = 64;
+            ctx.fillText(`${formatXp(textXp)} / ${formatXp(xpForNextText - xpForCurrentText)} XP`, contentX + barWidth, 135);
+            ctx.fillText(`${formatXp(voiceXp)} / ${formatXp(xpForNextVoice - xpForCurrentVoice)} XP`, contentX + barWidth, 215);
+            ctx.textAlign = 'left';            // サーバーアイコンを右上に追加
+            const serverIconSize = 48;
             const serverIconX = canvas.width - margin - serverIconSize - 10;
             const serverIconY = margin + 10;
             try {
