@@ -68,16 +68,13 @@ async function updatePermanentRankings(guild, redis, notion) {
             return;
         }
         let rankingChannel = null;
-        // guild.channels.cache優先、なければclient.channels.fetch
-        if (guild.channels && guild.channels.cache) {
-            rankingChannel = guild.channels.cache.get(config.RANKING_CHANNEL_ID);
-        }
-        if (!rankingChannel && client && typeof client.channels?.fetch === 'function') {
-            try {
-                rankingChannel = await client.channels.fetch(config.RANKING_CHANNEL_ID);
-            } catch (e) {
-                console.error('client.channels.fetchでランキングチャンネル取得失敗:', e);
-            }
+        try {
+            console.log('ランキングチャンネルの取得を試みます...');
+            console.log('チャンネルID:', config.RANKING_CHANNEL_ID);
+            rankingChannel = await guild.channels.fetch(config.RANKING_CHANNEL_ID);
+            console.log('ランキングチャンネルの取得に成功:', rankingChannel?.name);
+        } catch (e) {
+            console.error('ランキングチャンネルの取得に失敗:', e);
         }
         if (!rankingChannel) {
             console.error('ランキングチャンネルが見つかりません。');
