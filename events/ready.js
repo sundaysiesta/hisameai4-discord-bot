@@ -112,23 +112,32 @@ async function updatePermanentRankings(client, guild, redis, notion) {
 
         // レベルランキング
         try {
-            const levelRanking = await redis.zrange('user_levels', 0, 9, { rev: true, withScores: true });
+            const userKeys = await redis.keys('user:*');
+            const levelUsers = [];
+            
+            for (const key of userKeys) {
+                const userId = key.split(':')[1];
+                const textXp = await redis.hget(key, 'textXp');
+                const voiceXp = await redis.hget(key, 'voiceXp');
+                if (textXp) levelUsers.push({ userId, xp: Number(textXp) });
+                if (voiceXp) levelUsers.push({ userId, xp: Number(voiceXp) });
+            }
+            
+            const top10Level = levelUsers.sort((a, b) => b.xp - a.xp).slice(0, 10);
             const levelMembers = await Promise.all(
-                levelRanking
-                    .filter((_, i) => i % 2 === 0)
-                    .map(async (userId) => {
-                        try {
-                            const member = await guild.members.fetch(userId).catch(() => null);
-                            if (!member) {
-                                console.error(`メンバー取得エラー ${userId}: メンバーが見つかりません`);
-                                return null;
-                            }
-                            return member;
-                        } catch (error) {
-                            console.error(`メンバー取得エラー ${userId}:`, error);
+                top10Level.map(async (user) => {
+                    try {
+                        const member = await guild.members.fetch(user.userId).catch(() => null);
+                        if (!member) {
+                            console.error(`メンバー取得エラー ${user.userId}: メンバーが見つかりません`);
                             return null;
                         }
-                    })
+                        return { member, xp: user.xp };
+                    } catch (error) {
+                        console.error(`メンバー取得エラー ${user.userId}:`, error);
+                        return null;
+                    }
+                })
             );
 
             const validLevelMembers = levelMembers.filter(m => m !== null);
@@ -138,9 +147,9 @@ async function updatePermanentRankings(client, guild, redis, notion) {
                     .setColor('#FFD700')
                     .setDescription(
                         validLevelMembers
-                            .map((member, index) => {
-                                const level = parseInt(levelRanking[index * 2 + 1]);
-                                return `${index + 1}. ${member} - レベル ${level}`;
+                            .map((data, index) => {
+                                const level = calculateTextLevel(data.xp);
+                                return `${index + 1}. ${data.member} - Lv.${level} (${data.xp.toLocaleString()} XP)`;
                             })
                             .join('\n')
                     )
@@ -155,23 +164,46 @@ async function updatePermanentRankings(client, guild, redis, notion) {
 
         // コインランキング
         try {
-            const coinRanking = await redis.zrange('user_coins', 0, 9, { rev: true, withScores: true });
+            const userKeys = await redis.keys('user:*');
+            const coinUsers = new Map();
+            
+            for (const key of userKeys) {
+                const userId = key.split(':')[1];
+                const balance = await redis.hget(key, 'balance');
+                const mainAccountId = await redis.hget(key, 'mainAccountId') || userId;
+                
+                if (balance) {
+                    const currentBalance = Number(balance);
+                    if (coinUsers.has(mainAccountId)) {
+                        const existing = coinUsers.get(mainAccountId);
+                        coinUsers.set(mainAccountId, {
+                            userId: mainAccountId,
+                            xp: existing.xp + currentBalance
+                        });
+                    } else {
+                        coinUsers.set(mainAccountId, {
+                            userId: mainAccountId,
+                            xp: currentBalance
+                        });
+                    }
+                }
+            }
+
+            const top10Coin = Array.from(coinUsers.values()).sort((a, b) => b.xp - a.xp).slice(0, 10);
             const coinMembers = await Promise.all(
-                coinRanking
-                    .filter((_, i) => i % 2 === 0)
-                    .map(async (userId) => {
-                        try {
-                            const member = await guild.members.fetch(userId).catch(() => null);
-                            if (!member) {
-                                console.error(`コインランキングメンバー取得エラー ${userId}: メンバーが見つかりません`);
-                                return null;
-                            }
-                            return member;
-                        } catch (error) {
-                            console.error(`コインランキングメンバー取得エラー ${userId}:`, error);
+                top10Coin.map(async (user) => {
+                    try {
+                        const member = await guild.members.fetch(user.userId).catch(() => null);
+                        if (!member) {
+                            console.error(`コインランキングメンバー取得エラー ${user.userId}: メンバーが見つかりません`);
                             return null;
                         }
-                    })
+                        return { member, xp: user.xp };
+                    } catch (error) {
+                        console.error(`コインランキングメンバー取得エラー ${user.userId}:`, error);
+                        return null;
+                    }
+                })
             );
 
             const validCoinMembers = coinMembers.filter(m => m !== null);
@@ -181,9 +213,8 @@ async function updatePermanentRankings(client, guild, redis, notion) {
                     .setColor('#FFD700')
                     .setDescription(
                         validCoinMembers
-                            .map((member, index) => {
-                                const coins = parseInt(coinRanking[index * 2 + 1]);
-                                return `${index + 1}. ${member} - ${coins}コイン`;
+                            .map((data, index) => {
+                                return `${index + 1}. ${data.member} - ${config.COIN_SYMBOL} ${data.xp.toLocaleString()} ${config.COIN_NAME}`;
                             })
                             .join('\n')
                     )
