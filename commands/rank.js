@@ -5,9 +5,7 @@ const { notion, getNotionRelationTitles } = require('../utils/notionHelpers.js')
 const config = require('../config.js');
 
 const formatXp = (xp) => {
-    if (xp < 1000) return xp.toString();
-    if (xp < 1000000) return `${(xp / 1000).toFixed(1)}k`;
-    return `${(xp / 1000000).toFixed(1)}m`;
+    return xp.toLocaleString();
 };
 
 function drawRoundRect(ctx, x, y, width, height, radius) {
@@ -44,20 +42,32 @@ module.exports = {
             const textXp = Number(data?.textXp) || 0;
             const voiceXp = Number(data?.voiceXp) || 0;
 
+            // すべてのユーザーのXPを取得してランク順位を計算
+            const userKeys = await redis.keys('user:*');
+            const textRanks = [];
+            const voiceRanks = [];
+            for (const key of userKeys) {
+                const userData = await redis.hgetall(key);
+                if (userData.textXp) textRanks.push({ id: key.split(':')[1], xp: Number(userData.textXp) });
+                if (userData.voiceXp) voiceRanks.push({ id: key.split(':')[1], xp: Number(userData.voiceXp) });
+            }
+            textRanks.sort((a, b) => b.xp - a.xp);
+            voiceRanks.sort((a, b) => b.xp - a.xp);
+            const textRank = textRanks.findIndex(u => u.id === mainAccountId) + 1;
+            const voiceRank = voiceRanks.findIndex(u => u.id === mainAccountId) + 1;
+
             const textLevel = calculateTextLevel(textXp);
             const voiceLevel = calculateVoiceLevel(voiceXp);
 
             const xpForCurrentText = getXpForTextLevel(textLevel);
             const xpForNextText = getXpForTextLevel(textLevel + 1);
-            const progressText = textXp - xpForCurrentText;
             const neededText = xpForNextText - xpForCurrentText;
-            const percentText = neededText > 0 ? (progressText / neededText) : 1;
+            const percentText = neededText > 0 ? ((textXp - xpForCurrentText) / neededText) : 1;
 
             const xpForCurrentVoice = getXpForVoiceLevel(voiceLevel);
             const xpForNextVoice = getXpForVoiceLevel(voiceLevel + 1);
-            const progressVoice = voiceXp - xpForCurrentVoice;
             const neededVoice = xpForNextVoice - xpForCurrentVoice;
-            const percentVoice = neededVoice > 0 ? (progressVoice / neededVoice) : 1;
+            const percentVoice = neededVoice > 0 ? ((voiceXp - xpForCurrentVoice) / neededVoice) : 1;
 
             let borderColor = '#747F8D';
             let backgroundUrl = null;
@@ -120,13 +130,15 @@ module.exports = {
             ctx.fillStyle = '#FFFFFF';
             ctx.fillText('TEXT', contentX, 125);
             ctx.font = 'bold 30px "Noto Sans CJK JP"';
-            ctx.fillText(textLevel.toString(), contentX + 80, 125);
+            ctx.fillText(`Lv.${textLevel} (RANK #${textRank})`, contentX + 80, 125);
             
             ctx.font = 'bold 24px "Noto Sans CJK JP"';
+            ctx.fillStyle = '#FFFFFF';
             ctx.fillText('VOICE', contentX, 205);
             ctx.font = 'bold 30px "Noto Sans CJK JP"';
-            ctx.fillText(voiceLevel.toString(), contentX + 100, 205);
+            ctx.fillText(`Lv.${voiceLevel} (RANK #${voiceRank})`, contentX + 100, 205);
             
+            // プログレスバーと XP 表示
             const barWidth = canvas.width - contentX - margin - 30;
             ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
             drawRoundRect(ctx, contentX, 145, barWidth, 20, 10);
@@ -149,9 +161,26 @@ module.exports = {
             ctx.font = '18px "Noto Sans CJK JP"';
             ctx.fillStyle = '#FFFFFF';
             ctx.textAlign = 'right';
-            ctx.fillText(`${formatXp(progressText)} / ${formatXp(neededText)} XP`, contentX + barWidth, 115);
-            ctx.fillText(`${formatXp(progressVoice)} / ${formatXp(neededVoice)} XP`, contentX + barWidth, 195);
+            ctx.fillText(`${formatXp(textXp)} / ${formatXp(xpForNextText)} XP`, contentX + barWidth, 115);
+            ctx.fillText(`${formatXp(voiceXp)} / ${formatXp(xpForNextVoice)} XP`, contentX + barWidth, 195);
             ctx.textAlign = 'left';
+
+            // サーバーアイコンを右上に追加
+            const serverIconSize = 64;
+            const serverIconX = canvas.width - margin - serverIconSize - 10;
+            const serverIconY = margin + 10;
+            try {
+                const serverIcon = await loadImage(interaction.guild.iconURL({ extension: 'png', size: 128 }));
+                ctx.save();
+                ctx.beginPath();
+                ctx.arc(serverIconX + serverIconSize/2, serverIconY + serverIconSize/2, serverIconSize/2, 0, Math.PI * 2);
+                ctx.closePath();
+                ctx.clip();
+                ctx.drawImage(serverIcon, serverIconX, serverIconY, serverIconSize, serverIconSize);
+                ctx.restore();
+            } catch (error) {
+                console.error('Failed to load server icon:', error);
+            }
 
             ctx.save();
             ctx.beginPath();
