@@ -13,15 +13,21 @@ module.exports = {
             const mainAccountId = await redis.hget(`user:${userId}`, 'mainAccountId') || userId;
             const lastDaily = await redis.hget(`user:${mainAccountId}`, 'lastDaily');
             const now = new Date();
-            const today = now.toDateString();
-
-            // 0時にリセットされるように、日付を比較
-            const lastDailyDate = lastDaily ? new Date(parseInt(lastDaily)).toDateString() : null;
-
-            if (lastDailyDate === today) {
-                const nextReset = new Date();
+            
+            // 日本時間に調整（UTC+9）
+            now.setHours(now.getHours() + 9);
+            
+            // 今日の0時0分0秒を取得
+            const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            today.setHours(today.getHours() - 9); // UTCに戻す
+            
+            // 前回のデイリー時間を取得
+            const lastDailyDate = lastDaily ? new Date(parseInt(lastDaily)) : null;
+            
+            // 前回のデイリーが今日の0時以降かチェック
+            if (lastDailyDate && lastDailyDate >= today) {
+                const nextReset = new Date(today);
                 nextReset.setDate(nextReset.getDate() + 1);
-                nextReset.setHours(0, 0, 0, 0);
                 const remainingTime = nextReset.getTime() - now.getTime();
                 const hours = Math.floor(remainingTime / (60 * 60 * 1000));
                 const minutes = Math.floor((remainingTime % (60 * 60 * 1000)) / (60 * 1000));
