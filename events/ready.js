@@ -134,11 +134,19 @@ async function updatePermanentRankings(guild, redis) {
              clubRanking.sort((a, b) => (b.count !== a.count) ? b.count - a.count : a.position - b.position);
              if (clubRanking.length === 0) {
                  clubRankingEmbed.setDescription('現在、活動中の部活はありません。');
-             } else {                 const descriptionPromises = clubRanking.map(async (club, i) => {                     const leaderRoleId = await redis.get(`leader_roles:${club.id}`);
+             } else {
+                 const descriptionPromises = clubRanking.map(async (club, i) => {
+                     const leaderRoleId = await redis.get(`leader_roles:${club.id}`);
                      let leaderMention = '未設定';
                      if (leaderRoleId) {
-                         const role = guild.roles.cache.get(leaderRoleId);
-                         if (role) leaderMention = role.members.size > 0 ? role.members.map(m => m.toString()).join(', ') : '不在';
+                         const role = await guild.roles.fetch(leaderRoleId, { force: true }).catch(() => null);
+                         if (role) {
+                             if (role.members.size > 0) {
+                                 leaderMention = role.members.map(m => m.toString()).join(', ');
+                             } else {
+                                 leaderMention = '不在';
+                             }
+                         }
                      }
                      return `**${i + 1}位:** <#${club.id}>  **部長:** ${leaderMention}`;
                  });
@@ -177,7 +185,7 @@ async function updatePermanentRankings(guild, redis) {
             trendEmbed.setDescription('現在、トレンドはありません。');
         } else {
             trendEmbed.setDescription(
-                trendItems.map((item, index) => `**${index + 1}位:** ${item.word} (スコア: ${item.score})`).join('\n')
+                trendItems.slice(0, 30).map((item, index) => `**${index + 1}位:** ${item.word} (スコア: ${item.score})`).join('\n')
             );
         }
         trendMessage = await postOrEdit(rankingChannel, 'trend_message_id', { embeds: [trendEmbed] });
