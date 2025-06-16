@@ -58,7 +58,7 @@ async function postOrEdit(channel, redisKey, payload) {
 
 async function updatePermanentRankings(guild, redis, notion) {
     try {
-        let client = guild?.client;
+        let client = guild?.client || (guild && guild.client) || null;
         // guildがundefinedの場合はclientから取得
         if (!guild && client && client.guilds) {
             guild = await client.guilds.fetch(config.GUILD_ID);
@@ -68,15 +68,16 @@ async function updatePermanentRankings(guild, redis, notion) {
             return;
         }
         let rankingChannel = null;
-        // guild.channels.cache優先、なければclient.channels.cache
+        // guild.channels.cache優先、なければclient.channels.fetch
         if (guild.channels && guild.channels.cache) {
             rankingChannel = guild.channels.cache.get(config.RANKING_CHANNEL_ID);
-        } else if (client && client.channels && client.channels.cache) {
-            rankingChannel = client.channels.cache.get(config.RANKING_CHANNEL_ID);
         }
-        // どちらにもなければfetch
-        if (!rankingChannel && client && client.channels && typeof client.channels.fetch === 'function') {
-            rankingChannel = await client.channels.fetch(config.RANKING_CHANNEL_ID).catch(() => null);
+        if (!rankingChannel && client && typeof client.channels?.fetch === 'function') {
+            try {
+                rankingChannel = await client.channels.fetch(config.RANKING_CHANNEL_ID);
+            } catch (e) {
+                console.error('client.channels.fetchでランキングチャンネル取得失敗:', e);
+            }
         }
         if (!rankingChannel) {
             console.error('ランキングチャンネルが見つかりません。');
