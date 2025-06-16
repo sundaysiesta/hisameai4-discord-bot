@@ -112,7 +112,7 @@ async function updatePermanentRankings(client, guild, redis, notion) {
 
         // レベルランキング
         try {
-            const levelRanking = await redis.zrevrange('user_levels', 0, 9, 'WITHSCORES');
+            const levelRanking = await redis.zRange('user_levels', 0, 9, { REV: true, WITHSCORES: true });
             const levelMembers = await Promise.all(
                 levelRanking
                     .filter((_, i) => i % 2 === 0)
@@ -155,7 +155,7 @@ async function updatePermanentRankings(client, guild, redis, notion) {
 
         // コインランキング
         try {
-            const coinRanking = await redis.zrevrange('user_coins', 0, 9, 'WITHSCORES');
+            const coinRanking = await redis.zRange('user_coins', 0, 9, { REV: true, WITHSCORES: true });
             const coinMembers = await Promise.all(
                 coinRanking
                     .filter((_, i) => i % 2 === 0)
@@ -237,7 +237,7 @@ async function updatePermanentRankings(client, guild, redis, notion) {
 
         // トレンドワード
         try {
-            const trendWords = await redis.zrevrange('trend_words', 0, 9, 'WITHSCORES');
+            const trendWords = await redis.zRange('trend_words', 0, 9, { REV: true, WITHSCORES: true });
             if (trendWords.length > 0) {
                 const trendEmbed = new EmbedBuilder()
                     .setTitle('🔥 トレンドワード')
@@ -255,24 +255,6 @@ async function updatePermanentRankings(client, guild, redis, notion) {
             }
         } catch (error) {
             console.error('トレンドワードの更新に失敗:', error);
-        }
-
-        // リンク集
-        try {
-            const linksEmbed = new EmbedBuilder()
-                .setTitle('🔗 便利なリンク集')
-                .setColor('#FFD700')
-                .setDescription(
-                    '📊 [Notion](https://www.notion.so/your-workspace)\n' +
-                    '📝 [Google Docs](https://docs.google.com/document/d/your-doc-id)\n' +
-                    '📅 [Google Calendar](https://calendar.google.com/calendar/your-calendar)'
-                )
-                .setTimestamp();
-
-            const linksMessage = await rankingChannel.send({ embeds: [linksEmbed] });
-            await redis.set('ranking_links_message_id', linksMessage.id);
-        } catch (error) {
-            console.error('リンク集の更新に失敗:', error);
         }
 
         console.log('ランキングの更新が完了しました');
@@ -510,7 +492,6 @@ module.exports = {
             await redis.del('coin_ranking_message_id');
             await redis.del('club_ranking_message_id');
             await redis.del('trend_message_id');
-            await redis.del('ranking_links_message_id');
             console.log('ランキングメッセージIDをリセットしました');
 
             // 定期的なランキング更新（1時間ごと）
