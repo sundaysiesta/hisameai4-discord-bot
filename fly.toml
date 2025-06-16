@@ -10,6 +10,9 @@ primary_region = 'nrt'
 
 [[vm]]
   # メモリを1gbから512mbに変更してコストを削減
-  memory = '512mb'
+  memory = '1gb'
   cpu_kind = 'shared'
   cpus = 1
+
+[env]
+  NODE_ENV = "production"
