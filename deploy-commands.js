@@ -18,6 +18,7 @@ const commands = [
     { name: 'clearxpdata', description: '破損した可能性のある月間・日間のXPデータをクリアします。(管理者限定・一度だけ使用)' },
     { name: 'migrateprobot', description: 'ProBotのランキングメッセージからXPを一括で引き継ぎます。(管理者限定)', options: [ { name: 'message_id', type: 3, description: 'ProBotのランキングが表示されているメッセージのID', required: true } ] },
     { name: 'setprofilebg', description: 'あなたのプロフィールカードの背景画像を設定します。', options: [{ name: 'url', type: 3, description: '背景に設定したい画像のURL (リセットする場合は "none" と入力)', required: true }] },
+    { name: 'setrankbg', description: 'あなたのランクカードの背景画像を設定します。', options: [{ name: 'url', type: 3, description: '背景に設定したい画像のURL (リセットする場合は "reset" と入力)', required: true }] },
     {
         name: 'settempdesc',
         description: 'あなたのプロフィールに表示する仮の説明文を設定します。',
