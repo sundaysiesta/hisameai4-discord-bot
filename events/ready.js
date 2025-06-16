@@ -110,236 +110,174 @@ async function updatePermanentRankings(client, guild, redis, notion) {
 
         let levelMessage, coinMessage, clubMessage, trendMessage;
 
+        // レベルランキング
         try {
-            // メインアカウントのマッピングを作成
-            const userKeys = await redis.keys('user:*');
-            const mainAccountMap = new Map();
-            await Promise.all(userKeys.map(async key => {
-                const userId = key.split(':')[1];
-                const mainAccountId = await redis.hget(key, 'mainAccountId') || userId;
-                mainAccountMap.set(userId, mainAccountId);
-            }));
+            const levelRanking = await redis.zrevrange('user_levels', 0, 9, 'WITHSCORES');
+            const levelMembers = await Promise.all(
+                levelRanking
+                    .filter((_, i) => i % 2 === 0)
+                    .map(async (userId) => {
+                        try {
+                            const member = await guild.members.fetch(userId).catch(() => null);
+                            if (!member) {
+                                console.error(`メンバー取得エラー ${userId}: メンバーが見つかりません`);
+                                return null;
+                            }
+                            return member;
+                        } catch (error) {
+                            console.error(`メンバー取得エラー ${userId}:`, error);
+                            return null;
+                        }
+                    })
+            );
 
-            // 月間のデータを取得
-            const now = new Date();
-            const monthKey = now.toISOString().slice(0, 7);
-            const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-            const titleDate = `${firstDayOfMonth.getMonth() + 1}月${firstDayOfMonth.getDate()}日〜`;
+            const validLevelMembers = levelMembers.filter(m => m !== null);
+            if (validLevelMembers.length > 0) {
+                const levelEmbed = new EmbedBuilder()
+                    .setTitle('🏆 レベルランキング')
+                    .setColor('#FFD700')
+                    .setDescription(
+                        validLevelMembers
+                            .map((member, index) => {
+                                const level = parseInt(levelRanking[index * 2 + 1]);
+                                return `${index + 1}. ${member} - レベル ${level}`;
+                            })
+                            .join('\n')
+                    )
+                    .setTimestamp();
 
-            // テキストとボイスXPの集計
-            const [textKeys, voiceKeys] = await Promise.all([
-                redis.keys(`monthly_xp:text:${monthKey}:*`),
-                redis.keys(`monthly_xp:voice:${monthKey}:*`)
-            ]);
+                levelMessage = await rankingChannel.send({ embeds: [levelEmbed] });
+                await redis.set('level_ranking_message_id', levelMessage.id);
+            }
+        } catch (error) {
+            console.error('レベルランキングの更新に失敗:', error);
+        }
 
-            // テキストXPの集計（メインアカウントベース）
-            const textUsers = new Map();
-            await Promise.all(textKeys.map(async key => {
-                try {
-                    const userId = key.split(':')[3];
-                    const mainAccountId = mainAccountMap.get(userId) || userId;
-                    const xp = Number(await redis.get(key)) || 0;
-                    textUsers.set(mainAccountId, (textUsers.get(mainAccountId) || 0) + xp);
-                } catch (e) { console.error('テキストXP集計エラー:', e); }
-            }));
+        // コインランキング
+        try {
+            const coinRanking = await redis.zrevrange('user_coins', 0, 9, 'WITHSCORES');
+            const coinMembers = await Promise.all(
+                coinRanking
+                    .filter((_, i) => i % 2 === 0)
+                    .map(async (userId) => {
+                        try {
+                            const member = await guild.members.fetch(userId).catch(() => null);
+                            if (!member) {
+                                console.error(`コインランキングメンバー取得エラー ${userId}: メンバーが見つかりません`);
+                                return null;
+                            }
+                            return member;
+                        } catch (error) {
+                            console.error(`コインランキングメンバー取得エラー ${userId}:`, error);
+                            return null;
+                        }
+                    })
+            );
 
-            // ボイスXPの集計（メインアカウントベース）
-            const voiceUsers = new Map();
-            await Promise.all(voiceKeys.map(async key => {
-                try {
-                    const userId = key.split(':')[3];
-                    const mainAccountId = mainAccountMap.get(userId) || userId;
-                    const xp = Number(await redis.get(key)) || 0;
-                    voiceUsers.set(mainAccountId, (voiceUsers.get(mainAccountId) || 0) + xp);
-                } catch (e) { console.error('ボイスXP集計エラー:', e); }
-            }));
+            const validCoinMembers = coinMembers.filter(m => m !== null);
+            if (validCoinMembers.length > 0) {
+                const coinEmbed = new EmbedBuilder()
+                    .setTitle('💰 コインランキング')
+                    .setColor('#FFD700')
+                    .setDescription(
+                        validCoinMembers
+                            .map((member, index) => {
+                                const coins = parseInt(coinRanking[index * 2 + 1]);
+                                return `${index + 1}. ${member} - ${coins}コイン`;
+                            })
+                            .join('\n')
+                    )
+                    .setTimestamp();
 
-            // 上位20名の取得
-            const top20Text = Array.from(textUsers.entries())
-                .map(([userId, xp]) => ({ userId, xp }))
-                .sort((a, b) => b.xp - a.xp)
-                .slice(0, 20);
+                coinMessage = await rankingChannel.send({ embeds: [coinEmbed] });
+                await redis.set('coin_ranking_message_id', coinMessage.id);
+            }
+        } catch (error) {
+            console.error('コインランキングの更新に失敗:', error);
+        }
 
-            const top20Voice = Array.from(voiceUsers.entries())
-                .map(([userId, xp]) => ({ userId, xp }))
-                .sort((a, b) => b.xp - a.xp)
-                .slice(0, 20);
+        // 部活ランキング
+        try {
+            const clubCategory = await guild.channels.fetch(config.CLUB_CATEGORY_ID).catch(() => null);
+            if (!clubCategory) {
+                console.error('部活カテゴリの取得に失敗: カテゴリが見つかりません');
+                return;
+            }
 
-            // メンバー情報を一括取得
-            const memberCache = new Map();
-            const uniqueUserIds = new Set([
-                ...top20Text.map(u => u.userId),
-                ...top20Voice.map(u => u.userId)
-            ]);
+            const clubChannels = clubCategory.children.cache.filter(channel => 
+                channel.type === ChannelType.GuildVoice && 
+                channel.members.size > 0
+            );
 
-            await Promise.all(Array.from(uniqueUserIds).map(async userId => {
-                try {
-                    const member = await guild.members.fetch(userId);
-                    if (member) memberCache.set(userId, member);
-                } catch (e) { 
-                    console.error(`メンバー取得エラー ${userId}:`, e); 
-                }
-            }));
+            const clubRanking = Array.from(clubChannels.values())
+                .map(channel => ({
+                    name: channel.name,
+                    members: channel.members.size
+                }))
+                .sort((a, b) => b.members - a.members)
+                .slice(0, 10);
 
-            // ランキング表示の生成
-            const textDesc = top20Text.map((u, i) => {
-                const member = memberCache.get(u.userId);
-                return member ? `**${i+1}位:** ${member} - Lv.${calculateTextLevel(u.xp)} (${u.xp.toLocaleString()} XP)` : null;
-            }).filter(Boolean).join('\n') || 'まだ誰もXPを獲得していません。';
+            if (clubRanking.length > 0) {
+                const clubEmbed = new EmbedBuilder()
+                    .setTitle('🎮 部活ランキング')
+                    .setColor('#FFD700')
+                    .setDescription(
+                        clubRanking
+                            .map((club, index) => `${index + 1}. ${club.name} - ${club.members}人`)
+                            .join('\n')
+                    )
+                    .setTimestamp();
 
-            const voiceDesc = top20Voice.map((u, i) => {
-                const member = memberCache.get(u.userId);
-                return member ? `**${i+1}位:** ${member} - Lv.${calculateVoiceLevel(u.xp)} (${u.xp.toLocaleString()} XP)` : null;
-            }).filter(Boolean).join('\n') || 'まだ誰もXPを獲得していません。';
+                clubMessage = await rankingChannel.send({ embeds: [clubEmbed] });
+                await redis.set('club_ranking_message_id', clubMessage.id);
+            }
+        } catch (error) {
+            console.error('部活ランキングの更新に失敗:', error);
+        }
 
-            // ランキングの更新
-            const levelEmbed = new EmbedBuilder()
-                .setTitle(`月間レベルランキング (${titleDate})`)
-                .setColor(0xFFD700)
-                .addFields(
-                    { name: '💬 テキスト', value: textDesc, inline: true },
-                    { name: '🎤 ボイス', value: voiceDesc, inline: true }
+        // トレンドワード
+        try {
+            const trendWords = await redis.zrevrange('trend_words', 0, 9, 'WITHSCORES');
+            if (trendWords.length > 0) {
+                const trendEmbed = new EmbedBuilder()
+                    .setTitle('🔥 トレンドワード')
+                    .setColor('#FFD700')
+                    .setDescription(
+                        trendWords
+                            .filter((_, i) => i % 2 === 0)
+                            .map((word, index) => `${index + 1}. ${word}`)
+                            .join('\n')
+                    )
+                    .setTimestamp();
+
+                trendMessage = await rankingChannel.send({ embeds: [trendEmbed] });
+                await redis.set('trend_message_id', trendMessage.id);
+            }
+        } catch (error) {
+            console.error('トレンドワードの更新に失敗:', error);
+        }
+
+        // リンク集
+        try {
+            const linksEmbed = new EmbedBuilder()
+                .setTitle('🔗 便利なリンク集')
+                .setColor('#FFD700')
+                .setDescription(
+                    '📊 [Notion](https://www.notion.so/your-workspace)\n' +
+                    '📝 [Google Docs](https://docs.google.com/document/d/your-doc-id)\n' +
+                    '📅 [Google Calendar](https://calendar.google.com/calendar/your-calendar)'
                 )
                 .setTimestamp();
-            levelMessage = await postOrEdit(rankingChannel, 'level_ranking_message_id', { embeds: [levelEmbed] });
 
-            // ロメコインランキングの更新（メインアカウントベース）
-            const coinBalances = new Map();
-            await Promise.all(userKeys.map(async key => {
-                try {
-                    const userId = key.split(':')[1];
-                    const mainAccountId = mainAccountMap.get(userId) || userId;
-                    const balance = Number(await redis.hget(key, 'balance')) || 0;
-                    coinBalances.set(mainAccountId, (coinBalances.get(mainAccountId) || 0) + balance);
-                } catch (e) { console.error('コイン集計エラー:', e); }
-            }));
+            const linksMessage = await rankingChannel.send({ embeds: [linksEmbed] });
+            await redis.set('ranking_links_message_id', linksMessage.id);
+        } catch (error) {
+            console.error('リンク集の更新に失敗:', error);
+        }
 
-            const top20Balance = Array.from(coinBalances.entries())
-                .map(([userId, balance]) => ({ userId, balance }))
-                .sort((a, b) => b.balance - a.balance)
-                .slice(0, 20);
-
-            // コインランキング用のメンバー情報を更新
-            await Promise.all(top20Balance.map(async user => {
-                if (!memberCache.has(user.userId)) {
-                    try {
-                        const member = await guild.members.fetch(user.userId);
-                        if (member) memberCache.set(user.userId, member);
-                    } catch (e) { console.error(`コインランキングメンバー取得エラー ${user.userId}:`, e); }
-                }
-            }));
-
-            const balanceDesc = top20Balance.map((u, i) => {
-                const member = memberCache.get(u.userId);
-                return member ? `**${i+1}位:** ${member} - ${config.COIN_SYMBOL} ${u.balance.toLocaleString()} ${config.COIN_NAME}` : null;
-            }).filter(Boolean).join('\n') || 'まだ誰もコインを獲得していません。';
-
-            const coinEmbed = new EmbedBuilder()
-                .setTitle('ロメコインランキング')
-                .setColor(0xFFD700)
-                .setDescription(balanceDesc)
-                .setTimestamp();
-
-            coinMessage = await postOrEdit(rankingChannel, 'coin_ranking_message_id', { embeds: [coinEmbed] });
-
-        } catch (e) { console.error("レベル・コインランキング更新エラー:", e); }
-
-        try {
-            // 部活カテゴリの取得
-            let clubCategory;
-            try {
-                clubCategory = await guild.channels.fetch(config.CLUB_CATEGORY_ID);
-            } catch (error) {
-                console.error('部活カテゴリの取得に失敗:', error);
-                clubCategory = null;
-            }
-
-            let clubRankingEmbed = new EmbedBuilder().setTitle('部活アクティブランキング (週間)').setColor(0x82E0AA).setTimestamp();
-            if (clubCategory) {
-                await guild.members.fetch(); // 全メンバーをキャッシュ
-                const clubChannels = clubCategory.children.cache.filter(ch => !config.EXCLUDED_CHANNELS.includes(ch.id) && ch.type === ChannelType.GuildText);
-                let clubRanking = [];
-                for (const channel of clubChannels.values()) {
-                    const count = await redis.get(`weekly_message_count:${channel.id}`) || 0;
-                    clubRanking.push({ id: channel.id, count: Number(count), position: channel.position });
-                }
-                clubRanking.sort((a, b) => (b.count !== a.count) ? b.count - a.count : a.position - b.position);
-                if (clubRanking.length === 0) {
-                    clubRankingEmbed.setDescription('現在、活動中の部活はありません。');
-                } else {
-                    const descriptionPromises = clubRanking.map(async (club, i) => {
-                        let leaderRoleId = await redis.get(`leader_roles:${club.id}`);
-                        let leaderMention = '未設定';
-                        if (leaderRoleId) {
-                            const notionResponse = await notion.databases.query({
-                                database_id: config.NOTION_DATABASE_ID,
-                                filter: { property: '部長ロール', rich_text: { equals: leaderRoleId } }
-                            });
-                            if (notionResponse.results.length > 0) {
-                                const userId = notionResponse.results[0].properties['DiscordユーザーID']?.rich_text?.[0]?.plain_text;
-                                if (userId) {
-                                    leaderMention = `<@${userId}>`;
-                                } else {
-                                    leaderMention = '不在';
-                                }
-                            } else {
-                                leaderMention = '不在';
-                            }
-                        }
-                        return `**${i + 1}位:** <#${club.id}>  **部長:** ${leaderMention}`;
-                    });
-                    clubRankingEmbed.setDescription((await Promise.all(descriptionPromises)).join('\n'));
-                }
-            } else {
-                clubRankingEmbed.setDescription('部活カテゴリが見つかりません。');
-            }
-            clubMessage = await postOrEdit(rankingChannel, 'club_ranking_message_id', { embeds: [clubRankingEmbed] });
-        } catch(e) { console.error("部活ランキング更新エラー:", e); }
-          try {
-            // --- トレンドワードのリスト型対応 ---
-            const trendEntries = await redis.lrange('trend_words', 0, -1);
-            const trendItemsMap = new Map();
-            const now = Date.now();
-            const cutoff = now - config.TREND_WORD_LIFESPAN;
-            for (const entry of trendEntries) {
-                // entry形式: word:userId:timestamp
-                const [word, userId, timestamp] = entry.split(':');
-                if (!word || !timestamp) continue;
-                if (Number(timestamp) < cutoff) continue;
-                if (!trendItemsMap.has(word)) trendItemsMap.set(word, 0);
-                trendItemsMap.set(word, trendItemsMap.get(word) + 1);
-            }
-            // スコアで降順ソート
-            const trendItems = Array.from(trendItemsMap.entries())
-                .map(([word, score]) => ({ word, score }))
-                .sort((a, b) => b.score - a.score);
-
-            const trendEmbed = new EmbedBuilder()
-                .setTitle('サーバー内トレンド (過去3時間)')
-                .setColor(0x1DA1F2)
-                .setTimestamp();
-
-            if (trendItems.length === 0) {
-                trendEmbed.setDescription('現在、トレンドはありません。');
-            } else {
-                trendEmbed.setDescription(
-                    trendItems.slice(0, 30).map((item, index) => `**${index + 1}位:** ${item.word} (スコア: ${item.score})`).join('\n')
-                );
-            }
-            trendMessage = await postOrEdit(rankingChannel, 'trend_message_id', { embeds: [trendEmbed] });
-        } catch (e) { console.error("トレンドランキング更新エラー:", e); }
-        
-        try {
-            const payload = { content: '各ランキングへ移動:', components: [] };
-            const linkButtons = new ActionRowBuilder();
-            if (levelMessage) linkButtons.addComponents(new ButtonBuilder().setLabel('レベルランキングへ').setStyle(ButtonStyle.Link).setURL(levelMessage.url));
-            if (clubMessage) linkButtons.addComponents(new ButtonBuilder().setLabel('部活ランキングへ').setStyle(ButtonStyle.Link).setURL(clubMessage.url));
-            if (trendMessage) linkButtons.addComponents(new ButtonBuilder().setLabel('トレンドへ').setStyle(ButtonStyle.Link).setURL(trendMessage.url));
-            if (linkButtons.components.length > 0) payload.components.push(linkButtons);
-            await postOrEdit(rankingChannel, 'ranking_links_message_id', payload);
-        } catch(e){ console.error("リンクボタン更新エラー:", e); }
+        console.log('ランキングの更新が完了しました');
     } catch (error) {
-        console.error('ランキングの更新に失敗しました:', error);
+        console.error('ランキング更新でエラーが発生しました:', error);
     }
 }
 
