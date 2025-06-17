@@ -183,6 +183,7 @@ module.exports = {
 
             } else {
                 // テキスト/ボイスランキングの処理
+                const users = new Map();
                 const channels = interaction.guild.channels.cache.filter(channel => {
                     if (type === 'text') {
                         return channel.type === ChannelType.GuildText;
@@ -192,17 +193,39 @@ module.exports = {
                     return false;
                 });
 
-                const messageCounts = await Promise.all(
-                    channels.map(async (channel) => {
-                        const key = type === 'text' 
-                            ? `message_count:${channel.id}:${duration}`
-                            : `voice_time:${channel.id}:${duration}`;
-                        const count = await redis.get(key) || 0;
-                        return { channel, count: parseInt(count) };
-                    })
-                );
+                for (const channel of channels.values()) {
+                    const key = type === 'text' 
+                        ? `message_count:${channel.id}:${duration}`
+                        : `voice_time:${channel.id}:${duration}`;
+                    const count = await redis.get(key) || 0;
+                    
+                    if (type === 'text') {
+                        // テキストメッセージの場合は、ユーザーごとのメッセージ数を集計
+                        const messageKey = `user_messages:${channel.id}:${duration}`;
+                        const userMessages = await redis.hgetall(messageKey);
+                        
+                        for (const [userId, messageCount] of Object.entries(userMessages)) {
+                            const currentCount = users.get(userId) || 0;
+                            users.set(userId, currentCount + parseInt(messageCount));
+                        }
+                    } else {
+                        // ボイスの場合は、ユーザーごとの通話時間を集計
+                        const voiceKey = `user_voice:${channel.id}:${duration}`;
+                        const userVoice = await redis.hgetall(voiceKey);
+                        
+                        for (const [userId, voiceTime] of Object.entries(userVoice)) {
+                            const currentTime = users.get(userId) || 0;
+                            users.set(userId, currentTime + parseInt(voiceTime));
+                        }
+                    }
+                }
 
-                const sortedChannels = messageCounts
+                const sortedUsers = Array.from(users.entries())
+                    .map(([userId, count]) => ({
+                        userId,
+                        count,
+                        xp: type === 'text' ? count : count * 60 // ボイスの場合は時間を秒に変換
+                    }))
                     .sort((a, b) => b.count - a.count)
                     .slice(0, 10);
 
@@ -211,12 +234,14 @@ module.exports = {
                     .setColor('#0099ff')
                     .setDescription(`期間: ${getDurationText(duration)}`);
 
-                sortedChannels.forEach(({ channel, count }, index) => {
-                    const value = type === 'text' 
-                        ? `メッセージ数: ${count}`
-                        : `通話時間: ${formatDuration(count)}`;
+                sortedUsers.forEach((user, index) => {
+                    const level = type === 'text' ? calculateTextLevel(user.xp) : calculateVoiceLevel(user.xp);
+                    const value = type === 'text'
+                        ? `Lv.${level} (${user.count.toLocaleString()} メッセージ)`
+                        : `Lv.${level} (${formatDuration(user.count)} 通話)`;
+                    
                     embed.addFields({
-                        name: `${index + 1}位: ${channel.name}`,
+                        name: `${index + 1}位: <@${user.userId}>`,
                         value: value
                     });
                 });
