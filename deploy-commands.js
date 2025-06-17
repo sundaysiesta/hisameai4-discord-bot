@@ -48,7 +48,11 @@ const commands = [
     ] },
     { name: 'xp', description: 'ユーザーのXPを操作します。(管理者限定)', options: [{ name: 'user', type: 6, description: '対象のユーザー', required: true }, { name: 'type', type: 3, description: '操作するXPの種類', required: true, choices: [{ name: 'テキスト', value: 'text' }, { name: 'ボイス', value: 'voice' }] }, { name: 'action', type: 3, description: '操作の種類', required: true, choices: [{ name: '追加', value: 'add' }, { name: '削除', value: 'remove' }, { name: '設定', value: 'set' }] }, { name: 'amount', type: 4, description: 'XPの量', required: true }] },
     { name: 'transferxp', description: 'BANされたアカウントのXPを新しいアカウントに引き継ぎます。(管理者限定)', options: [{ name: 'old_user_id', type: 3, description: '元のアカウントのユーザーID', required: true }, { name: 'new_user', type: 6, description: '引き継ぎ先の新しいアカウント', required: true }] },
-    { name: 'linkmain', description: 'サブアカウントのXPをメインアカウントに合算します。(管理者限定)', options: [{ name: 'main_account', type: 6, description: 'XPの合算先となるメインアカウント', required: true }, { name: 'sub_account', type: 6, description: 'XPを合算するサブアカウント', required: true }] },
+    { name: 'linkmain', description: 'サブアカウントのXPをメインアカウントに合算します。(管理者限定)', options: [
+        { name: 'main_account', type: 6, description: 'XPの合算先となるメインアカウント', required: true },
+        { name: 'sub_account', type: 6, description: 'XPを合算するサブアカウント', required: true },
+        { name: 'unlink', type: 5, description: 'アカウントのリンクを解除する', required: false }
+    ] },
     { name: 'resettrend', description: 'トレンドランキングのデータをリセットします。(管理者限定)' },
     { name: 'clearxpdata', description: '破損した可能性のある月間・日間のXPデータをクリアします。(管理者限定・一度だけ使用)' },
     { name: 'migrateprobot', description: 'ProBotのランキングメッセージからXPを一括で引き継ぎます。(管理者限定)', options: [ { name: 'message_id', type: 3, description: 'ProBotのランキングが表示されているメッセージのID', required: true } ] },
