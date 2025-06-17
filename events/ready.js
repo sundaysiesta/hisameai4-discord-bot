@@ -351,8 +351,8 @@ module.exports = {
             if (!counterExists) await redis.set('anonymous_message_counter', 216);
         } catch (error) { console.error('起動時の初期化処理でエラー:', error); }
 
-        // ---【修正】cron式を1時間ごとに戻す---
-        cron.schedule('0 * * * *', async () => {
+        // ---【修正】cron式を5分ごとに変更---
+        cron.schedule('*/5 * * * *', async () => {
             try {
                 const guild = client.guilds.cache.first();
                 if (!guild) return;
