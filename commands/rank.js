@@ -1,8 +1,15 @@
 const { SlashCommandBuilder, AttachmentBuilder } = require('discord.js');
-const { createCanvas, loadImage } = require('canvas');
+const { createCanvas, loadImage, registerFont } = require('canvas');
 const { calculateTextLevel, getXpForTextLevel, calculateVoiceLevel, getXpForVoiceLevel, getGenerationRoleName } = require('../utils/utility.js');
 const { notion, getNotionRelationTitles } = require('../utils/notionHelpers.js');
 const config = require('../config.js');
+
+// フォントの登録
+try {
+    registerFont('fonts/NotoSansCJKjp-Bold.otf', { family: 'Noto Sans CJK JP', weight: 'bold' });
+} catch (error) {
+    console.error('Failed to load custom font:', error);
+}
 
 const formatXp = (xp) => {
     return xp.toLocaleString();
@@ -49,6 +56,10 @@ module.exports = {
             const mainAccountId = await redis.hget(`user:${targetUser.id}`, 'mainAccountId') || targetUser.id;
             const data = await redis.hgetall(`user:${mainAccountId}`);
             
+            if (!data) {
+                return interaction.editReply('ユーザーデータが見つかりませんでした。');
+            }
+
             const textXp = Number(data?.textXp) || 0;
             const voiceXp = Number(data?.voiceXp) || 0;
 
@@ -104,7 +115,7 @@ module.exports = {
                 }
             }
 
-            const canvas = createCanvas(934, 282);
+            const canvas = createCanvas(800, 400);
             const ctx = canvas.getContext('2d');
             
             try {
@@ -199,14 +210,19 @@ module.exports = {
                 console.error('Failed to load server icon:', error);
             }
 
-            ctx.save();
-            ctx.beginPath();
-            ctx.arc(avatarX + avatarSize / 2, avatarY + avatarSize / 2, avatarSize / 2, 0, Math.PI * 2, true);
-            ctx.closePath();
-            ctx.clip();
-            const avatar = await loadImage(targetUser.displayAvatarURL({ extension: 'png', size: 256 }));
-            ctx.drawImage(avatar, avatarX, avatarY, avatarSize, avatarSize);
-            ctx.restore();
+            try {
+                const avatar = await loadImage(targetUser.displayAvatarURL({ extension: 'png', size: 256 }));
+                ctx.save();
+                ctx.beginPath();
+                ctx.arc(avatarX + avatarSize / 2, avatarY + avatarSize / 2, avatarSize / 2, 0, Math.PI * 2, true);
+                ctx.clip();
+                ctx.drawImage(avatar, avatarX, avatarY, avatarSize, avatarSize);
+                ctx.restore();
+            } catch (avatarError) {
+                console.error('Failed to load avatar:', avatarError);
+                ctx.fillStyle = '#FFFFFF';
+                ctx.fillRect(avatarX, avatarY, avatarSize, avatarSize);
+            }
 
             ctx.beginPath();
             ctx.arc(avatarX + avatarSize / 2, avatarY + avatarSize / 2, avatarSize / 2 + 5, 0, Math.PI * 2, false);

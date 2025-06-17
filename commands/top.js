@@ -93,172 +93,224 @@ module.exports = {
         let date = interaction.options.getString('date');
         let month = interaction.options.getString('month');
 
-        if (type === 'club') {
-            const guild = interaction.guild;
-            const category = await guild.channels.fetch(config.CLUB_CATEGORY_ID).catch(() => null);
-            if (!category) return interaction.editReply({ content: "部活カテゴリが見つかりません。" });
-
-            const clubChannels = category.children.cache.filter(ch => !config.EXCLUDED_CHANNELS.includes(ch.id) && ch.type === ChannelType.GuildText);
-            let ranking = [];
-            for (const channel of clubChannels.values()) {
-                const count = await redis.get(`weekly_message_count:${channel.id}`) || 0;
-                
-                // 部員数の計算
-                const messages = await channel.messages.fetch({ limit: 100 }).catch(() => null);
-                let memberCount = 0;
-                if (messages) {
-                    const messageCounts = new Map();
-                    messages.forEach(msg => {
-                        if (!msg.author.bot) {
-                            const count = messageCounts.get(msg.author.id) || 0;
-                            messageCounts.set(msg.author.id, count + 1);
-                        }
-                    });
-                    memberCount = Array.from(messageCounts.entries())
-                        .filter(([_, count]) => count >= 5)
-                        .length;
-                }
-
-                // メッセージ数と部員数を組み合わせたスコアを計算
-                const score = (Number(count) * 0.7) + (memberCount * 0.3);
-                ranking.push({ 
-                    id: channel.id, 
-                    name: channel.name, 
-                    count: Number(count), 
-                    memberCount: memberCount,
-                    score: score,
-                    position: channel.position 
-                });
-            }
-            ranking.sort((a, b) => (b.score !== a.score) ? b.score - a.score : a.position - b.position);
-
-            const totalPages = Math.ceil(ranking.length / 10) || 1;
-            let page = 0;
-
-            const embed = await createClubLeaderboardEmbed(ranking, page, totalPages, guild, redis);
-            const row = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('prev_page').setLabel('◀️').setStyle(ButtonStyle.Primary).setDisabled(true),
-                new ButtonBuilder().setCustomId('next_page').setLabel('▶️').setStyle(ButtonStyle.Primary).setDisabled(totalPages <= 1)
-            );
-
-            const reply = await interaction.editReply({ embeds: [embed], components: [row] });
-            const collector = reply.createMessageComponentCollector({ componentType: ComponentType.Button, time: 60000 });
-
-            collector.on('collect', async i => {
-                if (i.user.id !== interaction.user.id) return i.reply({ content: 'コマンド実行者のみ操作できます。', ephemeral: true });
-                if(i.customId === 'prev_page') page--;
-                else if(i.customId === 'next_page') page++;
-                
-                const newEmbed = await createClubLeaderboardEmbed(ranking, page, totalPages, guild, redis);
-                row.components[0].setDisabled(page === 0);
-                row.components[1].setDisabled(page >= totalPages - 1);
-                
-                await i.update({ embeds: [newEmbed], components: [row] });
-            });
-
-            collector.on('end', () => {
-                row.components.forEach(c => c.setDisabled(true));
-                reply.edit({ components: [row] }).catch(()=>{});
-            });
-            return;
-        }
-
-        if (!type) {
-            const textUsers = [];
-            const voiceUsers = [];
-            const userKeys = await redis.keys('user:*');
-            for(const key of userKeys) {
-                const userId = key.split(':')[1];
-                const textXp = await redis.hget(key, 'textXp');
-                const voiceXp = await redis.hget(key, 'voiceXp');
-                if(textXp) textUsers.push({ userId, xp: Number(textXp) });
-                if(voiceXp) voiceUsers.push({ userId, xp: Number(voiceXp) });
-            }
-            
-            const top10Text = textUsers.sort((a,b) => b.xp-a.xp).slice(0, 10);
-            const top10Voice = voiceUsers.sort((a,b) => b.xp-a.xp).slice(0, 10);
-
-            const textDesc = top10Text.map((u, i) => {
-                const level = calculateTextLevel(u.xp);
-                return `**${i+1}位:** <@${u.userId}> - Lv.${level} (${u.xp} XP)`;
-            }).join('\n') || 'データなし';
-            const voiceDesc = top10Voice.map((u, i) => {
-                const level = calculateVoiceLevel(u.xp);
-                return `**${i+1}位:** <@${u.userId}> - Lv.${level} (${u.xp} XP)`;
-            }).join('\n') || 'データなし';
-            
-            const embed = new EmbedBuilder().setTitle('総合レベルランキングTOP10').setColor(0x0099ff).setTimestamp().addFields(
-                { name: '💬 テキスト', value: textDesc, inline: true },
-                { name: '🎤 ボイス', value: voiceDesc, inline: true }
-            );
-            return interaction.editReply({ embeds: [embed] });
-        }
-
-        let redisKeyPattern;
-        let title;
-        if (duration === 'daily') {
-            date = date || new Date().toISOString().slice(0, 10);
-            redisKeyPattern = `daily_xp:${type}:${date}:*`;
-            title = `${date} の${type === 'text' ? 'テキスト' : 'ボイス'}ランキング`;
-        } else if (duration === 'monthly') {
-            month = month || new Date().toISOString().slice(0, 7);
-            redisKeyPattern = `monthly_xp:${type}:${month}:*`;
-            title = `${month}月 の${type === 'text' ? 'テキスト' : 'ボイス'}ランキング`;
-        } else {
-            redisKeyPattern = `user:*`;
-            title = `全期間 ${type === 'text' ? 'テキスト' : 'ボイス'}ランキング`;
-        }
-        
         try {
-            const keys = await redis.keys(redisKeyPattern);
-            if (keys.length === 0) return interaction.editReply('ランキングデータがありません。');
-            
-            const usersData = [];
-            for (const key of keys) {
-                let xp;
-                if (duration) {
-                    xp = await redis.get(key);
-                } else {
-                    xp = await redis.hget(key, `${type}Xp`);
+            if (type === 'club') {
+                const guild = interaction.guild;
+                const category = await guild.channels.fetch(config.CLUB_CATEGORY_ID).catch(() => null);
+                if (!category) {
+                    return interaction.editReply({ content: "部活カテゴリが見つかりません。" });
                 }
-                if(xp) usersData.push({ userId: key.split(':').pop(), xp: Number(xp) });
+
+                const clubChannels = category.children.cache.filter(ch => !config.EXCLUDED_CHANNELS.includes(ch.id) && ch.type === ChannelType.GuildText);
+                if (clubChannels.size === 0) {
+                    return interaction.editReply({ content: "部活チャンネルが見つかりません。" });
+                }
+
+                let ranking = [];
+                for (const channel of clubChannels.values()) {
+                    try {
+                        const count = await redis.get(`weekly_message_count:${channel.id}`) || 0;
+                        
+                        // 部員数の計算
+                        const messages = await channel.messages.fetch({ limit: 100 }).catch(() => null);
+                        let memberCount = 0;
+                        if (messages) {
+                            const messageCounts = new Map();
+                            messages.forEach(msg => {
+                                if (!msg.author.bot) {
+                                    const count = messageCounts.get(msg.author.id) || 0;
+                                    messageCounts.set(msg.author.id, count + 1);
+                                }
+                            });
+                            memberCount = Array.from(messageCounts.entries())
+                                .filter(([_, count]) => count >= 5)
+                                .length;
+                        }
+
+                        // メッセージ数と部員数を組み合わせたスコアを計算
+                        const score = (Number(count) * 0.7) + (memberCount * 0.3);
+                        ranking.push({ 
+                            id: channel.id, 
+                            name: channel.name, 
+                            count: Number(count), 
+                            memberCount: memberCount,
+                            score: score,
+                            position: channel.position 
+                        });
+                    } catch (error) {
+                        console.error(`Error processing channel ${channel.id}:`, error);
+                        continue;
+                    }
+                }
+
+                if (ranking.length === 0) {
+                    return interaction.editReply({ content: "ランキングデータがありません。" });
+                }
+
+                ranking.sort((a, b) => (b.score !== a.score) ? b.score - a.score : a.position - b.position);
+
+                const totalPages = Math.ceil(ranking.length / 10) || 1;
+                let page = 0;
+
+                const embed = await createClubLeaderboardEmbed(ranking, page, totalPages, guild, redis);
+                const row = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId('prev_page').setLabel('◀️').setStyle(ButtonStyle.Primary).setDisabled(true),
+                    new ButtonBuilder().setCustomId('next_page').setLabel('▶️').setStyle(ButtonStyle.Primary).setDisabled(totalPages <= 1)
+                );
+
+                const reply = await interaction.editReply({ embeds: [embed], components: [row] });
+                const collector = reply.createMessageComponentCollector({ componentType: ComponentType.Button, time: 60000 });
+
+                collector.on('collect', async i => {
+                    if (i.user.id !== interaction.user.id) return i.reply({ content: 'コマンド実行者のみ操作できます。', ephemeral: true });
+                    if(i.customId === 'prev_page') page--;
+                    else if(i.customId === 'next_page') page++;
+                    
+                    const newEmbed = await createClubLeaderboardEmbed(ranking, page, totalPages, guild, redis);
+                    row.components[0].setDisabled(page === 0);
+                    row.components[1].setDisabled(page >= totalPages - 1);
+                    
+                    await i.update({ embeds: [newEmbed], components: [row] });
+                });
+
+                collector.on('end', () => {
+                    row.components.forEach(c => c.setDisabled(true));
+                    reply.edit({ components: [row] }).catch(()=>{});
+                });
+                return;
             }
 
-            const sortedUsers = usersData.sort((a, b) => b.xp - a.xp);
+            if (!type) {
+                const textUsers = [];
+                const voiceUsers = [];
+                try {
+                    const userKeys = await redis.keys('user:*');
+                    for(const key of userKeys) {
+                        try {
+                            const userId = key.split(':')[1];
+                            const textXp = await redis.hget(key, 'textXp');
+                            const voiceXp = await redis.hget(key, 'voiceXp');
+                            if(textXp) textUsers.push({ userId, xp: Number(textXp) });
+                            if(voiceXp) voiceUsers.push({ userId, xp: Number(voiceXp) });
+                        } catch (error) {
+                            console.error(`Error processing user ${key}:`, error);
+                            continue;
+                        }
+                    }
+                } catch (error) {
+                    console.error('Error fetching user data:', error);
+                    return interaction.editReply('ユーザーデータの取得中にエラーが発生しました。');
+                }
+                
+                if (textUsers.length === 0 && voiceUsers.length === 0) {
+                    return interaction.editReply('ランキングデータがありません。');
+                }
+
+                const top10Text = textUsers.sort((a,b) => b.xp-a.xp).slice(0, 10);
+                const top10Voice = voiceUsers.sort((a,b) => b.xp-a.xp).slice(0, 10);
+
+                const textDesc = top10Text.map((u, i) => {
+                    const level = calculateTextLevel(u.xp);
+                    return `**${i+1}位:** <@${u.userId}> - Lv.${level} (${u.xp} XP)`;
+                }).join('\n') || 'データなし';
+                const voiceDesc = top10Voice.map((u, i) => {
+                    const level = calculateVoiceLevel(u.xp);
+                    return `**${i+1}位:** <@${u.userId}> - Lv.${level} (${u.xp} XP)`;
+                }).join('\n') || 'データなし';
+                
+                const embed = new EmbedBuilder()
+                    .setTitle('総合レベルランキングTOP10')
+                    .setColor(0x0099ff)
+                    .setTimestamp()
+                    .addFields(
+                        { name: '💬 テキスト', value: textDesc, inline: true },
+                        { name: '🎤 ボイス', value: voiceDesc, inline: true }
+                    );
+                return interaction.editReply({ embeds: [embed] });
+            }
+
+            let redisKeyPattern;
+            let title;
+            if (duration === 'daily') {
+                date = date || new Date().toISOString().slice(0, 10);
+                redisKeyPattern = `daily_xp:${type}:${date}:*`;
+                title = `${date} の${type === 'text' ? 'テキスト' : 'ボイス'}ランキング`;
+            } else if (duration === 'monthly') {
+                month = month || new Date().toISOString().slice(0, 7);
+                redisKeyPattern = `monthly_xp:${type}:${month}:*`;
+                title = `${month}月 の${type === 'text' ? 'テキスト' : 'ボイス'}ランキング`;
+            } else {
+                redisKeyPattern = `user:*`;
+                title = `全期間 ${type === 'text' ? 'テキスト' : 'ボイス'}ランキング`;
+            }
             
-            let page = 0;
-            const totalPages = Math.ceil(sortedUsers.length / 10);
-            if(totalPages === 0) return interaction.editReply('ランキングデータがありません。');
-
-            const embed = await createLeaderboardEmbed(sortedUsers, page, totalPages, title, type);
-            const row = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('prev_page').setLabel('◀️').setStyle(ButtonStyle.Primary).setDisabled(true),
-                new ButtonBuilder().setCustomId('next_page').setLabel('▶️').setStyle(ButtonStyle.Primary).setDisabled(totalPages <= 1)
-            );
-
-            const reply = await interaction.editReply({ embeds: [embed], components: [row] });
-            const collector = reply.createMessageComponentCollector({ componentType: ComponentType.Button, time: 60000 });
-
-            collector.on('collect', async i => {
-                if (i.user.id !== interaction.user.id) return i.reply({ content: 'コマンド実行者のみ操作できます。', ephemeral: true });
-                if(i.customId === 'prev_page') page--;
-                else if(i.customId === 'next_page') page++;
+            try {
+                const keys = await redis.keys(redisKeyPattern);
+                if (keys.length === 0) {
+                    return interaction.editReply('ランキングデータがありません。');
+                }
                 
-                const newEmbed = await createLeaderboardEmbed(sortedUsers, page, totalPages, title, type);
-                row.components[0].setDisabled(page === 0);
-                row.components[1].setDisabled(page >= totalPages - 1);
+                const usersData = [];
+                for (const key of keys) {
+                    try {
+                        let xp;
+                        if (duration) {
+                            xp = await redis.get(key);
+                        } else {
+                            xp = await redis.hget(key, `${type}Xp`);
+                        }
+                        if(xp) usersData.push({ userId: key.split(':').pop(), xp: Number(xp) });
+                    } catch (error) {
+                        console.error(`Error processing key ${key}:`, error);
+                        continue;
+                    }
+                }
+
+                if (usersData.length === 0) {
+                    return interaction.editReply('ランキングデータがありません。');
+                }
+
+                const sortedUsers = usersData.sort((a, b) => b.xp - a.xp);
                 
-                await i.update({ embeds: [newEmbed], components: [row] });
-            });
+                let page = 0;
+                const totalPages = Math.ceil(sortedUsers.length / 10);
+                if(totalPages === 0) {
+                    return interaction.editReply('ランキングデータがありません。');
+                }
 
-            collector.on('end', () => {
-                row.components.forEach(c => c.setDisabled(true));
-                reply.edit({ components: [row] }).catch(()=>{});
-            });
+                const embed = await createLeaderboardEmbed(sortedUsers, page, totalPages, title, type);
+                const row = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId('prev_page').setLabel('◀️').setStyle(ButtonStyle.Primary).setDisabled(true),
+                    new ButtonBuilder().setCustomId('next_page').setLabel('▶️').setStyle(ButtonStyle.Primary).setDisabled(totalPages <= 1)
+                );
 
+                const reply = await interaction.editReply({ embeds: [embed], components: [row] });
+                const collector = reply.createMessageComponentCollector({ componentType: ComponentType.Button, time: 60000 });
+
+                collector.on('collect', async i => {
+                    if (i.user.id !== interaction.user.id) return i.reply({ content: 'コマンド実行者のみ操作できます。', ephemeral: true });
+                    if(i.customId === 'prev_page') page--;
+                    else if(i.customId === 'next_page') page++;
+                    
+                    const newEmbed = await createLeaderboardEmbed(sortedUsers, page, totalPages, title, type);
+                    row.components[0].setDisabled(page === 0);
+                    row.components[1].setDisabled(page >= totalPages - 1);
+                    
+                    await i.update({ embeds: [newEmbed], components: [row] });
+                });
+
+                collector.on('end', () => {
+                    row.components.forEach(c => c.setDisabled(true));
+                    reply.edit({ components: [row] }).catch(()=>{});
+                });
+
+            } catch (error) {
+                console.error("Leaderboard error:", error);
+                await interaction.editReply("ランキングの表示中にエラーが発生しました。");
+            }
         } catch (error) {
-            console.error("Leaderboard error:", error);
-            await interaction.editReply("ランキングの表示中にエラーが発生しました。");
+            console.error("Top command error:", error);
+            await interaction.editReply("コマンドの実行中にエラーが発生しました。");
         }
     },
 };
