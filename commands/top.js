@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType, ChannelType } = require('discord.js');
 const { calculateTextLevel, calculateVoiceLevel } = require('../utils/utility.js');
 const config = require('../config.js');
 
@@ -22,6 +22,37 @@ const createLeaderboardEmbed = async (users, page, totalPages, title, type) => {
         .setTimestamp();
 };
 
+const createClubLeaderboardEmbed = async (clubs, page, totalPages, guild) => {
+    const start = page * 10;
+    const end = start + 10;
+    const currentClubs = clubs.slice(start, end);
+
+    const descriptionPromises = currentClubs.map(async (club, i) => {
+        const leaderRoleId = await redis.get(`leader_roles:${club.id}`);
+        let leaderMention = '未設定';
+        if (leaderRoleId) {
+            const role = await guild.roles.fetch(leaderRoleId, { force: true }).catch(() => null);
+            if (role) {
+                if (role.members.size > 0) {
+                    leaderMention = role.members.map(m => m.toString()).join(', ');
+                } else {
+                    leaderMention = '不在';
+                }
+            }
+        }
+        return `**${start + i + 1}位:** <#${club.id}>  **部長:** ${leaderMention}`;
+    });
+
+    const description = (await Promise.all(descriptionPromises)).join('\n');
+
+    return new EmbedBuilder()
+        .setTitle('部活アクティブランキング (週間)')
+        .setDescription(description || 'データがありません。')
+        .setColor(0x5865F2)
+        .setFooter({ text: `ページ ${page + 1} / ${totalPages}` })
+        .setTimestamp();
+};
+
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('top')
@@ -32,7 +63,8 @@ module.exports = {
                 .setRequired(false)
                 .addChoices(
                     { name: 'テキスト', value: 'text' },
-                    { name: 'ボイス', value: 'voice' }
+                    { name: 'ボイス', value: 'voice' },
+                    { name: '部活', value: 'club' }
                 ))
         .addStringOption(option => option.setName('duration').setDescription('期間（指定しない場合は全期間）').setRequired(false).addChoices({ name: '日間', value: 'daily' }, { name: '月間', value: 'monthly' }))
         .addStringOption(option => option.setName('date').setDescription('日付 (YYYY-MM-DD形式)').setRequired(false))
@@ -43,6 +75,50 @@ module.exports = {
         const duration = interaction.options.getString('duration');
         let date = interaction.options.getString('date');
         let month = interaction.options.getString('month');
+
+        if (type === 'club') {
+            const guild = interaction.guild;
+            const category = await guild.channels.fetch(config.CLUB_CATEGORY_ID).catch(() => null);
+            if (!category) return interaction.editReply({ content: "部活カテゴリが見つかりません。" });
+
+            const clubChannels = category.children.cache.filter(ch => !config.EXCLUDED_CHANNELS.includes(ch.id) && ch.type === ChannelType.GuildText);
+            let ranking = [];
+            for (const channel of clubChannels.values()) {
+                const count = await redis.get(`weekly_message_count:${channel.id}`) || 0;
+                ranking.push({ id: channel.id, name: channel.name, count: Number(count), position: channel.position });
+            }
+            ranking.sort((a, b) => (b.count !== a.count) ? b.count - a.count : a.position - b.position);
+
+            const totalPages = Math.ceil(ranking.length / 10) || 1;
+            let page = 0;
+
+            const embed = await createClubLeaderboardEmbed(ranking, page, totalPages, guild);
+            const row = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('prev_page').setLabel('◀️').setStyle(ButtonStyle.Primary).setDisabled(true),
+                new ButtonBuilder().setCustomId('next_page').setLabel('▶️').setStyle(ButtonStyle.Primary).setDisabled(totalPages <= 1)
+            );
+
+            const reply = await interaction.editReply({ embeds: [embed], components: [row] });
+            const collector = reply.createMessageComponentCollector({ componentType: ComponentType.Button, time: 60000 });
+
+            collector.on('collect', async i => {
+                if (i.user.id !== interaction.user.id) return i.reply({ content: 'コマンド実行者のみ操作できます。', ephemeral: true });
+                if(i.customId === 'prev_page') page--;
+                else if(i.customId === 'next_page') page++;
+                
+                const newEmbed = await createClubLeaderboardEmbed(ranking, page, totalPages, guild);
+                row.components[0].setDisabled(page === 0);
+                row.components[1].setDisabled(page >= totalPages - 1);
+                
+                await i.update({ embeds: [newEmbed], components: [row] });
+            });
+
+            collector.on('end', () => {
+                row.components.forEach(c => c.setDisabled(true));
+                reply.edit({ components: [row] }).catch(()=>{});
+            });
+            return;
+        }
 
         if (!type) {
             const textUsers = [];
