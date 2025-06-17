@@ -22,7 +22,7 @@ const createLeaderboardEmbed = async (users, page, totalPages, title, type) => {
         .setTimestamp();
 };
 
-const createClubLeaderboardEmbed = async (clubs, page, totalPages, guild) => {
+const createClubLeaderboardEmbed = async (clubs, page, totalPages, guild, redis) => {
     const start = page * 10;
     const end = start + 10;
     const currentClubs = clubs.slice(start, end);
@@ -92,7 +92,7 @@ module.exports = {
             const totalPages = Math.ceil(ranking.length / 10) || 1;
             let page = 0;
 
-            const embed = await createClubLeaderboardEmbed(ranking, page, totalPages, guild);
+            const embed = await createClubLeaderboardEmbed(ranking, page, totalPages, guild, redis);
             const row = new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId('prev_page').setLabel('◀️').setStyle(ButtonStyle.Primary).setDisabled(true),
                 new ButtonBuilder().setCustomId('next_page').setLabel('▶️').setStyle(ButtonStyle.Primary).setDisabled(totalPages <= 1)
@@ -106,7 +106,7 @@ module.exports = {
                 if(i.customId === 'prev_page') page--;
                 else if(i.customId === 'next_page') page++;
                 
-                const newEmbed = await createClubLeaderboardEmbed(ranking, page, totalPages, guild);
+                const newEmbed = await createClubLeaderboardEmbed(ranking, page, totalPages, guild, redis);
                 row.components[0].setDisabled(page === 0);
                 row.components[1].setDisabled(page >= totalPages - 1);
                 
