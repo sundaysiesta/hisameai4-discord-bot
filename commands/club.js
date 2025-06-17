@@ -58,9 +58,9 @@ module.exports = {
                 }
             });
 
-            // 2回以上メッセージを送っているユーザーのみをカウント
+            // 5回以上メッセージを送っているユーザーのみをカウント
             const activeMembers = Array.from(messageCounts.entries())
-                .filter(([_, count]) => count >= 2)
+                .filter(([_, count]) => count >= 5)
                 .map(([userId]) => userId);
 
             const embed = new EmbedBuilder()
