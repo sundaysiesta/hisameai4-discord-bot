@@ -64,14 +64,26 @@ module.exports = {
             const voiceXp = Number(data?.voiceXp) || 0;
 
             // すべてのユーザーのXPを取得してランク順位を計算
-            const userKeys = await redis.keys('user:*');
             const textRanks = [];
             const voiceRanks = [];
-            for (const key of userKeys) {
-                const userData = await redis.hgetall(key);
-                if (userData.textXp) textRanks.push({ id: key.split(':')[1], xp: Number(userData.textXp) });
-                if (userData.voiceXp) voiceRanks.push({ id: key.split(':')[1], xp: Number(userData.voiceXp) });
-            }
+            let cursor = 0;
+            
+            do {
+                const [nextCursor, keys] = await redis.scan(cursor, { match: 'user:*', count: 100 });
+                cursor = nextCursor;
+                
+                for (const key of keys) {
+                    try {
+                        const userData = await redis.hgetall(key);
+                        if (userData.textXp) textRanks.push({ id: key.split(':')[1], xp: Number(userData.textXp) });
+                        if (userData.voiceXp) voiceRanks.push({ id: key.split(':')[1], xp: Number(userData.voiceXp) });
+                    } catch (error) {
+                        console.error(`Error processing user data for key ${key}:`, error);
+                        continue;
+                    }
+                }
+            } while (cursor !== 0);
+
             textRanks.sort((a, b) => b.xp - a.xp);
             voiceRanks.sort((a, b) => b.xp - a.xp);
             const textRank = textRanks.findIndex(u => u.id === mainAccountId) + 1;

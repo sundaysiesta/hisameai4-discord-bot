@@ -184,19 +184,24 @@ module.exports = {
                 const textUsers = [];
                 const voiceUsers = [];
                 try {
-                    const userKeys = await redis.keys('user:*');
-                    for(const key of userKeys) {
-                        try {
-                            const userId = key.split(':')[1];
-                            const textXp = await redis.hget(key, 'textXp');
-                            const voiceXp = await redis.hget(key, 'voiceXp');
-                            if(textXp) textUsers.push({ userId, xp: Number(textXp) });
-                            if(voiceXp) voiceUsers.push({ userId, xp: Number(voiceXp) });
-                        } catch (error) {
-                            console.error(`Error processing user ${key}:`, error);
-                            continue;
+                    let cursor = 0;
+                    do {
+                        const [nextCursor, keys] = await redis.scan(cursor, { match: 'user:*', count: 100 });
+                        cursor = nextCursor;
+                        
+                        for (const key of keys) {
+                            try {
+                                const userId = key.split(':')[1];
+                                const textXp = await redis.hget(key, 'textXp');
+                                const voiceXp = await redis.hget(key, 'voiceXp');
+                                if(textXp) textUsers.push({ userId, xp: Number(textXp) });
+                                if(voiceXp) voiceUsers.push({ userId, xp: Number(voiceXp) });
+                            } catch (error) {
+                                console.error(`Error processing user ${key}:`, error);
+                                continue;
+                            }
                         }
-                    }
+                    } while (cursor !== 0);
                 } catch (error) {
                     console.error('Error fetching user data:', error);
                     return interaction.editReply('ユーザーデータの取得中にエラーが発生しました。');
@@ -245,26 +250,28 @@ module.exports = {
             }
             
             try {
-                const keys = await redis.keys(redisKeyPattern);
-                if (keys.length === 0) {
-                    return interaction.editReply('ランキングデータがありません。');
-                }
-                
                 const usersData = [];
-                for (const key of keys) {
-                    try {
-                        let xp;
-                        if (duration) {
-                            xp = await redis.get(key);
-                        } else {
-                            xp = await redis.hget(key, `${type}Xp`);
+                let cursor = 0;
+                
+                do {
+                    const [nextCursor, keys] = await redis.scan(cursor, { match: redisKeyPattern, count: 100 });
+                    cursor = nextCursor;
+                    
+                    for (const key of keys) {
+                        try {
+                            let xp;
+                            if (duration) {
+                                xp = await redis.get(key);
+                            } else {
+                                xp = await redis.hget(key, `${type}Xp`);
+                            }
+                            if(xp) usersData.push({ userId: key.split(':').pop(), xp: Number(xp) });
+                        } catch (error) {
+                            console.error(`Error processing key ${key}:`, error);
+                            continue;
                         }
-                        if(xp) usersData.push({ userId: key.split(':').pop(), xp: Number(xp) });
-                    } catch (error) {
-                        console.error(`Error processing key ${key}:`, error);
-                        continue;
                     }
-                }
+                } while (cursor !== 0);
 
                 if (usersData.length === 0) {
                     return interaction.editReply('ランキングデータがありません。');
