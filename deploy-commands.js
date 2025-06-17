@@ -78,6 +78,7 @@ const commands = [
             required: false,
         }],
     },
+    { name: 'updaterankings', description: '常駐ランキングを手動で更新します。(管理者限定)' },
 ].map(command => command);
 
 const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_BOT_TOKEN);

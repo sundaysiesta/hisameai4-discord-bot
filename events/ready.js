@@ -351,17 +351,6 @@ module.exports = {
             if (!counterExists) await redis.set('anonymous_message_counter', 216);
         } catch (error) { console.error('起動時の初期化処理でエラー:', error); }
 
-        // ---【追加】起動時に即時ランキング更新---
-        try {
-            const guild = client.guilds.cache.first();
-            if (guild) {
-                await updatePermanentRankings(guild, redis, notion);
-                console.log('起動時にランキングを即時更新しました。');
-            }
-        } catch (e) {
-            console.error('起動時ランキング即時更新エラー:', e);
-        }
-
         // ---【修正】cron式を1時間ごとに戻す---
         cron.schedule('0 * * * *', async () => {
             try {

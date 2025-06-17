@@ -1,6 +1,6 @@
 const { SlashCommandBuilder, PermissionsBitField } = require('discord.js');
 const config = require('../config.js');
-const { notion, getNotionRelationTitles, getNotionPropertyText } = require('../utils/notionHelpers.js');
+const { notion, getNotionRelationTitles } = require('../utils/notionHelpers.js');
 const { getGenerationRoleName } = require('../utils/utility.js');
 
 module.exports = {
@@ -70,27 +70,13 @@ module.exports = {
                 }
             }
             
-            // 危険等級ロールを付与
+            // 【追加】危険等級ロールを付与
             const hazardNames = await getNotionRelationTitles(notion, props['危険等級']);
             for (const roleName of hazardNames) {
                 const role = interaction.guild.roles.cache.find(r => r.name === roleName);
                 if (role) {
                     await targetMember.roles.add(role).catch(e => console.error(`Failed to add role ${roleName}:`, e));
                     addedRoles.push(role.name);
-                }
-            }
-
-            // 部長ロールを付与
-            const leaderRoleIds = getNotionPropertyText(props['部長']);
-            if (leaderRoleIds && leaderRoleIds !== 'N/A') {
-                // カンマで区切られた部長ロールIDを配列に分割
-                const roleIds = leaderRoleIds.split(',').map(id => id.trim());
-                for (const roleId of roleIds) {
-                    const role = interaction.guild.roles.cache.get(roleId);
-                    if (role) {
-                        await targetMember.roles.add(role).catch(e => console.error(`Failed to add leader role ${role.name}:`, e));
-                        addedRoles.push(role.name);
-                    }
                 }
             }
 
