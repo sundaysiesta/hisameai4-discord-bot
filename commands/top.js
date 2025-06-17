@@ -184,24 +184,21 @@ module.exports = {
                 const textUsers = [];
                 const voiceUsers = [];
                 try {
-                    let cursor = 0;
-                    do {
-                        const [nextCursor, keys] = await redis.scan(cursor, { match: 'user:*', count: 100 });
-                        cursor = nextCursor;
-                        
-                        for (const key of keys) {
-                            try {
-                                const userId = key.split(':')[1];
-                                const textXp = await redis.hget(key, 'textXp');
-                                const voiceXp = await redis.hget(key, 'voiceXp');
-                                if(textXp) textUsers.push({ userId, xp: Number(textXp) });
-                                if(voiceXp) voiceUsers.push({ userId, xp: Number(voiceXp) });
-                            } catch (error) {
-                                console.error(`Error processing user ${key}:`, error);
-                                continue;
-                            }
+                    // メンバーリストから直接ユーザーIDを取得
+                    const members = await interaction.guild.members.fetch();
+                    const userIds = members.map(m => m.id);
+                    
+                    // 各ユーザーのデータを取得
+                    for (const userId of userIds) {
+                        try {
+                            const userData = await redis.hgetall(`user:${userId}`);
+                            if (userData?.textXp) textUsers.push({ userId, xp: Number(userData.textXp) });
+                            if (userData?.voiceXp) voiceUsers.push({ userId, xp: Number(userData.voiceXp) });
+                        } catch (error) {
+                            console.error(`Error processing user ${userId}:`, error);
+                            continue;
                         }
-                    } while (cursor !== 0);
+                    }
                 } catch (error) {
                     console.error('Error fetching user data:', error);
                     return interaction.editReply('ユーザーデータの取得中にエラーが発生しました。');
@@ -245,46 +242,86 @@ module.exports = {
                 redisKeyPattern = `monthly_xp:${type}:${month}:*`;
                 title = `${month}月 の${type === 'text' ? 'テキスト' : 'ボイス'}ランキング`;
             } else {
-                redisKeyPattern = `user:*`;
-                title = `全期間 ${type === 'text' ? 'テキスト' : 'ボイス'}ランキング`;
-            }
-            
-            try {
+                // 全期間の場合は、メンバーリストから直接ユーザーIDを取得
+                const members = await interaction.guild.members.fetch();
+                const userIds = members.map(m => m.id);
                 const usersData = [];
-                let cursor = 0;
                 
-                do {
-                    const [nextCursor, keys] = await redis.scan(cursor, { match: redisKeyPattern, count: 100 });
-                    cursor = nextCursor;
-                    
-                    for (const key of keys) {
-                        try {
-                            let xp;
-                            if (duration) {
-                                xp = await redis.get(key);
-                            } else {
-                                xp = await redis.hget(key, `${type}Xp`);
-                            }
-                            if(xp) usersData.push({ userId: key.split(':').pop(), xp: Number(xp) });
-                        } catch (error) {
-                            console.error(`Error processing key ${key}:`, error);
-                            continue;
-                        }
+                for (const userId of userIds) {
+                    try {
+                        const xp = await redis.hget(`user:${userId}`, `${type}Xp`);
+                        if (xp) usersData.push({ userId, xp: Number(xp) });
+                    } catch (error) {
+                        console.error(`Error processing user ${userId}:`, error);
+                        continue;
                     }
-                } while (cursor !== 0);
+                }
 
                 if (usersData.length === 0) {
                     return interaction.editReply('ランキングデータがありません。');
                 }
 
                 const sortedUsers = usersData.sort((a, b) => b.xp - a.xp);
-                
                 let page = 0;
                 const totalPages = Math.ceil(sortedUsers.length / 10);
-                if(totalPages === 0) {
+                
+                const embed = await createLeaderboardEmbed(sortedUsers, page, totalPages, `全期間 ${type === 'text' ? 'テキスト' : 'ボイス'}ランキング`, type);
+                const row = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId('prev_page').setLabel('◀️').setStyle(ButtonStyle.Primary).setDisabled(true),
+                    new ButtonBuilder().setCustomId('next_page').setLabel('▶️').setStyle(ButtonStyle.Primary).setDisabled(totalPages <= 1)
+                );
+
+                const reply = await interaction.editReply({ embeds: [embed], components: [row] });
+                const collector = reply.createMessageComponentCollector({ componentType: ComponentType.Button, time: 60000 });
+
+                collector.on('collect', async i => {
+                    if (i.user.id !== interaction.user.id) return i.reply({ content: 'コマンド実行者のみ操作できます。', ephemeral: true });
+                    if(i.customId === 'prev_page') page--;
+                    else if(i.customId === 'next_page') page++;
+                    
+                    const newEmbed = await createLeaderboardEmbed(sortedUsers, page, totalPages, `全期間 ${type === 'text' ? 'テキスト' : 'ボイス'}ランキング`, type);
+                    row.components[0].setDisabled(page === 0);
+                    row.components[1].setDisabled(page >= totalPages - 1);
+                    
+                    await i.update({ embeds: [newEmbed], components: [row] });
+                });
+
+                collector.on('end', () => {
+                    row.components.forEach(c => c.setDisabled(true));
+                    reply.edit({ components: [row] }).catch(()=>{});
+                });
+                return;
+            }
+            
+            try {
+                const usersData = [];
+                // メンバーリストから直接ユーザーIDを取得
+                const members = await interaction.guild.members.fetch();
+                const userIds = members.map(m => m.id);
+                
+                for (const userId of userIds) {
+                    try {
+                        let xp;
+                        if (duration === 'daily') {
+                            xp = await redis.get(`daily_xp:${type}:${date}:${userId}`);
+                        } else if (duration === 'monthly') {
+                            xp = await redis.get(`monthly_xp:${type}:${month}:${userId}`);
+                        }
+                        if (xp) usersData.push({ userId, xp: Number(xp) });
+                    } catch (error) {
+                        console.error(`Error processing user ${userId}:`, error);
+                        continue;
+                    }
+                }
+
+                if (usersData.length === 0) {
                     return interaction.editReply('ランキングデータがありません。');
                 }
 
+                const sortedUsers = usersData.sort((a, b) => b.xp - a.xp);
+                let page = 0;
+                const totalPages = Math.ceil(sortedUsers.length / 10);
+                
                 const embed = await createLeaderboardEmbed(sortedUsers, page, totalPages, title, type);
                 const row = new ActionRowBuilder().addComponents(
                     new ButtonBuilder().setCustomId('prev_page').setLabel('◀️').setStyle(ButtonStyle.Primary).setDisabled(true),

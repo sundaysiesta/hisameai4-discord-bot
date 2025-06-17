@@ -66,23 +66,22 @@ module.exports = {
             // すべてのユーザーのXPを取得してランク順位を計算
             const textRanks = [];
             const voiceRanks = [];
-            let cursor = 0;
             
-            do {
-                const [nextCursor, keys] = await redis.scan(cursor, { match: 'user:*', count: 100 });
-                cursor = nextCursor;
-                
-                for (const key of keys) {
-                    try {
-                        const userData = await redis.hgetall(key);
-                        if (userData.textXp) textRanks.push({ id: key.split(':')[1], xp: Number(userData.textXp) });
-                        if (userData.voiceXp) voiceRanks.push({ id: key.split(':')[1], xp: Number(userData.voiceXp) });
-                    } catch (error) {
-                        console.error(`Error processing user data for key ${key}:`, error);
-                        continue;
-                    }
+            // メンバーリストから直接ユーザーIDを取得
+            const members = await interaction.guild.members.fetch();
+            const userIds = members.map(m => m.id);
+            
+            // 各ユーザーのデータを取得
+            for (const userId of userIds) {
+                try {
+                    const userData = await redis.hgetall(`user:${userId}`);
+                    if (userData?.textXp) textRanks.push({ id: userId, xp: Number(userData.textXp) });
+                    if (userData?.voiceXp) voiceRanks.push({ id: userId, xp: Number(userData.voiceXp) });
+                } catch (error) {
+                    console.error(`Error processing user data for ${userId}:`, error);
+                    continue;
                 }
-            } while (cursor !== 0);
+            }
 
             textRanks.sort((a, b) => b.xp - a.xp);
             voiceRanks.sort((a, b) => b.xp - a.xp);
