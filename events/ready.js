@@ -418,17 +418,31 @@ module.exports = {
                                     }
 
                                     // XPの更新
+                                    console.log(`[ボイスXP] ${member.user.tag} のXP更新を開始します`);
                                     await Promise.all([
                                         redis.hincrby(userKey, 'voiceXp', xp),
                                         redis.incrby(monthlyKey, xp),
                                         redis.incrby(dailyKey, xp)
                                     ]);
+                                    console.log(`[ボイスXP] ${member.user.tag} のXP更新が完了しました`);
 
                                     await redis.set(cooldownKey, now, { ex: 125 });
+                                    console.log(`[ボイスXP] ${member.user.tag} のクールダウンを設定しました`);
+
                                     await updateLevelRoles(mainMember, redis, client);
+                                    console.log(`[ボイスXP] ${member.user.tag} のレベルロールを更新しました`);
+
                                     console.log(`[ボイスXP] ${member.user.tag} に ${xp} XPを付与しました（メインアカウント: ${mainMember.user.tag}）`);
                                 } catch (error) {
                                     console.error(`[ボイスXP] ${member.user.tag} のXP付与中にエラー:`, error);
+                                    console.error(`[ボイスXP] エラーの詳細:`, {
+                                        userId: member.id,
+                                        mainAccountId: mainAccountId,
+                                        userKey: userKey,
+                                        monthlyKey: monthlyKey,
+                                        dailyKey: dailyKey,
+                                        cooldownKey: cooldownKey
+                                    });
                                 }
                             } else {
                                 console.log(`[ボイスXP] ${member.user.tag} はクールダウン中です（残り: ${Math.ceil((config.VOICE_XP_COOLDOWN - (now - lastXpTime)) / 1000)}秒）`);
