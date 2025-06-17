@@ -70,9 +70,19 @@ module.exports = {
                 }
             }
             
-            // 【追加】危険等級ロールを付与
+            // 危険等級ロールを付与
             const hazardNames = await getNotionRelationTitles(notion, props['危険等級']);
             for (const roleName of hazardNames) {
+                const role = interaction.guild.roles.cache.find(r => r.name === roleName);
+                if (role) {
+                    await targetMember.roles.add(role).catch(e => console.error(`Failed to add role ${roleName}:`, e));
+                    addedRoles.push(role.name);
+                }
+            }
+
+            // 部長ロールを付与
+            const leaderNames = await getNotionRelationTitles(notion, props['部長']);
+            for (const roleName of leaderNames) {
                 const role = interaction.guild.roles.cache.find(r => r.name === roleName);
                 if (role) {
                     await targetMember.roles.add(role).catch(e => console.error(`Failed to add role ${roleName}:`, e));
