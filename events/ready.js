@@ -190,7 +190,12 @@ async function updatePermanentRankings(guild, redis, notion) {
                          // 3. Notion人物DBから部長ロールプロパティ一致の人物を検索
                          const notionResponse = await notion.databases.query({
                              database_id: config.NOTION_DATABASE_ID,
-                             filter: { property: '部長ロール', rich_text: { equals: leaderRoleId } }
+                             filter: {
+                                 or: [
+                                     { property: '部長ロール', rich_text: { equals: leaderRoleId } },
+                                     { property: '部長ロール', rich_text: { contains: leaderRoleId } }
+                                 ]
+                             }
                          });
                          if (notionResponse.results.length > 0) {
                              const userId = notionResponse.results[0].properties['DiscordユーザーID']?.rich_text?.[0]?.plain_text;
