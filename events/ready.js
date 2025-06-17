@@ -60,7 +60,7 @@ async function updatePermanentRankings(guild, redis, notion) {
     const rankingChannel = await guild.client.channels.fetch(config.RANKING_CHANNEL_ID).catch(() => null);
     if (!rankingChannel) return;
 
-    let levelMessage, clubMessage, trendMessage;
+    let levelMessage, clubMessage;
 
     try {
         const now = new Date();
@@ -281,7 +281,7 @@ async function updatePermanentRankings(guild, redis, notion) {
         const linkButtons = new ActionRowBuilder();
         if (levelMessage) linkButtons.addComponents(new ButtonBuilder().setLabel('レベルランキングへ').setStyle(ButtonStyle.Link).setURL(levelMessage.url));
         if (clubMessage) linkButtons.addComponents(new ButtonBuilder().setLabel('部活ランキングへ').setStyle(ButtonStyle.Link).setURL(clubMessage.url));
-        if (trendMessage) linkButtons.addComponents(new ButtonBuilder().setLabel('トレンドへ').setStyle(ButtonStyle.Link).setURL(trendMessage.url));
+        // trendMessageやトレンドボタンは追加しない
         if (linkButtons.components.length > 0) payload.components.push(linkButtons);
         await postOrEdit(rankingChannel, 'ranking_links_message_id', payload);
     } catch(e){ console.error("リンクボタン更新エラー:", e); }
@@ -418,31 +418,17 @@ module.exports = {
                                     }
 
                                     // XPの更新
-                                    console.log(`[ボイスXP] ${member.user.tag} のXP更新を開始します`);
                                     await Promise.all([
                                         redis.hincrby(userKey, 'voiceXp', xp),
                                         redis.incrby(monthlyKey, xp),
                                         redis.incrby(dailyKey, xp)
                                     ]);
-                                    console.log(`[ボイスXP] ${member.user.tag} のXP更新が完了しました`);
 
-                                    await redis.set(cooldownKey, now, { ex: 300 });
-                                    console.log(`[ボイスXP] ${member.user.tag} のクールダウンを設定しました（5分）`);
-
+                                    await redis.set(cooldownKey, now, { ex: 125 });
                                     await updateLevelRoles(mainMember, redis, client);
-                                    console.log(`[ボイスXP] ${member.user.tag} のレベルロールを更新しました`);
-
                                     console.log(`[ボイスXP] ${member.user.tag} に ${xp} XPを付与しました（メインアカウント: ${mainMember.user.tag}）`);
                                 } catch (error) {
                                     console.error(`[ボイスXP] ${member.user.tag} のXP付与中にエラー:`, error);
-                                    console.error(`[ボイスXP] エラーの詳細:`, {
-                                        userId: member.id,
-                                        mainAccountId: mainAccountId,
-                                        userKey: userKey,
-                                        monthlyKey: monthlyKey,
-                                        dailyKey: dailyKey,
-                                        cooldownKey: cooldownKey
-                                    });
                                 }
                             } else {
                                 console.log(`[ボイスXP] ${member.user.tag} はクールダウン中です（残り: ${Math.ceil((config.VOICE_XP_COOLDOWN - (now - lastXpTime)) / 1000)}秒）`);
@@ -472,11 +458,7 @@ module.exports = {
                     await redis.del(...dailyKeys);
                 }
 
-                // 期限切れのトレンドデータを削除（3時間以上前）
-                const cutoff = now - config.TREND_WORD_LIFESPAN;
-                await redis.zremrangebyscore('trend_words_scores', '-inf', cutoff);
-                await redis.zremrangebyscore('trend_words_timestamps', '-inf', cutoff);
-
+                // --- トレンドデータの自動削除処理も削除 ---
                 // 不要なクールダウンキーを削除
                 const cooldownKeys = await redis.keys('xp_cooldown:*');
                 for (const key of cooldownKeys) {
