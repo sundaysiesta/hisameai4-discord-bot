@@ -50,12 +50,18 @@ module.exports = {
 
             // 部員数（アクティブユーザー数）の計算
             const messages = await channel.messages.fetch({ limit: 100 });
-            const activeMembers = new Set();
+            const messageCounts = new Map();
             messages.forEach(msg => {
                 if (!msg.author.bot) {
-                    activeMembers.add(msg.author.id);
+                    const count = messageCounts.get(msg.author.id) || 0;
+                    messageCounts.set(msg.author.id, count + 1);
                 }
             });
+
+            // 2回以上メッセージを送っているユーザーのみをカウント
+            const activeMembers = Array.from(messageCounts.entries())
+                .filter(([_, count]) => count >= 2)
+                .map(([userId]) => userId);
 
             const embed = new EmbedBuilder()
                 .setTitle(`${channel.name} の情報`)
@@ -63,7 +69,7 @@ module.exports = {
                 .addFields(
                     { name: '👑 部長', value: leaderMention, inline: true },
                     { name: '📊 週間順位', value: `${rank}位`, inline: true },
-                    { name: '👥 アクティブ部員数', value: `${activeMembers.size}人`, inline: true },
+                    { name: '👥 アクティブ部員数', value: `${activeMembers.length}人`, inline: true },
                     { name: '📝 部活説明', value: description }
                 )
                 .setTimestamp();
