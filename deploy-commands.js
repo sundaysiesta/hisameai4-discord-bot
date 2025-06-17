@@ -5,13 +5,13 @@ const commands = [
     { name: 'help', description: '利用可能なコマンドの一覧を表示します。' },
     { name: 'status', description: 'Botのステータスメッセージを変更します。(管理者限定)', options: [{ name: '内容', type: 3, description: '表示するステータスの内容', required: true }] },
     { name: 'leader', description: '部活チャンネルに部長ロールを手動で設定します。(管理者限定)', options: [{ name: '部活', type: 7, description: '対象の部活チャンネル', required: true }, { name: '部長', type: 8, description: '設定する部長ロール', required: true }] },
-    { name: 'club', description: '指定した部活の情報（部長、説明、順位、部員数）を表示します。', options: [{ name: '部活', type: 7, description: '情報を表示したい部活チャンネル', required: true }] },
+    { name: 'club', description: '部活アクティブランキングを表示します。' },
     { name: 'sort', description: '部活チャンネルを現在のアクティブ順に手動で並び替えます。(管理者限定)' },
     { name: 'profile', description: 'プロフィールを画像で表示します。ユーザー指定か名前検索、または自身のプロフを表示します。', options: [{ name: 'user', type: 6, description: 'プロフィールを表示したいユーザー', required: false }, { name: 'name', type: 3, description: 'Notionデータベースの名前で検索', required: false }] },
     { name: 'link', description: 'DiscordアカウントとNotionの名前を紐付けます。(管理者限定)', options: [{ name: 'user', type: 6, description: '紐付けたいDiscordユーザー', required: true }, { name: 'name', type: 3, description: 'Notionデータベース上の正確な名前（タイトル）', required: true }] },
     { name: 'wordcloud', description: 'このチャンネルの最近のメッセージからワードクラウド画像を生成します。' },
-    { name: 'rank', description: 'ランクカードを表示します。', options: [{ name: 'user', type: 6, description: '確認したいユーザー（指定しない場合は自分）', required: false }] },
-    { name: 'top', description: 'ランキングを表示します。', options: [
+    { name: 'rank', description: '現在のレベルと経験値を表示します。', options: [{ name: 'user', type: 6, description: '確認したいユーザー（指定しない場合は自分）', required: false }] },
+    { name: 'top', description: 'レベルランキングを表示します。', options: [
         { 
             name: 'type', 
             type: 3, 
@@ -19,8 +19,7 @@ const commands = [
             required: false, 
             choices: [
                 { name: 'テキスト', value: 'text' }, 
-                { name: 'ボイス', value: 'voice' },
-                { name: '部活', value: 'club' }
+                { name: 'ボイス', value: 'voice' }
             ]
         }, 
         { 
@@ -53,7 +52,7 @@ const commands = [
     { name: 'clearxpdata', description: '破損した可能性のある月間・日間のXPデータをクリアします。(管理者限定・一度だけ使用)' },
     { name: 'migrateprobot', description: 'ProBotのランキングメッセージからXPを一括で引き継ぎます。(管理者限定)', options: [ { name: 'message_id', type: 3, description: 'ProBotのランキングが表示されているメッセージのID', required: true } ] },
     { name: 'setprofilebg', description: 'あなたのプロフィールカードの背景画像を設定します。', options: [{ name: 'url', type: 3, description: '背景に設定したい画像のURL (リセットする場合は "none" と入力)', required: true }] },
-    { name: 'setrankbg', description: 'ランクカードの背景を設定します。', options: [{ name: 'url', type: 3, description: '背景に設定したい画像のURL (リセットする場合は "reset" と入力)', required: true }] },
+    { name: 'setrankbg', description: 'あなたのランクカードの背景画像を設定します。', options: [{ name: 'url', type: 3, description: '背景に設定したい画像のURL (リセットする場合は "reset" と入力)', required: true }] },
     {
         name: 'settempdesc',
         description: 'あなたのプロフィールに表示する仮の説明文を設定します。',

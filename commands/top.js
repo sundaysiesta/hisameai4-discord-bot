@@ -1,198 +1,145 @@
-const { SlashCommandBuilder, EmbedBuilder, ChannelType } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType } = require('discord.js');
 const { calculateTextLevel, calculateVoiceLevel } = require('../utils/utility.js');
 const config = require('../config.js');
+
+const createLeaderboardEmbed = async (users, page, totalPages, title, type) => {
+    const start = page * 10;
+    const end = start + 10;
+    const currentUsers = users.slice(start, end);
+
+    const descriptionPromises = currentUsers.map(async (u, i) => {
+        const level = type === 'text' ? calculateTextLevel(u.xp) : calculateVoiceLevel(u.xp);
+        return `**${start + i + 1}位:** <@${u.userId}> - Lv.${level} (${u.xp.toLocaleString()} XP)`;
+    });
+
+    const description = (await Promise.all(descriptionPromises)).join('\n');
+
+    return new EmbedBuilder()
+        .setTitle(title)
+        .setDescription(description || 'データがありません。')
+        .setColor(0xFFA500)
+        .setFooter({ text: `ページ ${page + 1} / ${totalPages}` })
+        .setTimestamp();
+};
 
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('top')
-        .setDescription('ランキングを表示します')
-        .addStringOption(option =>
+        .setDescription('ランキングを表示します。')
+        .addStringOption(option => 
             option.setName('type')
-                .setDescription('ランキングの種類')
+                .setDescription('ランキングの種類（未指定で両方表示）')
                 .setRequired(false)
                 .addChoices(
                     { name: 'テキスト', value: 'text' },
                     { name: 'ボイス', value: 'voice' }
                 ))
-        .addStringOption(option =>
-            option.setName('duration')
-                .setDescription('期間')
-                .setRequired(false)
-                .addChoices(
-                    { name: '今日', value: 'day' },
-                    { name: '今週', value: 'week' },
-                    { name: '今月', value: 'month' }
-                )),
-
-    async execute(interaction, redis, notion) {
+        .addStringOption(option => option.setName('duration').setDescription('期間（指定しない場合は全期間）').setRequired(false).addChoices({ name: '日間', value: 'daily' }, { name: '月間', value: 'monthly' }))
+        .addStringOption(option => option.setName('date').setDescription('日付 (YYYY-MM-DD形式)').setRequired(false))
+        .addStringOption(option => option.setName('month').setDescription('月 (YYYY-MM形式)').setRequired(false)),
+    async execute(interaction, redis) {
         await interaction.deferReply();
         const type = interaction.options.getString('type');
-        const duration = interaction.options.getString('duration') || 'all';
+        const duration = interaction.options.getString('duration');
+        let date = interaction.options.getString('date');
+        let month = interaction.options.getString('month');
 
-        try {
-            if (!type) {
-                // テキストとボイスの両方のランキングを表示
-                const textUsers = new Map();
-                const voiceUsers = new Map();
-
-                // テキストチャンネルの処理
-                const textChannels = interaction.guild.channels.cache.filter(channel => 
-                    channel.type === ChannelType.GuildText
-                );
-
-                for (const channel of textChannels.values()) {
-                    const messageKey = `user_messages:${channel.id}:${duration}`;
-                    const userMessages = await redis.hgetall(messageKey);
-                    
-                    for (const [userId, messageCount] of Object.entries(userMessages)) {
-                        const currentCount = textUsers.get(userId) || 0;
-                        textUsers.set(userId, currentCount + parseInt(messageCount));
-                    }
-                }
-
-                // ボイスチャンネルの処理
-                const voiceChannels = interaction.guild.channels.cache.filter(channel => 
-                    channel.type === ChannelType.GuildVoice
-                );
-
-                for (const channel of voiceChannels.values()) {
-                    const voiceKey = `user_voice:${channel.id}:${duration}`;
-                    const userVoice = await redis.hgetall(voiceKey);
-                    
-                    for (const [userId, voiceTime] of Object.entries(userVoice)) {
-                        const currentTime = voiceUsers.get(userId) || 0;
-                        voiceUsers.set(userId, currentTime + parseInt(voiceTime));
-                    }
-                }
-
-                // テキストランキングの作成
-                const sortedTextUsers = Array.from(textUsers.entries())
-                    .map(([userId, count]) => ({
-                        userId,
-                        count,
-                        xp: count
-                    }))
-                    .sort((a, b) => b.count - a.count)
-                    .slice(0, 10);
-
-                // ボイスランキングの作成
-                const sortedVoiceUsers = Array.from(voiceUsers.entries())
-                    .map(([userId, count]) => ({
-                        userId,
-                        count,
-                        xp: count * 60
-                    }))
-                    .sort((a, b) => b.count - a.count)
-                    .slice(0, 10);
-
-                const embed = new EmbedBuilder()
-                    .setTitle('ランキング')
-                    .setColor('#0099ff')
-                    .setDescription(`期間: ${getDurationText(duration)}`);
-
-                // テキストランキングの追加
-                if (sortedTextUsers.length > 0) {
-                    embed.addFields({ name: 'テキストランキング', value: '\u200B' });
-                    sortedTextUsers.forEach((user, index) => {
-                        const level = calculateTextLevel(user.xp);
-                        embed.addFields({
-                            name: `${index + 1}位: <@${user.userId}>`,
-                            value: `Lv.${level} (${user.count.toLocaleString()} メッセージ)`
-                        });
-                    });
-                }
-
-                // ボイスランキングの追加
-                if (sortedVoiceUsers.length > 0) {
-                    embed.addFields({ name: 'ボイスランキング', value: '\u200B' });
-                    sortedVoiceUsers.forEach((user, index) => {
-                        const level = calculateVoiceLevel(user.xp);
-                        embed.addFields({
-                            name: `${index + 1}位: <@${user.userId}>`,
-                            value: `Lv.${level} (${formatDuration(user.count)} 通話)`
-                        });
-                    });
-                }
-
-                await interaction.editReply({ embeds: [embed] });
-            } else {
-                // 特定のタイプのランキングのみ表示
-                const users = new Map();
-                const channels = interaction.guild.channels.cache.filter(channel => {
-                    if (type === 'text') {
-                        return channel.type === ChannelType.GuildText;
-                    } else if (type === 'voice') {
-                        return channel.type === ChannelType.GuildVoice;
-                    }
-                    return false;
-                });
-
-                for (const channel of channels.values()) {
-                    if (type === 'text') {
-                        const messageKey = `user_messages:${channel.id}:${duration}`;
-                        const userMessages = await redis.hgetall(messageKey);
-                        
-                        for (const [userId, messageCount] of Object.entries(userMessages)) {
-                            const currentCount = users.get(userId) || 0;
-                            users.set(userId, currentCount + parseInt(messageCount));
-                        }
-                    } else {
-                        const voiceKey = `user_voice:${channel.id}:${duration}`;
-                        const userVoice = await redis.hgetall(voiceKey);
-                        
-                        for (const [userId, voiceTime] of Object.entries(userVoice)) {
-                            const currentTime = users.get(userId) || 0;
-                            users.set(userId, currentTime + parseInt(voiceTime));
-                        }
-                    }
-                }
-
-                const sortedUsers = Array.from(users.entries())
-                    .map(([userId, count]) => ({
-                        userId,
-                        count,
-                        xp: type === 'text' ? count : count * 60
-                    }))
-                    .sort((a, b) => b.count - a.count)
-                    .slice(0, 10);
-
-                const embed = new EmbedBuilder()
-                    .setTitle(`${type === 'text' ? 'テキスト' : 'ボイス'}ランキング`)
-                    .setColor('#0099ff')
-                    .setDescription(`期間: ${getDurationText(duration)}`);
-
-                sortedUsers.forEach((user, index) => {
-                    const level = type === 'text' ? calculateTextLevel(user.xp) : calculateVoiceLevel(user.xp);
-                    const value = type === 'text'
-                        ? `Lv.${level} (${user.count.toLocaleString()} メッセージ)`
-                        : `Lv.${level} (${formatDuration(user.count)} 通話)`;
-                    
-                    embed.addFields({
-                        name: `${index + 1}位: <@${user.userId}>`,
-                        value: value
-                    });
-                });
-
-                await interaction.editReply({ embeds: [embed] });
+        if (!type) {
+            const textUsers = [];
+            const voiceUsers = [];
+            const userKeys = await redis.keys('user:*');
+            for(const key of userKeys) {
+                const userId = key.split(':')[1];
+                const textXp = await redis.hget(key, 'textXp');
+                const voiceXp = await redis.hget(key, 'voiceXp');
+                if(textXp) textUsers.push({ userId, xp: Number(textXp) });
+                if(voiceXp) voiceUsers.push({ userId, xp: Number(voiceXp) });
             }
+            
+            const top10Text = textUsers.sort((a,b) => b.xp-a.xp).slice(0, 10);
+            const top10Voice = voiceUsers.sort((a,b) => b.xp-a.xp).slice(0, 10);
+
+            const textDesc = top10Text.map((u, i) => {
+                const level = calculateTextLevel(u.xp);
+                return `**${i+1}位:** <@${u.userId}> - Lv.${level} (${u.xp} XP)`;
+            }).join('\n') || 'データなし';
+            const voiceDesc = top10Voice.map((u, i) => {
+                const level = calculateVoiceLevel(u.xp);
+                return `**${i+1}位:** <@${u.userId}> - Lv.${level} (${u.xp} XP)`;
+            }).join('\n') || 'データなし';
+            
+            const embed = new EmbedBuilder().setTitle('総合レベルランキングTOP10').setColor(0x0099ff).setTimestamp().addFields(
+                { name: '💬 テキスト', value: textDesc, inline: true },
+                { name: '🎤 ボイス', value: voiceDesc, inline: true }
+            );
+            return interaction.editReply({ embeds: [embed] });
+        }
+
+        let redisKeyPattern;
+        let title;
+        if (duration === 'daily') {
+            date = date || new Date().toISOString().slice(0, 10);
+            redisKeyPattern = `daily_xp:${type}:${date}:*`;
+            title = `${date} の${type === 'text' ? 'テキスト' : 'ボイス'}ランキング`;
+        } else if (duration === 'monthly') {
+            month = month || new Date().toISOString().slice(0, 7);
+            redisKeyPattern = `monthly_xp:${type}:${month}:*`;
+            title = `${month}月 の${type === 'text' ? 'テキスト' : 'ボイス'}ランキング`;
+        } else {
+            redisKeyPattern = `user:*`;
+            title = `全期間 ${type === 'text' ? 'テキスト' : 'ボイス'}ランキング`;
+        }
+        
+        try {
+            const keys = await redis.keys(redisKeyPattern);
+            if (keys.length === 0) return interaction.editReply('ランキングデータがありません。');
+            
+            const usersData = [];
+            for (const key of keys) {
+                let xp;
+                if (duration) {
+                    xp = await redis.get(key);
+                } else {
+                    xp = await redis.hget(key, `${type}Xp`);
+                }
+                if(xp) usersData.push({ userId: key.split(':').pop(), xp: Number(xp) });
+            }
+
+            const sortedUsers = usersData.sort((a, b) => b.xp - a.xp);
+            
+            let page = 0;
+            const totalPages = Math.ceil(sortedUsers.length / 10);
+            if(totalPages === 0) return interaction.editReply('ランキングデータがありません。');
+
+            const embed = await createLeaderboardEmbed(sortedUsers, page, totalPages, title, type);
+            const row = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('prev_page').setLabel('◀️').setStyle(ButtonStyle.Primary).setDisabled(true),
+                new ButtonBuilder().setCustomId('next_page').setLabel('▶️').setStyle(ButtonStyle.Primary).setDisabled(totalPages <= 1)
+            );
+
+            const reply = await interaction.editReply({ embeds: [embed], components: [row] });
+            const collector = reply.createMessageComponentCollector({ componentType: ComponentType.Button, time: 60000 });
+
+            collector.on('collect', async i => {
+                if (i.user.id !== interaction.user.id) return i.reply({ content: 'コマンド実行者のみ操作できます。', ephemeral: true });
+                if(i.customId === 'prev_page') page--;
+                else if(i.customId === 'next_page') page++;
+                
+                const newEmbed = await createLeaderboardEmbed(sortedUsers, page, totalPages, title, type);
+                row.components[0].setDisabled(page === 0);
+                row.components[1].setDisabled(page >= totalPages - 1);
+                
+                await i.update({ embeds: [newEmbed], components: [row] });
+            });
+
+            collector.on('end', () => {
+                row.components.forEach(c => c.setDisabled(true));
+                reply.edit({ components: [row] }).catch(()=>{});
+            });
+
         } catch (error) {
-            console.error('Error in /top command:', error);
-            await interaction.editReply('ランキングの取得中にエラーが発生しました。');
+            console.error("Leaderboard error:", error);
+            await interaction.editReply("ランキングの表示中にエラーが発生しました。");
         }
     },
 };
-
-function getDurationText(duration) {
-    switch (duration) {
-        case 'day': return '今日';
-        case 'week': return '今週';
-        case 'month': return '今月';
-        default: return '全期間';
-    }
-}
-
-function formatDuration(seconds) {
-    const hours = Math.floor(seconds / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    return `${hours}時間${minutes}分`;
-}
