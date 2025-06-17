@@ -37,23 +37,22 @@ async function getLatestCommitInfo() {
 }
 
 
-async function postOrEdit(channel, redisKey, payload) {
-    const messageId = await channel.client.redis.get(redisKey);
-    let message;
-    if (messageId) {
-        try {
-            message = await channel.messages.fetch(messageId);
-            await message.edit(payload);
-        } catch (error) {
-            console.error(`Failed to edit message ${messageId}, posting new one.`, error);
-            message = await channel.send(payload);
-            await channel.client.redis.set(redisKey, message.id);
+async function postOrEdit(channel, messageIdKey, payload, redis) {
+    try {
+        const messageId = await redis.get(messageIdKey);
+        if (messageId) {
+            const message = await channel.messages.fetch(messageId).catch(() => null);
+            if (message) {
+                return await message.edit(payload);
+            }
         }
-    } else {
-        message = await channel.send(payload);
-        await channel.client.redis.set(redisKey, message.id);
+        const newMessage = await channel.send(payload);
+        await redis.set(messageIdKey, newMessage.id);
+        return newMessage;
+    } catch (error) {
+        console.error(`Error in postOrEdit for ${messageIdKey}:`, error);
+        return null;
     }
-    return message;
 }
 
 async function updatePermanentRankings(guild, redis, notion) {
@@ -163,7 +162,7 @@ async function updatePermanentRankings(guild, redis, notion) {
                 { name: '🎤 ボイス', value: voiceDesc, inline: true }
             )
             .setTimestamp();
-        levelMessage = await postOrEdit(rankingChannel, 'level_ranking_message_id', { embeds: [levelEmbed] });
+        levelMessage = await postOrEdit(rankingChannel, 'level_ranking_message_id', { embeds: [levelEmbed] }, redis);
     } catch (e) { console.error("レベルランキング更新エラー:", e); }
 
     try {
@@ -201,7 +200,7 @@ async function updatePermanentRankings(guild, redis, notion) {
                 trendItems.slice(0, 30).map((item, index) => `**${index + 1}位:** ${item.word} (スコア: ${item.score})`).join('\n')
             );
         }
-        trendMessage = await postOrEdit(rankingChannel, 'trend_message_id', { embeds: [trendEmbed] });
+        trendMessage = await postOrEdit(rankingChannel, 'trend_message_id', { embeds: [trendEmbed] }, redis);
     } catch (e) { console.error("トレンドランキング更新エラー:", e); }
     
     try {
@@ -211,7 +210,7 @@ async function updatePermanentRankings(guild, redis, notion) {
         if (clubMessage) linkButtons.addComponents(new ButtonBuilder().setLabel('部活ランキングへ').setStyle(ButtonStyle.Link).setURL(clubMessage.url));
         if (trendMessage) linkButtons.addComponents(new ButtonBuilder().setLabel('トレンドへ').setStyle(ButtonStyle.Link).setURL(trendMessage.url));
         if (linkButtons.components.length > 0) payload.components.push(linkButtons);
-        await postOrEdit(rankingChannel, 'ranking_links_message_id', payload);
+        await postOrEdit(rankingChannel, 'ranking_links_message_id', payload, redis);
     } catch(e){ console.error("リンクボタン更新エラー:", e); }
 }
 
@@ -282,7 +281,7 @@ async function updateClubRanking(guild, redis, notion) {
 
         embed.setDescription((await Promise.all(descriptionPromises)).join('\n') || 'データがありません。');
 
-        return await postOrEdit(channel, 'club_ranking_message_id', { embeds: [embed] });
+        return await postOrEdit(channel, 'club_ranking_message_id', { embeds: [embed] }, redis);
     } catch (error) {
         console.error('Club ranking update error:', error);
         return null;
