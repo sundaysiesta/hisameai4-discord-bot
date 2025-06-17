@@ -175,9 +175,34 @@ async function updatePermanentRankings(guild, redis, notion) {
              let clubRanking = [];
              for (const channel of clubChannels.values()) {
                  const count = await redis.get(`weekly_message_count:${channel.id}`) || 0;
-                 clubRanking.push({ id: channel.id, count: Number(count), position: channel.position });
+                 
+                 // 部員数の計算
+                 const messages = await channel.messages.fetch({ limit: 100 }).catch(() => null);
+                 let memberCount = 0;
+                 if (messages) {
+                     const messageCounts = new Map();
+                     messages.forEach(msg => {
+                         if (!msg.author.bot) {
+                             const count = messageCounts.get(msg.author.id) || 0;
+                             messageCounts.set(msg.author.id, count + 1);
+                         }
+                     });
+                     memberCount = Array.from(messageCounts.entries())
+                         .filter(([_, count]) => count >= 5)
+                         .length;
+                 }
+
+                 // メッセージ数と部員数を組み合わせたスコアを計算
+                 const score = (Number(count) * 0.7) + (memberCount * 0.3);
+                 clubRanking.push({ 
+                     id: channel.id, 
+                     count: Number(count), 
+                     memberCount: memberCount,
+                     score: score,
+                     position: channel.position 
+                 });
              }
-             clubRanking.sort((a, b) => (b.count !== a.count) ? b.count - a.count : a.position - b.position);
+             clubRanking.sort((a, b) => (b.score !== a.score) ? b.score - a.score : a.position - b.position);
              if (clubRanking.length === 0) {
                  clubRankingEmbed.setDescription('現在、活動中の部活はありません。');
              } else {
@@ -208,7 +233,7 @@ async function updatePermanentRankings(guild, redis, notion) {
                              leaderMention = '不在';
                          }
                      }
-                     return `**${i + 1}位:** <#${club.id}>  **部長:** ${leaderMention}`;
+                     return `**${i + 1}位:** <#${club.id}>  **部長:** ${leaderMention}  **部員数:** ${club.memberCount}人`;
                  });
                  clubRankingEmbed.setDescription((await Promise.all(descriptionPromises)).join('\n'));
              }
