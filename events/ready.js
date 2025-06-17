@@ -242,39 +242,6 @@ async function updatePermanentRankings(guild, redis, notion) {
          }
         clubMessage = await postOrEdit(rankingChannel, 'club_ranking_message_id', { embeds: [clubRankingEmbed] });
     } catch(e) { console.error("部活ランキング更新エラー:", e); }
-      try {
-        // --- トレンドワードのリスト型対応 ---
-        const trendEntries = await redis.lrange('trend_words', 0, -1);
-        const trendItemsMap = new Map();
-        const now = Date.now();
-        const cutoff = now - config.TREND_WORD_LIFESPAN;
-        for (const entry of trendEntries) {
-            // entry形式: word:userId:timestamp
-            const [word, userId, timestamp] = entry.split(':');
-            if (!word || !timestamp) continue;
-            if (Number(timestamp) < cutoff) continue;
-            if (!trendItemsMap.has(word)) trendItemsMap.set(word, 0);
-            trendItemsMap.set(word, trendItemsMap.get(word) + 1);
-        }
-        // スコアで降順ソート
-        const trendItems = Array.from(trendItemsMap.entries())
-            .map(([word, score]) => ({ word, score }))
-            .sort((a, b) => b.score - a.score);
-
-        const trendEmbed = new EmbedBuilder()
-            .setTitle('サーバー内トレンド (過去3時間)')
-            .setColor(0x1DA1F2)
-            .setTimestamp();
-
-        if (trendItems.length === 0) {
-            trendEmbed.setDescription('現在、トレンドはありません。');
-        } else {
-            trendEmbed.setDescription(
-                trendItems.slice(0, 30).map((item, index) => `**${index + 1}位:** ${item.word} (スコア: ${item.score})`).join('\n')
-            );
-        }
-        trendMessage = await postOrEdit(rankingChannel, 'trend_message_id', { embeds: [trendEmbed] });
-    } catch (e) { console.error("トレンドランキング更新エラー:", e); }
     
     try {
         const payload = { content: '各ランキングへ移動:', components: [] };
@@ -351,8 +318,8 @@ module.exports = {
             if (!counterExists) await redis.set('anonymous_message_counter', 216);
         } catch (error) { console.error('起動時の初期化処理でエラー:', error); }
 
-        // ---【修正】cron式を5分ごとに変更---
-        cron.schedule('*/5 * * * *', async () => {
+        // ---【修正】cron式を1時間ごとに変更---
+        cron.schedule('0 * * * *', async () => {
             try {
                 const guild = client.guilds.cache.first();
                 if (!guild) return;
@@ -443,35 +410,5 @@ module.exports = {
                 console.error('ランキング自動更新cronエラー:', e);
             }
         });
-        
-        // 毎日深夜0時にRedisキーのクリーンアップを実行
-        cron.schedule('0 0 * * *', async () => {
-            try {
-                const now = Date.now();
-                const yesterday = new Date();
-                yesterday.setDate(yesterday.getDate() - 1);
-                const yesterdayKey = yesterday.toISOString().slice(0, 10);
-
-                // 期限切れの日次XPデータを削除
-                const dailyKeys = await redis.keys(`daily_xp:*:${yesterdayKey}:*`);
-                if (dailyKeys.length > 0) {
-                    await redis.del(...dailyKeys);
-                }
-
-                // --- トレンドデータの自動削除処理も削除 ---
-                // 不要なクールダウンキーを削除
-                const cooldownKeys = await redis.keys('xp_cooldown:*');
-                for (const key of cooldownKeys) {
-                    const timestamp = await redis.get(key);
-                    if (now - timestamp > 24 * 60 * 60 * 1000) {
-                        await redis.del(key);
-                    }
-                }
-
-                console.log('Redisキーのクリーンアップが完了しました。');
-            } catch (error) {
-                console.error('Redisキーのクリーンアップ中にエラー:', error);
-            }
-        }, { scheduled: true, timezone: "Asia/Tokyo" });
 	},
 };
