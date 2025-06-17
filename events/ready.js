@@ -169,7 +169,8 @@ async function updatePermanentRankings(guild, redis, notion) {
     try {
         await updateClubRanking(guild, redis, notion);
     } catch(e) { console.error("部活ランキング更新エラー:", e); }
-      try {
+
+    try {
         // --- トレンドワードのリスト型対応 ---
         const trendEntries = await redis.lrange('trend_words', 0, -1);
         const trendItemsMap = new Map();
@@ -258,9 +259,6 @@ async function updateClubRanking(guild, redis, notion) {
         const channel = await guild.channels.fetch(config.CLUB_RANKING_CHANNEL_ID).catch(() => null);
         if (!channel) return;
 
-        const messages = await channel.messages.fetch({ limit: 1 });
-        const lastMessage = messages.first();
-
         const embed = new EmbedBuilder()
             .setTitle('部活アクティブランキング (週間)')
             .setColor(0x5865F2)
@@ -284,13 +282,10 @@ async function updateClubRanking(guild, redis, notion) {
 
         embed.setDescription((await Promise.all(descriptionPromises)).join('\n') || 'データがありません。');
 
-        if (lastMessage) {
-            await lastMessage.edit({ embeds: [embed] });
-        } else {
-            await channel.send({ embeds: [embed] });
-        }
+        return await postOrEdit(channel, 'club_ranking_message_id', { embeds: [embed] });
     } catch (error) {
         console.error('Club ranking update error:', error);
+        return null;
     }
 }
 
