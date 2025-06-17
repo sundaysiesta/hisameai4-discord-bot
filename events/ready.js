@@ -426,8 +426,8 @@ module.exports = {
                                     ]);
                                     console.log(`[ボイスXP] ${member.user.tag} のXP更新が完了しました`);
 
-                                    await redis.set(cooldownKey, now, { ex: 125 });
-                                    console.log(`[ボイスXP] ${member.user.tag} のクールダウンを設定しました`);
+                                    await redis.set(cooldownKey, now, { ex: 300 });
+                                    console.log(`[ボイスXP] ${member.user.tag} のクールダウンを設定しました（5分）`);
 
                                     await updateLevelRoles(mainMember, redis, client);
                                     console.log(`[ボイスXP] ${member.user.tag} のレベルロールを更新しました`);
