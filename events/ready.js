@@ -167,55 +167,7 @@ async function updatePermanentRankings(guild, redis, notion) {
     } catch (e) { console.error("レベルランキング更新エラー:", e); }
 
     try {
-        const clubCategory = await guild.channels.fetch(config.CLUB_CATEGORY_ID).catch(() => null);
-        let clubRankingEmbed = new EmbedBuilder().setTitle('部活アクティブランキング (週間)').setColor(0x82E0AA).setTimestamp();
-        if (clubCategory) {
-             await guild.members.fetch(); // 全メンバーをキャッシュ
-             const clubChannels = clubCategory.children.cache.filter(ch => !config.EXCLUDED_CHANNELS.includes(ch.id) && ch.type === ChannelType.GuildText);
-             let clubRanking = [];
-             for (const channel of clubChannels.values()) {
-                 const count = await redis.get(`weekly_message_count:${channel.id}`) || 0;
-                 clubRanking.push({ id: channel.id, count: Number(count), position: channel.position });
-             }
-             clubRanking.sort((a, b) => (b.count !== a.count) ? b.count - a.count : a.position - b.position);
-             if (clubRanking.length === 0) {
-                 clubRankingEmbed.setDescription('現在、活動中の部活はありません。');
-             } else {
-                 const descriptionPromises = clubRanking.map(async (club, i) => {
-                     // 1. redisから部長ロールID取得
-                     let leaderRoleId = await redis.get(`leader_roles:${club.id}`);
-                     // 2. なければNotionから取得（ここは省略可、必要なら追加）
-                     let leaderMention = '未設定';
-                     if (leaderRoleId) {
-                         // 3. Notion人物DBから部長ロールプロパティ一致の人物を検索
-                         const notionResponse = await notion.databases.query({
-                             database_id: config.NOTION_DATABASE_ID,
-                             filter: {
-                                 or: [
-                                     { property: '部長ロール', rich_text: { equals: leaderRoleId } },
-                                     { property: '部長ロール', rich_text: { contains: leaderRoleId } }
-                                 ]
-                             }
-                         });
-                         if (notionResponse.results.length > 0) {
-                             const userId = notionResponse.results[0].properties['DiscordユーザーID']?.rich_text?.[0]?.plain_text;
-                             if (userId) {
-                                 leaderMention = `<@${userId}>`;
-                             } else {
-                                 leaderMention = '不在';
-                             }
-                         } else {
-                             leaderMention = '不在';
-                         }
-                     }
-                     return `**${i + 1}位:** <#${club.id}>  **部長:** ${leaderMention}`;
-                 });
-                 clubRankingEmbed.setDescription((await Promise.all(descriptionPromises)).join('\n'));
-             }
-         } else {
-             clubRankingEmbed.setDescription('部活カテゴリが見つかりません。');
-         }
-        clubMessage = await postOrEdit(rankingChannel, 'club_ranking_message_id', { embeds: [clubRankingEmbed] });
+        await updateClubRanking(guild, redis, notion);
     } catch(e) { console.error("部活ランキング更新エラー:", e); }
       try {
         // --- トレンドワードのリスト型対応 ---
@@ -260,6 +212,86 @@ async function updatePermanentRankings(guild, redis, notion) {
         if (linkButtons.components.length > 0) payload.components.push(linkButtons);
         await postOrEdit(rankingChannel, 'ranking_links_message_id', payload);
     } catch(e){ console.error("リンクボタン更新エラー:", e); }
+}
+
+async function updateClubRanking(guild, redis, notion) {
+    try {
+        const category = await guild.channels.fetch(config.CLUB_CATEGORY_ID).catch(() => null);
+        if (!category) return;
+
+        const clubChannels = category.children.cache.filter(ch => !config.EXCLUDED_CHANNELS.includes(ch.id) && ch.type === ChannelType.GuildText);
+        let ranking = [];
+
+        for (const channel of clubChannels.values()) {
+            const count = await redis.get(`weekly_message_count:${channel.id}`) || 0;
+            
+            // 部員数の計算
+            const messages = await channel.messages.fetch({ limit: 100 }).catch(() => null);
+            let memberCount = 0;
+            if (messages) {
+                const messageCounts = new Map();
+                messages.forEach(msg => {
+                    if (!msg.author.bot) {
+                        const count = messageCounts.get(msg.author.id) || 0;
+                        messageCounts.set(msg.author.id, count + 1);
+                    }
+                });
+                memberCount = Array.from(messageCounts.entries())
+                    .filter(([_, count]) => count >= 5)
+                    .length;
+            }
+
+            // メッセージ数と部員数を組み合わせたスコアを計算
+            const score = (Number(count) * 0.7) + (memberCount * 0.3);
+            ranking.push({ 
+                id: channel.id, 
+                name: channel.name, 
+                count: Number(count), 
+                memberCount: memberCount,
+                score: score,
+                position: channel.position 
+            });
+        }
+
+        ranking.sort((a, b) => (b.score !== a.score) ? b.score - a.score : a.position - b.position);
+
+        const channel = await guild.channels.fetch(config.CLUB_RANKING_CHANNEL_ID).catch(() => null);
+        if (!channel) return;
+
+        const messages = await channel.messages.fetch({ limit: 1 });
+        const lastMessage = messages.first();
+
+        const embed = new EmbedBuilder()
+            .setTitle('部活アクティブランキング (週間)')
+            .setColor(0x5865F2)
+            .setTimestamp();
+
+        const descriptionPromises = ranking.map(async (club, i) => {
+            const leaderRoleId = await redis.get(`leader_roles:${club.id}`);
+            let leaderMention = '未設定';
+            if (leaderRoleId) {
+                const role = await guild.roles.fetch(leaderRoleId, { force: true }).catch(() => null);
+                if (role) {
+                    if (role.members.size > 0) {
+                        leaderMention = role.members.map(m => m.toString()).join(', ');
+                    } else {
+                        leaderMention = '不在';
+                    }
+                }
+            }
+            return `**${i + 1}位:** <#${club.id}>  **部長:** ${leaderMention}  **部員数:** ${club.memberCount}人`;
+        });
+
+        embed.setDescription((await Promise.all(descriptionPromises)).join('\n') || 'データがありません。');
+
+        if (lastMessage) {
+            await lastMessage.edit({ embeds: [embed] });
+        } else {
+            await channel.send({ embeds: [embed] });
+        }
+    } catch (error) {
+        console.error('Club ranking update error:', error);
+    }
 }
 
 module.exports = {
