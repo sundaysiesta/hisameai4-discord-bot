@@ -81,12 +81,16 @@ module.exports = {
             }
 
             // 部長ロールを付与
-            const leaderRoleId = getNotionPropertyText(props['部長']);
-            if (leaderRoleId && leaderRoleId !== 'N/A') {
-                const role = interaction.guild.roles.cache.get(leaderRoleId);
-                if (role) {
-                    await targetMember.roles.add(role).catch(e => console.error(`Failed to add leader role ${role.name}:`, e));
-                    addedRoles.push(role.name);
+            const leaderRoleIds = getNotionPropertyText(props['部長']);
+            if (leaderRoleIds && leaderRoleIds !== 'N/A') {
+                // カンマで区切られた部長ロールIDを配列に分割
+                const roleIds = leaderRoleIds.split(',').map(id => id.trim());
+                for (const roleId of roleIds) {
+                    const role = interaction.guild.roles.cache.get(roleId);
+                    if (role) {
+                        await targetMember.roles.add(role).catch(e => console.error(`Failed to add leader role ${role.name}:`, e));
+                        addedRoles.push(role.name);
+                    }
                 }
             }
 
