@@ -18,16 +18,13 @@ module.exports = {
                     '`/setprofilebg` - プロフィールカードの背景を設定'
                 },
                 { name: '🏆 ランキング関連', value: 
-                    '`/rank` - 個人のランキングを表示\n' +
-                    '`/leaderboard` - サーバーのランキングを表示\n' +
-                    '`/top` - トップユーザーを表示\n' +
-                    '`/monthlyresult` - 月間結果を表示\n' +
-                    '`/setrankbg` - ランキングカードの背景を設定'
+                    '`/rank` - ランクカードを表示\n' +
+                    '`/top` - ランキングを表示\n' +
+                    '`/setrankbg` - ランクカードの背景を設定'
                 },
                 { name: '🎮 その他の機能', value: 
                     '`/club` - 部活情報を表示\n' +
-                    '`/wordcloud` - ワードクラウドを生成\n' +
-                    '`/status` - ボットの状態を表示'
+                    '`/wordcloud` - ワードクラウドを生成'
                 }
             )
             .setFooter({ text: 'コマンドの詳細は各コマンドの説明を参照してください。' });
@@ -42,7 +39,8 @@ module.exports = {
                         '`/transferxp` - XPを移行\n' +
                         '`/clearxpdata` - XPデータをクリア\n' +
                         '`/resettrend` - トレンドをリセット\n' +
-                        '`/syncleader` - 部長情報を同期'
+                        '`/syncleader` - 部長情報を同期\n' +
+                        '`/status` - ボットの状態を表示'
                     },
                     { name: '🛠️ システムコマンド', value: 
                         '`/link` - アカウントを連携\n' +
