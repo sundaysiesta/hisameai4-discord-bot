@@ -2,6 +2,7 @@ const { REST, Routes } = require('discord.js');
 require('dotenv').config();
 
 const commands = [
+    { name: 'help', description: '利用可能なコマンドの一覧を表示します。' },
     { name: 'status', description: 'Botのステータスメッセージを変更します。(管理者限定)', options: [{ name: '内容', type: 3, description: '表示するステータスの内容', required: true }] },
     { name: 'leader', description: '部活チャンネルに部長ロールを手動で設定します。(管理者限定)', options: [{ name: '部活', type: 7, description: '対象の部活チャンネル', required: true }, { name: '部長', type: 8, description: '設定する部長ロール', required: true }] },
     { name: 'club', description: '部活アクティブランキングを表示します。' },
@@ -72,12 +73,6 @@ const commands = [
             required: false,
         }],
     },
-    { name: 'balance', description: '所持金を確認します', options: [{ name: 'user', type: 6, description: '確認したいユーザー（指定しない場合は自分）', required: false }] },
-    { name: 'daily', description: '日課報酬を受け取ります' },
-    { name: 'work', description: '働いてコインを稼ぎます' },
-    { name: 'give', description: '他のユーザーにコインを送金します', options: [{ name: 'user', type: 6, description: '送金先のユーザー', required: true }, { name: 'amount', type: 4, description: '送金額', required: true }] },
-    { name: 'shop', description: 'アイテムショップを表示します' },
-    { name: 'buy', description: 'ショップでアイテムを購入します', options: [{ name: 'itemid', type: 3, description: '購入するアイテムのID', required: true }] },
 ].map(command => command);
 
 const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_BOT_TOKEN);
