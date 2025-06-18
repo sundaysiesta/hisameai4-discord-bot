@@ -190,8 +190,8 @@ module.exports = {
             console.error('起動時ランキング即時更新エラー:', e);
         }
 
-        // ---【修正】cron式を1時間ごとに戻す---
-        cron.schedule('0 * * * *', async () => {
+        // ---【修正】cron式を5分ごとに---
+        cron.schedule('*/5 * * * *', async () => {
             try {
                 const guild = client.guilds.cache.first();
                 if (!guild) return;
@@ -248,11 +248,11 @@ module.exports = {
                                     ]);
 
                                     if (!monthlyExists) {
-                                        await redis.set(monthlyKey, '0', { ex: 60 * 60 * 24 * 32 });  // 32日で期限切れ
+                                        await redis.set(monthlyKey, '0', { ex: 60 * 60 * 24 * 32 });
                                         console.log(`[ボイスXP] ${mainMember.user.tag} の月間XPデータを初期化しました`);
                                     }
                                     if (!dailyExists) {
-                                        await redis.set(dailyKey, '0', { ex: 60 * 60 * 24 * 2 });    // 2日で期限切れ
+                                        await redis.set(dailyKey, '0', { ex: 60 * 60 * 24 * 2 });
                                         console.log(`[ボイスXP] ${mainMember.user.tag} の日間XPデータを初期化しました`);
                                     }
 
@@ -263,7 +263,7 @@ module.exports = {
                                         redis.incrby(dailyKey, xp)
                                     ]);
 
-                                    await redis.set(cooldownKey, now, { ex: 125 });
+                                    await redis.set(cooldownKey, now, { ex: 350 });
                                     await updateLevelRoles(mainMember, redis, client);
                                     console.log(`[ボイスXP] ${member.user.tag} に ${xp} XPを付与しました（メインアカウント: ${mainMember.user.tag}）`);
                                 } catch (error) {
