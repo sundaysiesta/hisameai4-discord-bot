@@ -9,8 +9,6 @@ module.exports = {
     ROLE_TO_REMOVE_ON_CREATE: '1373302892823580762',
     CREATE_CLUB_BUTTON_ID: 'create_club_button',
     CREATE_CLUB_MODAL_ID: 'create_club_modal',
-    RANKING_CHANNEL_ID: '1383261252662595604',
-    RANKING_UPDATE_INTERVAL: '*/5 * * * *',
     WORDCLOUD_EXCLUDED_CATEGORY_ID: '1370683406345699369',
     XP_EXCLUDED_ROLE_ID: '1371467046055055432',
     RESTART_NOTIFICATION_CHANNEL_ID: '1369627467991486605',
@@ -20,13 +18,11 @@ module.exports = {
     // クールダウンを延長
     TEXT_XP_COOLDOWN: 5 * 60 * 1000,    // 5分
     VOICE_XP_COOLDOWN: 5 * 60 * 1000,   // 5分
-    TREND_WORD_COOLDOWN: 5 * 60 * 1000, // 5分
 
     // 【最重要修正】クールダウン延長に合わせて獲得XP量を調整
     VOICE_XP_AMOUNT: 25,     // 10 -> 25
     MIN_TEXT_XP: 25,        // 10 -> 25
     MAX_TEXT_XP: 100,       // 40 -> 100
-    TREND_WORD_LIFESPAN: 3 * 60 * 60 * 1000, // 6時間から3時間に変更
     PHRASES_TO_COMBINE: ['確認してください', 'よろしくお願いします'],
     STOP_WORDS: new Set([
         'する', 'いる', 'なる', 'れる', 'ある', 'ない', 'です', 'ます', 'こと', 'もの',

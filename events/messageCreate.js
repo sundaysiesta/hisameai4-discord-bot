@@ -4,7 +4,6 @@ const { updateLevelRoles, postStickyMessage } = require('../utils/utility.js');
 const TinySegmenter = require('tiny-segmenter');
 
 const textXpCooldowns = new Map();
-const trendCooldowns = new Map();
 const segmenter = new TinySegmenter();
 
 // メモリリーク防止のためのクリーンアップ関数
@@ -13,11 +12,6 @@ function cleanupCooldowns() {
     for (const [userId, timestamp] of textXpCooldowns.entries()) {
         if (now - timestamp > config.TEXT_XP_COOLDOWN * 2) {
             textXpCooldowns.delete(userId);
-        }
-    }
-    for (const [userId, timestamp] of trendCooldowns.entries()) {
-        if (now - timestamp > config.TREND_WORD_COOLDOWN * 2) {
-            trendCooldowns.delete(userId);
         }
     }
 }
@@ -104,44 +98,6 @@ module.exports = {
             }
         } catch(error) { console.error('テキストXP付与エラー:', error); }
 
-        // --- トレンド単語集計処理 ---
-        try {
-            const lastTrendTime = trendCooldowns.get(userId);
-            if (!lastTrendTime || (now - lastTrendTime > config.TREND_WORD_COOLDOWN)) {
-                const content = message.content
-                    .replace(/<@!?&?(\d{17,19})>/g, '')
-                    .replace(/<#(\d{17,19})>/g, '')
-                    .replace(/<a?:[a-zA-Z0-9_]+:(\d{17,19})>/g, '')
-                    .replace(/https?:\/\/\S+/g, '')
-                    .replace(/```[\s\S]*?```/g, '')
-                    .replace(/`[^`]+`/g, '')
-                    .replace(/[*_~|]/g, '')
-                    .replace(/[!"#$%&'()+,-.\/:;<=>?@[\]^{}~「」『』【】、。！？・'"…]+/g, ' ')
-                    .replace(/\s+/g, ' ');
-
-                const words = segmenter.segment(content)
-                    .filter(word => 
-                        word.length > 1 && 
-                        !config.STOP_WORDS.has(word) && 
-                        !/^[a-zA-Z0-9]+$/.test(word) &&
-                        !/^\d+$/.test(word)
-                    );
-
-                // 重複を排除してから有効な単語のみを抽出
-                const uniqueWords = [...new Set(words)].filter(word => word && word.trim());
-                if (uniqueWords.length > 0) {
-                    const timestamp = Date.now().toString();
-                    // 各単語に対して個別に追加する
-                    for (const word of uniqueWords) {
-                        const trendEntry = `${word}:${userId}:${timestamp}`;
-                        await redis.lpush('trend_words', trendEntry);
-                    }
-                    await redis.expire('trend_words', config.TREND_WORD_LIFESPAN);
-                    trendCooldowns.set(userId, now);
-                }
-            }
-        } catch (error) { console.error('トレンド処理エラー:', error); }
-        
         // --- 部活チャンネルのメッセージ数カウント ---
         if (message.channel.parentId === config.CLUB_CATEGORY_ID && !config.EXCLUDED_CHANNELS.includes(message.channel.id)) {
             try {
