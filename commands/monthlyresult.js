@@ -1,6 +1,6 @@
 const { SlashCommandBuilder, AttachmentBuilder } = require('discord.js');
 const { createCanvas, loadImage } = require('canvas');
-const { calculateTextLevel, calculateVoiceLevel } = require('../utils/utility.js');
+const { calculateTextLevel, calculateVoiceLevel, getAllKeys } = require('../utils/utility.js');
 
 // 描画用のヘルパー関数 (変更なし)
 function drawRoundRect(ctx, x, y, width, height, radius) {
@@ -61,8 +61,8 @@ module.exports = {
                 return users.sort((a, b) => b.xp - a.xp).slice(0, 10);
             };
 
-            const textKeys = await redis.keys(`monthly_xp:text:${targetMonth}:*`);
-            const voiceKeys = await redis.keys(`monthly_xp:voice:${targetMonth}:*`);
+            const textKeys = await getAllKeys(redis, `monthly_xp:text:${targetMonth}:*`);
+            const voiceKeys = await getAllKeys(redis, `monthly_xp:voice:${targetMonth}:*`);
             
             const topTextUsers = await fetchUsers(textKeys, 'text');
             const topVoiceUsers = await fetchUsers(voiceKeys, 'voice');

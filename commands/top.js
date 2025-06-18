@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType, ChannelType } = require('discord.js');
-const { calculateTextLevel, calculateVoiceLevel } = require('../utils/utility.js');
+const { calculateTextLevel, calculateVoiceLevel, getAllKeys } = require('../utils/utility.js');
 const config = require('../config.js');
 
 const createLeaderboardEmbed = async (users, page, totalPages, title, type) => {
@@ -166,7 +166,7 @@ module.exports = {
         if (!type) {
             const textUsers = [];
             const voiceUsers = [];
-            const userKeys = await redis.keys('user:*');
+            const userKeys = await getAllKeys(redis, 'user:*');
             for(const key of userKeys) {
                 const userId = key.split(':')[1];
                 const textXp = await redis.hget(key, 'textXp');
@@ -210,7 +210,7 @@ module.exports = {
         }
         
         try {
-            const keys = await redis.keys(redisKeyPattern);
+            const keys = await getAllKeys(redis, redisKeyPattern);
             if (keys.length === 0) return interaction.editReply('ランキングデータがありません。');
             
             const usersData = [];

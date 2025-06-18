@@ -202,5 +202,17 @@ function toKanjiNumber(num) {
     return result;
 }
 
+// redis.keysの代替
+async function getAllKeys(redis, pattern) {
+    let cursor = '0';
+    const keys = [];
+    do {
+        const reply = await redis.scan(cursor, 'MATCH', pattern, 'COUNT', '1000');
+        cursor = reply[0];
+        keys.push(...reply[1]);
+    } while (cursor !== '0');
+    return keys;
+}
+
 // 【最重要修正】toHalfWidthをエクスポートリストに追加
-module.exports = { postStickyMessage, sortClubChannels, getGenerationRoleName, calculateTextLevel, getXpForTextLevel, calculateVoiceLevel, getXpForVoiceLevel, updateLevelRoles, safeIncrby, toKanjiNumber, toHalfWidth };
+module.exports = { postStickyMessage, sortClubChannels, getGenerationRoleName, calculateTextLevel, getXpForTextLevel, calculateVoiceLevel, getXpForVoiceLevel, updateLevelRoles, safeIncrby, toKanjiNumber, toHalfWidth, getAllKeys };

@@ -1,6 +1,6 @@
 const { SlashCommandBuilder, AttachmentBuilder } = require('discord.js');
 const { createCanvas, loadImage } = require('canvas');
-const { calculateTextLevel, getXpForTextLevel, calculateVoiceLevel, getXpForVoiceLevel, getGenerationRoleName } = require('../utils/utility.js');
+const { calculateTextLevel, getXpForTextLevel, calculateVoiceLevel, getXpForVoiceLevel, getGenerationRoleName, getAllKeys } = require('../utils/utility.js');
 const { notion, getNotionRelationTitles } = require('../utils/notionHelpers.js');
 const config = require('../config.js');
 
@@ -53,7 +53,7 @@ module.exports = {
             const voiceXp = Number(data?.voiceXp) || 0;
 
             // すべてのユーザーのXPを取得してランク順位を計算
-            const userKeys = await redis.keys('user:*');
+            const userKeys = await getAllKeys(redis, 'user:*');
             const textRanks = [];
             const voiceRanks = [];
             for (const key of userKeys) {

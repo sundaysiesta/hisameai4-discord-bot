@@ -1,7 +1,7 @@
 const { Events, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, EmbedBuilder, ActivityType } = require('discord.js');
 const cron = require('node-cron');
 const config = require('../config.js');
-const { postStickyMessage, sortClubChannels, updateLevelRoles, calculateTextLevel, calculateVoiceLevel, safeIncrby } = require('../utils/utility.js');
+const { postStickyMessage, sortClubChannels, updateLevelRoles, calculateTextLevel, calculateVoiceLevel, safeIncrby, getAllKeys } = require('../utils/utility.js');
 
 /**
  * 【新規追加】GitHub APIから最新のコミット情報を取得する関数
@@ -72,14 +72,14 @@ async function updatePermanentRankings(guild, redis, notion) {
         let textKeys = [], voiceKeys = [];
         try {
             [textKeys, voiceKeys] = await Promise.all([
-                redis.keys(`monthly_xp:text:${monthKey}:*`),
-                redis.keys(`monthly_xp:voice:${monthKey}:*`)
+                getAllKeys(redis, `monthly_xp:text:${monthKey}:*`),
+                getAllKeys(redis, `monthly_xp:voice:${monthKey}:*`)
             ]);
         } catch (error) {
             console.error('Redis keys fetch error:', error);
             // 個別に取得を試みる
-            textKeys = await redis.keys(`monthly_xp:text:${monthKey}:*`).catch(() => []);
-            voiceKeys = await redis.keys(`monthly_xp:voice:${monthKey}:*`).catch(() => []);
+            textKeys = await getAllKeys(redis, `monthly_xp:text:${monthKey}:*`).catch(() => []);
+            voiceKeys = await getAllKeys(redis, `monthly_xp:voice:${monthKey}:*`).catch(() => []);
         }
 
         const textUsers = [];
@@ -439,7 +439,7 @@ module.exports = {
                 const yesterdayKey = yesterday.toISOString().slice(0, 10);
 
                 // 期限切れの日次XPデータを削除
-                const dailyKeys = await redis.keys(`daily_xp:*:${yesterdayKey}:*`);
+                const dailyKeys = await getAllKeys(redis, `daily_xp:*:${yesterdayKey}:*`);
                 if (dailyKeys.length > 0) {
                     await redis.del(...dailyKeys);
                 }
@@ -450,7 +450,7 @@ module.exports = {
                 await redis.zremrangebyscore('trend_words_timestamps', '-inf', cutoff);
 
                 // 不要なクールダウンキーを削除
-                const cooldownKeys = await redis.keys('xp_cooldown:*');
+                const cooldownKeys = await getAllKeys(redis, 'xp_cooldown:*');
                 for (const key of cooldownKeys) {
                     const timestamp = await redis.get(key);
                     if (now - timestamp > 24 * 60 * 60 * 1000) {

@@ -1,4 +1,5 @@
 const { SlashCommandBuilder, PermissionsBitField } = require('discord.js');
+const { getAllKeys } = require('../utils/utility.js');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -12,10 +13,10 @@ module.exports = {
         await interaction.deferReply({ ephemeral: true });
 
         try {
-            const monthlyTextKeys = await redis.keys('monthly_xp:text:*');
-            const dailyTextKeys = await redis.keys('daily_xp:text:*');
-            const monthlyVoiceKeys = await redis.keys('monthly_xp:voice:*');
-            const dailyVoiceKeys = await redis.keys('daily_xp:voice:*');
+            const monthlyTextKeys = await getAllKeys(redis, 'monthly_xp:text:*');
+            const dailyTextKeys = await getAllKeys(redis, 'daily_xp:text:*');
+            const monthlyVoiceKeys = await getAllKeys(redis, 'monthly_xp:voice:*');
+            const dailyVoiceKeys = await getAllKeys(redis, 'daily_xp:voice:*');
 
             const allKeys = [...monthlyTextKeys, ...dailyTextKeys, ...monthlyVoiceKeys, ...dailyVoiceKeys];
 

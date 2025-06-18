@@ -1,5 +1,6 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const config = require('../config.js');
+const { getAllKeys } = require('../utils/utility.js');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -10,7 +11,7 @@ module.exports = {
         
         try {
             // すべてのユーザーのコイン残高を取得
-            const userKeys = await redis.keys('user:*');
+            const userKeys = await getAllKeys(redis, 'user:*');
             const balances = [];
             
             for (const key of userKeys) {

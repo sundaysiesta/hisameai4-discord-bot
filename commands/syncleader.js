@@ -1,5 +1,6 @@
 const { SlashCommandBuilder, PermissionsBitField } = require('discord.js');
 const config = require('../config.js');
+const { getAllKeys } = require('../utils/utility.js');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -12,7 +13,7 @@ module.exports = {
         await interaction.deferReply({ ephemeral: true });
         try {
             // 1. 全部活チャンネルIDから部長ロールIDを収集
-            const clubKeys = await redis.keys('leader_roles:*');
+            const clubKeys = await getAllKeys(redis, 'leader_roles:*');
             const allLeaderRoleIds = new Set();
             for (const key of clubKeys) {
                 const roleId = await redis.get(key);
