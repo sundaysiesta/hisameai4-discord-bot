@@ -207,8 +207,8 @@ async function getAllKeys(redis, pattern) {
     let cursor = '0';
     const keys = [];
     do {
-        const reply = await redis.scan(cursor, 'MATCH', pattern, 'COUNT', '1000');
-        cursor = reply[0];
+        const reply = await redis.scan(Number(cursor), { match: pattern, count: 1000 });
+        cursor = String(reply[0]);
         keys.push(...reply[1]);
     } while (cursor !== '0');
     return keys;
