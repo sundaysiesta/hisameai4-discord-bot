@@ -1,21 +1,11 @@
 const { SlashCommandBuilder, AttachmentBuilder } = require('discord.js');
 const { createCanvas, loadImage } = require('canvas');
-const { calculateTextLevel, getXpForTextLevel, calculateVoiceLevel, getXpForVoiceLevel, getGenerationRoleName, getAllKeys } = require('../utils/utility.js');
+const { calculateVoiceLevel, getXpForVoiceLevel, getGenerationRoleName, getAllKeys } = require('../utils/utility.js');
 const { notion, getNotionRelationTitles } = require('../utils/notionHelpers.js');
 const config = require('../config.js');
 
 const formatXp = (xp) => {
     return xp.toLocaleString();
-};
-
-/**
- * XP情報をフォーマットする関数
- * @param {number} currentXp 現在のXP
- * @param {number} totalNeededXp 次のレベルまでに必要な合計XP
- * @returns {string} フォーマットされたXP文字列
- */
-const formatXpProgress = (currentXp, totalNeededXp) => {
-    return `${formatXp(currentXp)} / ${formatXp(totalNeededXp)}`;
 };
 
 function drawRoundRect(ctx, x, y, width, height, radius) {
@@ -35,7 +25,7 @@ function drawRoundRect(ctx, x, y, width, height, radius) {
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('rank')
-        .setDescription('現在のレベルと経験値を表示します。')
+        .setDescription('現在のボイスレベルと経験値を表示します。')
         .addUserOption(option => 
             option.setName('user')
                 .setDescription('確認したいユーザー（指定しない場合は自分）')
@@ -49,32 +39,19 @@ module.exports = {
             const mainAccountId = await redis.hget(`user:${targetUser.id}`, 'mainAccountId') || targetUser.id;
             const data = await redis.hgetall(`user:${mainAccountId}`);
             
-            const textXp = Number(data?.textXp) || 0;
             const voiceXp = Number(data?.voiceXp) || 0;
 
             // すべてのユーザーのXPを取得してランク順位を計算
             const userKeys = await getAllKeys(redis, 'user:*');
-            const textRanks = [];
             const voiceRanks = [];
             for (const key of userKeys) {
                 const userData = await redis.hgetall(key);
-                if (userData.textXp) textRanks.push({ id: key.split(':')[1], xp: Number(userData.textXp) });
                 if (userData.voiceXp) voiceRanks.push({ id: key.split(':')[1], xp: Number(userData.voiceXp) });
             }
-            textRanks.sort((a, b) => b.xp - a.xp);
             voiceRanks.sort((a, b) => b.xp - a.xp);
-            const textRank = textRanks.findIndex(u => u.id === mainAccountId) + 1;
             const voiceRank = voiceRanks.findIndex(u => u.id === mainAccountId) + 1;
 
-            const textLevel = calculateTextLevel(textXp);
             const voiceLevel = calculateVoiceLevel(voiceXp);
-
-            const xpForCurrentText = getXpForTextLevel(textLevel);
-            const xpForNextText = getXpForTextLevel(textLevel + 1);
-            const neededText = xpForNextText - xpForCurrentText;
-            const percentText = neededText > 0 ? ((textXp - xpForCurrentText) / neededText) : 1;
-            const totalNeededTextXp = xpForNextText;  // 次のレベルまでの合計必要XP
-
             const xpForCurrentVoice = getXpForVoiceLevel(voiceLevel);
             const xpForNextVoice = getXpForVoiceLevel(voiceLevel + 1);
             const neededVoice = xpForNextVoice - xpForCurrentVoice;
@@ -138,49 +115,27 @@ module.exports = {
 
             ctx.font = 'bold 24px "Noto Sans CJK JP"';
             ctx.fillStyle = '#FFFFFF';
-            ctx.fillText('TEXT', contentX, 125);            
+            ctx.fillText('VOICE', contentX, 125);
             ctx.font = 'bold 30px "Noto Sans CJK JP"';
-            ctx.fillText(`Lv.${textLevel} #${textRank}`, contentX + 80, 125);
-            
-            ctx.font = 'bold 24px "Noto Sans CJK JP"';
-            ctx.fillStyle = '#FFFFFF';
-            ctx.fillText('VOICE', contentX, 205);
-            ctx.font = 'bold 30px "Noto Sans CJK JP"';
-            ctx.fillText(`Lv.${voiceLevel} #${voiceRank}`, contentX + 100, 205);
+            ctx.fillText(`Lv.${voiceLevel} #${voiceRank}`, contentX + 100, 125);
 
-            // テキストとプログレスバーを描画
+            // ボイスチャットのプログレスバー
             const barWidth = canvas.width - contentX - margin - 30;
             ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
             drawRoundRect(ctx, contentX, 145, barWidth, 20, 10);
             ctx.fill();
-            if(percentText > 0) {
-                ctx.fillStyle = '#1E90FF';
-                drawRoundRect(ctx, contentX, 145, barWidth * percentText, 20, 10);
-                ctx.fill();
-            }
-
-            // ボイスチャットのプログレスバー
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
-            drawRoundRect(ctx, contentX, 225, barWidth, 20, 10);
-            ctx.fill();
             if(percentVoice > 0) {
                 ctx.fillStyle = '#32CD32';
-                drawRoundRect(ctx, contentX, 225, barWidth * percentVoice, 20, 10);
+                drawRoundRect(ctx, contentX, 145, barWidth * percentVoice, 20, 10);
                 ctx.fill();
             }
 
-            // XPテキストの描画
+            // XPテキストの描画（ボイスのみ）
             ctx.fillStyle = '#FFFFFF';
             ctx.font = '16px "Noto Sans CJK JP"';
             ctx.textAlign = 'right';
-            
-            // テキストXP
-            const textXpDisplay = `${formatXp(textXp)} / ${formatXp(xpForNextText)} XP`;
-            ctx.fillText(textXpDisplay, contentX + barWidth - 5, 135);
-            
-            // ボイスXP
             const voiceXpDisplay = `${formatXp(voiceXp)} / ${formatXp(xpForNextVoice)} XP`;
-            ctx.fillText(voiceXpDisplay, contentX + barWidth - 5, 215);
+            ctx.fillText(voiceXpDisplay, contentX + barWidth - 5, 135);
 
             // サーバーアイコンを右上に追加
             const serverIconSize = 48;
@@ -199,27 +154,27 @@ module.exports = {
                 console.error('Failed to load server icon:', error);
             }
 
-            ctx.save();
-            ctx.beginPath();
-            ctx.arc(avatarX + avatarSize / 2, avatarY + avatarSize / 2, avatarSize / 2, 0, Math.PI * 2, true);
-            ctx.closePath();
-            ctx.clip();
-            const avatar = await loadImage(targetUser.displayAvatarURL({ extension: 'png', size: 256 }));
-            ctx.drawImage(avatar, avatarX, avatarY, avatarSize, avatarSize);
-            ctx.restore();
+            // アバター描画
+            try {
+                const avatar = await loadImage(targetUser.displayAvatarURL({ extension: 'png', size: 256 }));
+                ctx.save();
+                ctx.beginPath();
+                ctx.arc(avatarX + avatarSize/2, avatarY + avatarSize/2, avatarSize/2, 0, Math.PI * 2);
+                ctx.closePath();
+                ctx.clip();
+                ctx.drawImage(avatar, avatarX, avatarY, avatarSize, avatarSize);
+                ctx.restore();
+            } catch (error) {
+                console.error('Failed to load user avatar:', error);
+            }
 
-            ctx.beginPath();
-            ctx.arc(avatarX + avatarSize / 2, avatarY + avatarSize / 2, avatarSize / 2 + 5, 0, Math.PI * 2, false);
-            ctx.strokeStyle = borderColor;
-            ctx.lineWidth = 10;
-            ctx.stroke();
-            
-            const attachment = new AttachmentBuilder(canvas.toBuffer(), { name: 'rank-card.png' });
+            // 画像を送信
+            const buffer = canvas.toBuffer('image/png');
+            const attachment = new AttachmentBuilder(buffer, { name: 'rank.png' });
             await interaction.editReply({ files: [attachment] });
-
         } catch (error) {
-            console.error('Rank command error:', error);
-            await interaction.editReply('ランク情報の取得中にエラーが発生しました。');
+            console.error('ランクカード生成エラー:', error);
+            await interaction.editReply('ランクカードの生成中にエラーが発生しました。');
         }
     },
 };

@@ -61,38 +61,6 @@ function getGenerationRoleName(generationText) {
     }
     return roman;
 }
-const generateTextXpTable = (maxLevel) => {
-    const table = [0];
-    let xpForNextLevel = 35; 
-    let increaseAmount = 68;
-    let totalXp = 0;
-    for (let level = 1; level <= maxLevel; level++) {
-        totalXp += xpForNextLevel;
-        table[level] = totalXp;
-        xpForNextLevel += increaseAmount;
-        increaseAmount = (increaseAmount === 69) ? 70 : 69;
-    }
-    return table;
-};
-const textXpTable = generateTextXpTable(100);
-function calculateTextLevel(xp) {
-    if (xp <= 0) return 0;
-    for (let i = textXpTable.length - 1; i >= 0; i--) {
-        if (xp >= textXpTable[i]) {
-            return i;
-        }
-    }
-    return 0;
-}
-function getXpForTextLevel(level) {
-    if (level < 0) return 0;
-    if (level >= textXpTable.length) {
-        const lastLevelXp = textXpTable[textXpTable.length - 1];
-        const lastLevelDelta = textXpTable[textXpTable.length - 1] - textXpTable[textXpTable.length - 2];
-        return lastLevelXp + (lastLevelDelta * (level - (textXpTable.length - 1)));
-    }
-    return textXpTable[level];
-}
 function calculateVoiceLevel(xp) {
     if (xp <= 0) return 0;
     let level = 0;
@@ -147,12 +115,9 @@ async function updateLevelRoles(member, redis, client) {
     try {
         const mainMember = await member.guild.members.fetch(mainAccountId).catch(() => null);
         if (!mainMember) return;
-        const textXp = await redis.hget(`user:${mainAccountId}`, 'textXp') || 0;
         const voiceXp = await redis.hget(`user:${mainAccountId}`, 'voiceXp') || 0;
-        const textLevel = calculateTextLevel(textXp);
         const voiceLevel = calculateVoiceLevel(voiceXp);
-        const newLevel = Math.max(textLevel, voiceLevel);
-        const rankInfo = getRankInfo(newLevel);
+        const rankInfo = getRankInfo(voiceLevel);
         if (!rankInfo.title) {
             const currentLevelRoles = mainMember.roles.cache.filter(role => role.name.includes('Lv.'));
             if (currentLevelRoles.size > 0) await mainMember.roles.remove(currentLevelRoles);
@@ -215,4 +180,4 @@ async function getAllKeys(redis, pattern) {
 }
 
 // 【最重要修正】toHalfWidthをエクスポートリストに追加
-module.exports = { postStickyMessage, sortClubChannels, getGenerationRoleName, calculateTextLevel, getXpForTextLevel, calculateVoiceLevel, getXpForVoiceLevel, updateLevelRoles, safeIncrby, toKanjiNumber, toHalfWidth, getAllKeys };
+module.exports = { postStickyMessage, sortClubChannels, getGenerationRoleName, calculateVoiceLevel, getXpForVoiceLevel, updateLevelRoles, safeIncrby, toKanjiNumber, toHalfWidth, getAllKeys };

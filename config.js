@@ -15,14 +15,9 @@ module.exports = {
     NOTION_DATABASE_ID: process.env.NOTION_DATABASE_ID,
     NOTION_API_KEY: process.env.NOTION_API_KEY,
     
-    // クールダウンを延長
-    TEXT_XP_COOLDOWN: 5 * 60 * 1000,    // 5分
+    // クールダウン（ボイスのみ）
     VOICE_XP_COOLDOWN: 5 * 60 * 1000,   // 5分
-
-    // 【最重要修正】クールダウン延長に合わせて獲得XP量を調整
     VOICE_XP_AMOUNT: 25,     // 10 -> 25
-    MIN_TEXT_XP: 25,        // 10 -> 25
-    MAX_TEXT_XP: 100,       // 40 -> 100
     PHRASES_TO_COMBINE: ['確認してください', 'よろしくお願いします'],
     STOP_WORDS: new Set([
         'する', 'いる', 'なる', 'れる', 'ある', 'ない', 'です', 'ます', 'こと', 'もの',

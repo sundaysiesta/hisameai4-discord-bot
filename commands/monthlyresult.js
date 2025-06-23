@@ -1,6 +1,6 @@
 const { SlashCommandBuilder, AttachmentBuilder } = require('discord.js');
 const { createCanvas, loadImage } = require('canvas');
-const { calculateTextLevel, calculateVoiceLevel, getAllKeys } = require('../utils/utility.js');
+const { calculateVoiceLevel, getAllKeys } = require('../utils/utility.js');
 
 // 描画用のヘルパー関数 (変更なし)
 function drawRoundRect(ctx, x, y, width, height, radius) {
@@ -21,7 +21,7 @@ function drawRoundRect(ctx, x, y, width, height, radius) {
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('monthlyresult')
-        .setDescription('月間レベルランキングのリザルト画像を生成します。')
+        .setDescription('月間ボイスレベルランキングのリザルト画像を生成します。')
         .addStringOption(option =>
             option.setName('month')
                 .setDescription('対象の月をYYYY-MM 形式で指定 (例: 2025-05)。未指定の場合は先月になります。')
@@ -38,22 +38,19 @@ module.exports = {
         }
 
         try {
-            const fetchUsers = async (keys, type) => {
+            const fetchUsers = async (keys) => {
                 const users = [];
                 for (const key of keys) {
-                    // 【最重要修正】データ破損に備え、try-catchブロックで囲む
                     try {
-                        const xp = await redis.get(key); // エラー発生源
+                        const xp = await redis.get(key);
                         const userId = key.split(':')[3];
                         if (xp && userId) {
                             users.push({ userId, xp: Number(xp) });
                         }
                     } catch (error) {
-                        // WRONGTYPEエラーが発生した場合は、そのキーをスキップして処理を続行
                         if (error.message.includes('WRONGTYPE')) {
                             console.error(`Skipping corrupted key (WRONGTYPE): ${key}`);
                         } else {
-                            // それ以外のエラーは再スロー
                             throw error;
                         }
                     }
@@ -61,17 +58,14 @@ module.exports = {
                 return users.sort((a, b) => b.xp - a.xp).slice(0, 10);
             };
 
-            const textKeys = await getAllKeys(redis, `monthly_xp:text:${targetMonth}:*`);
             const voiceKeys = await getAllKeys(redis, `monthly_xp:voice:${targetMonth}:*`);
+            const topVoiceUsers = await fetchUsers(voiceKeys);
             
-            const topTextUsers = await fetchUsers(textKeys, 'text');
-            const topVoiceUsers = await fetchUsers(voiceKeys, 'voice');
-            
-            if (topTextUsers.length === 0 && topVoiceUsers.length === 0) {
-                return interaction.editReply(`${targetMonth} のランキングデータが見つかりませんでした。`);
+            if (topVoiceUsers.length === 0) {
+                return interaction.editReply(`${targetMonth} のボイスランキングデータが見つかりませんでした。`);
             }
 
-            const canvasWidth = 1200;
+            const canvasWidth = 600;
             const canvasHeight = 800;
             const canvas = createCanvas(canvasWidth, canvasHeight);
             const ctx = canvas.getContext('2d');
@@ -82,11 +76,12 @@ module.exports = {
             ctx.fillStyle = '#FFFFFF';
             ctx.font = 'bold 48px "Noto Sans CJK JP"';
             ctx.textAlign = 'center';
-            ctx.fillText(`${targetMonth}月度 月間ランキング`, canvasWidth / 2, 70);
+            ctx.fillText(`${targetMonth}月度 月間ボイスランキング`, canvasWidth / 2, 70);
 
-            const drawRanking = async (users, type, startX) => {
-                const title = type === 'text' ? '💬 TEXT' : '🎤 VOICE';
-                const color = type === 'text' ? '#5865F2' : '#3BA55D';
+            // ボイスランキングのみ描画
+            const drawRanking = async (users, startX) => {
+                const title = '🎤 VOICE';
+                const color = '#3BA55D';
 
                 ctx.fillStyle = color;
                 ctx.font = 'bold 32px "Noto Sans CJK JP"';
@@ -98,7 +93,7 @@ module.exports = {
                     const user = users[i];
                     try {
                         const discordUser = await interaction.client.users.fetch(user.userId);
-                        const level = type === 'text' ? calculateTextLevel(user.xp) : calculateVoiceLevel(user.xp);
+                        const level = calculateVoiceLevel(user.xp);
 
                         ctx.fillStyle = '#FFFFFF';
                         ctx.font = 'bold 28px "Noto Sans CJK JP"';
@@ -128,8 +123,7 @@ module.exports = {
                 }
             };
             
-            await drawRanking(topTextUsers, 'text', 50);
-            await drawRanking(topVoiceUsers, 'voice', 625);
+            await drawRanking(topVoiceUsers, 0);
 
             const attachment = new AttachmentBuilder(canvas.toBuffer(), { name: `monthly-result-${targetMonth}.png` });
             await interaction.editReply({ files: [attachment] });
