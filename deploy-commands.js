@@ -15,10 +15,9 @@ const commands = [
         { 
             name: 'type', 
             type: 3, 
-            description: 'ランキングの種類（未指定で両方表示）', 
+            description: 'ランキングの種類（未指定でボイスのみ表示）', 
             required: false, 
             choices: [
-                { name: 'テキスト', value: 'text' }, 
                 { name: 'ボイス', value: 'voice' },
                 { name: '部活', value: 'club' }
             ]
@@ -46,11 +45,10 @@ const commands = [
             required: false 
         }
     ] },
-    { name: 'xp', description: 'ユーザーのXPを操作します。(管理者限定)', options: [{ name: 'user', type: 6, description: '対象のユーザー', required: true }, { name: 'type', type: 3, description: '操作するXPの種類', required: true, choices: [{ name: 'テキスト', value: 'text' }, { name: 'ボイス', value: 'voice' }] }, { name: 'action', type: 3, description: '操作の種類', required: true, choices: [{ name: '追加', value: 'add' }, { name: '削除', value: 'remove' }, { name: '設定', value: 'set' }] }, { name: 'amount', type: 4, description: 'XPの量', required: true }] },
-    { name: 'transferxp', description: 'BANされたアカウントのXPを新しいアカウントに引き継ぎます。(管理者限定)', options: [{ name: 'old_user_id', type: 3, description: '元のアカウントのユーザーID', required: true }, { name: 'new_user', type: 6, description: '引き継ぎ先の新しいアカウント', required: true }] },
-    { name: 'linkmain', description: 'サブアカウントのXPをメインアカウントに合算します。(管理者限定)', options: [{ name: 'main_account', type: 6, description: 'XPの合算先となるメインアカウント', required: true }, { name: 'sub_account', type: 6, description: 'XPを合算するサブアカウント', required: true }] },
-    { name: 'clearxpdata', description: '破損した可能性のある月間・日間のXPデータをクリアします。(管理者限定・一度だけ使用)' },
-    { name: 'migrateprobot', description: 'ProBotのランキングメッセージからXPを一括で引き継ぎます。(管理者限定)', options: [ { name: 'message_id', type: 3, description: 'ProBotのランキングが表示されているメッセージのID', required: true } ] },
+    { name: 'xp', description: 'ユーザーのボイスXPを操作します。(管理者限定)', options: [{ name: 'user', type: 6, description: '対象のユーザー', required: true }, { name: 'action', type: 3, description: '操作の種類', required: true, choices: [{ name: '追加', value: 'add' }, { name: '削除', value: 'remove' }, { name: '設定', value: 'set' }] }, { name: 'amount', type: 4, description: 'XPの量', required: true }] },
+    { name: 'transferxp', description: 'BANされたアカウントのボイスXPを新しいアカウントに引き継ぎます。(管理者限定)', options: [{ name: 'old_user_id', type: 3, description: '元のアカウントのユーザーID', required: true }, { name: 'new_user', type: 6, description: '引き継ぎ先の新しいアカウント', required: true }] },
+    { name: 'linkmain', description: 'サブアカウントのボイスXPをメインアカウントに合算します。(管理者限定)', options: [{ name: 'main_account', type: 6, description: 'XPの合算先となるメインアカウント', required: true }, { name: 'sub_account', type: 6, description: 'XPを合算するサブアカウント', required: true }] },
+    { name: 'clearxpdata', description: '破損した可能性のある月間・日間のボイスXPデータをクリアします。(管理者限定・一度だけ使用)' },
     { name: 'setprofilebg', description: 'あなたのプロフィールカードの背景画像を設定します。', options: [{ name: 'url', type: 3, description: '背景に設定したい画像のURL (リセットする場合は "none" と入力)', required: true }] },
     { name: 'setrankbg', description: 'あなたのランクカードの背景画像を設定します。', options: [{ name: 'url', type: 3, description: '背景に設定したい画像のURL (リセットする場合は "reset" と入力)', required: true }] },
     {
@@ -65,7 +63,7 @@ const commands = [
     },
     {
         name: 'monthlyresult',
-        description: '月間レベルランキングのリザルト画像を生成します。',
+        description: '月間ボイスレベルランキングのリザルト画像を生成します。',
         options: [{
             name: 'month',
             type: 3, // STRING
