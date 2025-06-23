@@ -115,6 +115,10 @@ async function updatePermanentRankings(guild, redis, notion) {
     } catch(e) { console.error("部活ランキング更新エラー:", e); }
 }
 
+// グローバル: 部活チャンネルごとのメッセージ数をメモリ内でカウント
+if (!global.dailyMessageBuffer) global.dailyMessageBuffer = {};
+const dailyMessageBuffer = global.dailyMessageBuffer;
+
 module.exports = {
 	name: Events.ClientReady,
 	once: true,
@@ -283,6 +287,18 @@ module.exports = {
             }
         });
         
+        // --- 部活メッセージ数を1日1回Redisに反映 ---
+        const flushClubMessageCounts = async () => {
+            for (const [channelId, count] of Object.entries(dailyMessageBuffer)) {
+                if (count > 0) {
+                    await redis.set(`weekly_message_count:${channelId}`, count);
+                    dailyMessageBuffer[channelId] = 0;
+                }
+            }
+            console.log('部活メッセージ数を1日分まとめてRedisに反映しました。');
+        };
+        cron.schedule('0 0 * * *', flushClubMessageCounts, { scheduled: true, timezone: 'Asia/Tokyo' });
+
         // 毎日深夜0時にRedisキーのクリーンアップを実行
         cron.schedule('0 0 * * *', async () => {
             try {

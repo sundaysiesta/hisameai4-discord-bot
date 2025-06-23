@@ -3,6 +3,10 @@ const config = require('../config.js');
 const { postStickyMessage } = require('../utils/utility.js');
 const TinySegmenter = require('tiny-segmenter');
 
+// グローバル: 部活チャンネルごとのメッセージ数をメモリ内でカウント
+if (!global.dailyMessageBuffer) global.dailyMessageBuffer = {};
+const dailyMessageBuffer = global.dailyMessageBuffer;
+
 // テキストXP関連のクールダウンや付与処理は削除
 
 module.exports = {
@@ -17,19 +21,9 @@ module.exports = {
 
         // --- テキストXP付与処理はここで削除 ---
 
-        // --- 部活チャンネルのメッセージ数カウント ---
+        // --- 部活チャンネルのメッセージ数カウント（メモリ内のみ） ---
         if (message.channel.parentId === config.CLUB_CATEGORY_ID && !config.EXCLUDED_CHANNELS.includes(message.channel.id)) {
-            try {
-                const key = `weekly_message_count:${message.channel.id}`;
-                const exists = await redis.exists(key);
-                if (!exists) {
-                    await redis.set(key, '0');
-                    await redis.expire(key, 60 * 60 * 24 * 8); // 8日
-                }
-                await redis.incr(key);
-            } catch (error) {
-                console.error('部活メッセージカウントエラー:', error);
-            }
+            dailyMessageBuffer[message.channel.id] = (dailyMessageBuffer[message.channel.id] || 0) + 1;
         }
     },
 };
