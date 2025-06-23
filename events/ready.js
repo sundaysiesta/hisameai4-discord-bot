@@ -297,11 +297,6 @@ module.exports = {
                     await redis.del(...dailyKeys);
                 }
 
-                // 期限切れのトレンドデータを削除（3時間以上前）
-                const cutoff = now - config.TREND_WORD_LIFESPAN;
-                await redis.zremrangebyscore('trend_words_scores', '-inf', cutoff);
-                await redis.zremrangebyscore('trend_words_timestamps', '-inf', cutoff);
-
                 // 不要なクールダウンキーを削除
                 const cooldownKeys = await getAllKeys(redis, 'xp_cooldown:*');
                 for (const key of cooldownKeys) {

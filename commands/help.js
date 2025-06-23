@@ -38,7 +38,6 @@ module.exports = {
                         '`/xp` - ユーザーのXPを操作\n' +
                         '`/transferxp` - XPを移行\n' +
                         '`/clearxpdata` - XPデータをクリア\n' +
-                        '`/resettrend` - トレンドをリセット\n' +
                         '`/syncleader` - 部長情報を同期\n' +
                         '`/status` - ボットの状態を表示'
                     },
