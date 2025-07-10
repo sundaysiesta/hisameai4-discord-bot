@@ -1,4 +1,4 @@
-const { Events, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const { Events, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } = require('discord.js');
 const config = require('../config.js');
 const { postStickyMessage } = require('../utils/utility.js');
 const TinySegmenter = require('tiny-segmenter');
@@ -20,51 +20,68 @@ module.exports = {
         }
         if (message.author.bot || !message.inGuild()) return;
 
-        // --- ここからメンション付き画像/動画代理投稿機能 ---
+        // --- ここからメンション付き画像/動画/リンク代理投稿機能 ---
         const clientUser = message.client.user;
         const isMentionToBot = message.mentions.has(clientUser);
         const isReply = !!message.reference;
         const attachments = message.attachments.filter(att => att.contentType && (att.contentType.startsWith('image/') || att.contentType.startsWith('video/')));
         const hasMedia = attachments.size > 0;
-        const hasText = message.content.replace(/<@!?\d+>/g, '').trim().length > 0;
+        const textWithoutMention = message.content.replace(/<@!?\d+>/g, '').trim();
+        const hasText = textWithoutMention.length > 0;
+        const urlRegex = /https?:\/\/[\w/:%#\$&\?\(\)~\.=\+\-]+/gi;
+        const hasUrl = urlRegex.test(textWithoutMention);
 
         if (isMentionToBot) {
-            if (!isReply && hasMedia) {
+            if (!isReply && (hasMedia || hasUrl)) {
                 // webhook取得または作成
                 let webhook = null;
                 const webhooks = await message.channel.fetchWebhooks();
                 webhook = webhooks.find(wh => wh.owner && wh.owner.id === clientUser.id);
+                // サーバーニックネーム取得
+                let displayName = message.member ? message.member.displayName : message.author.username;
                 if (!webhook) {
                     webhook = await message.channel.createWebhook({
-                        name: message.author.username,
+                        name: displayName,
                         avatar: message.author.displayAvatarURL({ dynamic: true })
                     });
                 } else {
                     // 名前・アイコンを最新に
                     await webhook.edit({
-                        name: message.author.username,
+                        name: displayName,
                         avatar: message.author.displayAvatarURL({ dynamic: true })
                     });
                 }
                 // 送信内容構築
                 const files = Array.from(attachments.values());
-                let content = hasText ? message.content.replace(`<@${clientUser.id}>`, '').trim() : '';
-                await webhook.send({
-                    content: content || undefined,
+                let content = textWithoutMention;
+                // 削除ボタン追加
+                const delBtn = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder()
+                        .setCustomId(`delete_proxy_${message.id}`)
+                        .setLabel('削除')
+                        .setStyle(ButtonStyle.Danger)
+                        .setEmoji('🗑️')
+                );
+                const sent = await webhook.send({
+                    content: (content || hasUrl) ? content : undefined,
                     files: files,
-                    username: message.author.username,
+                    username: displayName,
                     avatarURL: message.author.displayAvatarURL({ dynamic: true }),
-                    allowedMentions: { parse: [] }
+                    allowedMentions: { parse: [] },
+                    components: [delBtn]
                 });
                 await message.delete().catch(() => {});
+                // 送信者IDとメッセージIDを紐付けて保存（削除権限判定用）
+                if (!global.proxyDeleteMap) global.proxyDeleteMap = {};
+                global.proxyDeleteMap[sent.id] = message.author.id;
                 return;
             } else {
-                // 返信 or 添付なし: 使い方案内
+                // 返信 or 添付・リンクなし: 使い方案内
                 const helpEmbed = new EmbedBuilder()
                     .setColor('#0099ff')
                     .setTitle('📚 Botの使い方')
-                    .setDescription('Botへのメンション付きで画像や動画を送信すると、代理で投稿します。\n\n**使い方例:**\n@Bot名 画像や動画（＋任意のテキスト）\n\n※メンションのみや返信、添付ファイルがない場合は代理投稿されません。');
-                await message.reply({ embeds: [helpEmbed], ephemeral: true }).catch(() => {});
+                    .setDescription('Botへのメンション付きで画像や動画、またはリンクを送信すると、代理で投稿します。\n\n**使い方例:**\n@Bot名 画像や動画（＋任意のテキスト）\n@Bot名 https://example.com\n\n※メンションのみや返信、添付ファイル・リンクがない場合は代理投稿されません。');
+                await message.reply({ embeds: [helpEmbed], flags: MessageFlags.Ephemeral }).catch(() => {});
                 return;
             }
         }

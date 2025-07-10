@@ -38,6 +38,20 @@ module.exports = {
                     modal.addComponents(new ActionRowBuilder().addComponents(nameInput), new ActionRowBuilder().addComponents(activityInput));
                     await interaction.showModal(modal);
                 }
+                // 代理投稿削除ボタン
+                if (interaction.customId && interaction.customId.startsWith('delete_proxy_')) {
+                    const proxyDeleteMap = global.proxyDeleteMap || {};
+                    const targetMsg = await interaction.channel.messages.fetch(interaction.message.id).catch(() => null);
+                    const ownerId = proxyDeleteMap[interaction.message.id];
+                    if (interaction.user.id === ownerId) {
+                        if (targetMsg) await targetMsg.delete().catch(() => {});
+                        await interaction.reply({ content: 'メッセージを削除しました。', ephemeral: true });
+                        delete proxyDeleteMap[interaction.message.id];
+                    } else {
+                        await interaction.reply({ content: 'このメッセージを削除できるのは投稿者のみです。', ephemeral: true });
+                    }
+                    return;
+                }
             }
             // フォーム送信の処理
             else if (interaction.isModalSubmit()) {
