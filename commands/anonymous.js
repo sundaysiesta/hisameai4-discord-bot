@@ -43,7 +43,8 @@ module.exports = {
         const salt = process.env.ANONYMOUS_SALT || '';
         const date = new Date().toISOString().slice(0, 10);
         const hash = crypto.createHash('sha256').update(interaction.user.id + date + salt).digest('hex').slice(0, 8);
-        const displayName = (nameOpt && nameOpt.trim().length > 0) ? nameOpt.trim() : `名無しのロメダ民 (${hash})`;
+        const displayNameRaw = (nameOpt && nameOpt.trim().length > 0) ? nameOpt.trim() : '名無しのロメダ民';
+        const displayName = `${displayNameRaw} ID: ${hash}`;
 
         // webhook取得または作成
         const channel = interaction.channel;
