@@ -74,6 +74,7 @@ const commands = [
     { name: 'anonymous', description: '匿名でメッセージを投稿します。', options: [
         { name: '内容', type: 3, description: '投稿内容（改行禁止・144文字以内）', required: true },
         { name: '添付ファイル', type: 11, description: '画像や動画などの添付ファイル', required: false },
+        { name: 'アイコン', type: 11, description: '表示用アイコン画像', required: false },
         { name: '名前', type: 3, description: '表示名（未入力の場合は「名無しのロメダ民」）', required: false }
     ] },
 ].map(command => command);

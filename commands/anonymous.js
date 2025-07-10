@@ -15,6 +15,11 @@ module.exports = {
                 .setDescription('画像や動画などの添付ファイル')
                 .setRequired(false)
         )
+        .addAttachmentOption(option =>
+            option.setName('アイコン')
+                .setDescription('表示用アイコン画像')
+                .setRequired(false)
+        )
         .addStringOption(option =>
             option.setName('名前')
                 .setDescription('表示名（未入力の場合は「名無しのロメダ民」）')
@@ -33,6 +38,7 @@ module.exports = {
 
         const content = interaction.options.getString('内容');
         const file = interaction.options.getAttachment('添付ファイル');
+        const icon = interaction.options.getAttachment('アイコン');
         const nameOpt = interaction.options.getString('名前');
 
         if (content.includes('\n') || content.length > 144) {
@@ -55,12 +61,12 @@ module.exports = {
         if (!webhook) {
             webhook = await channel.createWebhook({
                 name: displayName,
-                avatar: null
+                avatar: icon ? icon.url : null
             });
         } else {
             await webhook.edit({
                 name: displayName,
-                avatar: null
+                avatar: icon ? icon.url : null
             });
         }
 
