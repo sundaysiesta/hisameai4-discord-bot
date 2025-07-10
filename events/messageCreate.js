@@ -62,6 +62,8 @@ module.exports = {
                         .setStyle(ButtonStyle.Danger)
                         .setEmoji('🗑️')
                 );
+                // メッセージ削除を並列で実行
+                message.delete().catch(() => {});
                 const sent = await webhook.send({
                     content: (content || hasUrl) ? content : undefined,
                     files: files,
@@ -70,7 +72,6 @@ module.exports = {
                     allowedMentions: { parse: [] },
                     components: [delBtn]
                 });
-                await message.delete().catch(() => {});
                 // 送信者IDとメッセージIDを紐付けて保存（削除権限判定用）
                 if (!global.proxyDeleteMap) global.proxyDeleteMap = {};
                 global.proxyDeleteMap[sent.id] = message.author.id;
