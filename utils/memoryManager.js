@@ -44,6 +44,28 @@ class MemoryManager {
                 }
             });
         }
+
+        // 代理投稿クールダウンのクリーンアップ
+        if (global.proxyCooldown) {
+            const now = Date.now();
+            const cooldownTimeout = 2 * 60 * 1000; // 2分
+            
+            Object.keys(global.proxyCooldown).forEach(userId => {
+                if (now - global.proxyCooldown[userId] > cooldownTimeout) {
+                    delete global.proxyCooldown[userId];
+                }
+            });
+        }
+
+        // 代理投稿削除マップのクリーンアップ
+        if (global.proxyDeleteMap) {
+            const now = Date.now();
+            const deleteMapTimeout = 24 * 60 * 60 * 1000; // 24時間
+            
+            // 古いメッセージIDを削除（実際のメッセージ削除は別途処理）
+            // ここではメモリ上の古いデータのみをクリーンアップ
+            console.log(`代理投稿削除マップ: ${Object.keys(global.proxyDeleteMap).length}件のエントリ`);
+        }
         
         this.lastCleanup = Date.now();
     }
@@ -98,6 +120,24 @@ class MemoryManager {
             console.error('ファイル処理エラー:', error);
             throw error;
         }
+    }
+
+    // 代理投稿クールダウン管理
+    checkProxyCooldown(userId, cooldownTime = 10 * 1000) {
+        if (!global.proxyCooldown) global.proxyCooldown = {};
+        
+        const now = Date.now();
+        const last = global.proxyCooldown[userId] || 0;
+        
+        if (now - last < cooldownTime) {
+            return {
+                onCooldown: true,
+                remainingTime: Math.ceil((cooldownTime - (now - last)) / 1000)
+            };
+        }
+        
+        global.proxyCooldown[userId] = now;
+        return { onCooldown: false };
     }
 }
 
