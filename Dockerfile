@@ -24,5 +24,5 @@ RUN npm ci --only=production
 # Botの全ソースコードを作業場所にコピー
 COPY . .
 
-# Botを起動するコマンド
-CMD ["node", "index.js"]
+# メモリ制限とガベージコレクションを有効にしてBotを起動
+CMD ["node", "--max-old-space-size=512", "--expose-gc", "index.js"]

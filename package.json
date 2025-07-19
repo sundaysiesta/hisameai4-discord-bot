@@ -4,7 +4,9 @@
   "description": "A simple Discord bot for Fly.io",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "node --max-old-space-size=512 --expose-gc index.js",
+    "dev": "node --max-old-space-size=512 --expose-gc index.js",
+    "deploy": "node deploy-commands.js"
   },
   "dependencies": {
     "@notionhq/client": "^3.1.3",
