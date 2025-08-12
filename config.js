@@ -10,14 +10,9 @@ module.exports = {
     CREATE_CLUB_BUTTON_ID: 'create_club_button',
     CREATE_CLUB_MODAL_ID: 'create_club_modal',
     WORDCLOUD_EXCLUDED_CATEGORY_ID: '1370683406345699369',
-    XP_EXCLUDED_ROLE_ID: '1371467046055055432',
     RESTART_NOTIFICATION_CHANNEL_ID: '1369627467991486605',
     NOTION_DATABASE_ID: process.env.NOTION_DATABASE_ID,
     NOTION_API_KEY: process.env.NOTION_API_KEY,
-    
-    // クールダウン（ボイスのみ）
-    VOICE_XP_COOLDOWN: 5 * 60 * 1000,   // 5分
-    VOICE_XP_AMOUNT: 25,     // 10 -> 25
     PHRASES_TO_COMBINE: ['確認してください', 'よろしくお願いします'],
     STOP_WORDS: new Set([
         'する', 'いる', 'なる', 'れる', 'ある', 'ない', 'です', 'ます', 'こと', 'もの',

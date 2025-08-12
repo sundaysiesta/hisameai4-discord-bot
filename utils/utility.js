@@ -61,82 +61,7 @@ function getGenerationRoleName(generationText) {
     }
     return roman;
 }
-function calculateVoiceLevel(xp) {
-    if (xp <= 0) return 0;
-    let level = 0;
-    let cumulativeXp = 0;
-    while (true) {
-        const requiredForNext = (level === 0) ? 69 : Math.floor(138 * level + 69);
-        if (xp < cumulativeXp + requiredForNext) {
-            return level;
-        }
-        cumulativeXp += requiredForNext;
-        level++;
-         if (level > 200) return 200;
-    }
-}
-function getXpForVoiceLevel(level) {
-    let totalXp = 0;
-    for (let i = 0; i < level; i++) {
-        totalXp += Math.floor(138 * i + 69);
-    }
-    return totalXp;
-}
-function getRankInfo(level) {
-    if (level <= 0) return { title: null, level: 0 };
-    if (level >= 100) return { title: 'LEGEND', level: 100 };
-    if (level >= 95) return { title: 'ULTIMATE MASTER II', level: 95 };
-    if (level >= 90) return { title: 'ULTIMATE MASTER I', level: 90 };
-    if (level >= 85) return { title: 'GRAND MASTER II', level: 85 };
-    if (level >= 80) return { title: 'GRAND MASTER I', level: 80 };
-    if (level >= 75) return { title: 'HIGH MASTER II', level: 75 };
-    if (level >= 70) return { title: 'HIGH MASTER I', level: 70 };
-    if (level >= 65) return { title: 'MASTER II', level: 65 };
-    if (level >= 60) return { title: 'MASTER I', level: 60 };
-    if (level >= 55) return { title: 'DIAMOND II', level: 55 };
-    if (level >= 50) return { title: 'DIAMOND I', level: 50 };
-    if (level >= 45) return { title: 'PLATINUM II', level: 45 };
-    if (level >= 40) return { title: 'PLATINUM I', level: 40 };
-    if (level >= 35) return { title: 'GOLD II', level: 35 };
-    if (level >= 30) return { title: 'GOLD I', level: 30 };
-    if (level >= 25) return { title: 'SILVER II', level: 25 };
-    if (level >= 20) return { title: 'SILVER I', level: 20 };
-    if (level >= 15) return { title: 'BRONZE II', level: 15 };
-    if (level >= 10) return { title: 'BRONZE I', level: 10 };
-    if (level >= 5) return { title: 'IRON', level: level };
-    if (level >= 1) return { title: 'ROOKIE', level: level };
-    return { title: null, level: 0 };
-}
-async function updateLevelRoles(member, redis, client) {
-    if (!member || !redis || !client) return;
-    const mainAccountId = await redis.hget(`user:${member.id}`, 'mainAccountId') || member.id;
-    if (levelUpLocks.has(mainAccountId)) return;
-    levelUpLocks.add(mainAccountId);
-    try {
-        const mainMember = await member.guild.members.fetch(mainAccountId).catch(() => null);
-        if (!mainMember) return;
-        const voiceXp = await redis.hget(`user:${mainAccountId}`, 'voiceXp') || 0;
-        const voiceLevel = calculateVoiceLevel(voiceXp);
-        const rankInfo = getRankInfo(voiceLevel);
-        if (!rankInfo.title) {
-            const currentLevelRoles = mainMember.roles.cache.filter(role => role.name.includes('Lv.'));
-            if (currentLevelRoles.size > 0) await mainMember.roles.remove(currentLevelRoles);
-            return;
-        }
-        const targetRoleName = `${rankInfo.title} Lv.${rankInfo.level}`;
-        const targetRole = mainMember.guild.roles.cache.find(r => r.name === targetRoleName);
-        const allTitleRanks = ['ROOKIE', 'IRON', 'BRONZE', 'SILVER', 'GOLD', 'PLATINUM', 'DIAMOND', 'MASTER', 'HIGH', 'GRAND', 'ULTIMATE', 'LEGEND'];
-        const currentLevelRoles = mainMember.roles.cache.filter(role => allTitleRanks.some(title => role.name.startsWith(title)) && role.name.includes('Lv.'));
-        const rolesToRemove = currentLevelRoles.filter(r => r.id !== targetRole?.id);
-        const shouldAddRole = targetRole && !mainMember.roles.cache.has(targetRole.id);
-        if (rolesToRemove.size > 0) await mainMember.roles.remove(rolesToRemove);
-        if (shouldAddRole) await mainMember.roles.add(targetRole);
-    } catch (error) {
-        console.error(`Failed to update level roles for ${member.id}:`, error);
-    } finally {
-        levelUpLocks.delete(mainAccountId);
-    }
-}
+
 async function safeIncrby(redis, key, value) {
     try { return await redis.incrby(key, value); }
     catch (e) {
@@ -180,4 +105,4 @@ async function getAllKeys(redis, pattern) {
 }
 
 // 【最重要修正】toHalfWidthをエクスポートリストに追加
-module.exports = { postStickyMessage, sortClubChannels, getGenerationRoleName, calculateVoiceLevel, getXpForVoiceLevel, updateLevelRoles, safeIncrby, toKanjiNumber, toHalfWidth, getAllKeys };
+module.exports = { postStickyMessage, sortClubChannels, getGenerationRoleName, safeIncrby, toKanjiNumber, toHalfWidth, getAllKeys };

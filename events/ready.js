@@ -1,7 +1,7 @@
 const { Events, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, EmbedBuilder, ActivityType } = require('discord.js');
 const cron = require('node-cron');
 const config = require('../config.js');
-const { postStickyMessage, sortClubChannels, updateLevelRoles, calculateTextLevel, calculateVoiceLevel, safeIncrby, getAllKeys } = require('../utils/utility.js');
+const { postStickyMessage, sortClubChannels, safeIncrby, getAllKeys } = require('../utils/utility.js');
 
 /**
  * 【新規追加】GitHub APIから最新のコミット情報を取得する関数
@@ -199,88 +199,7 @@ module.exports = {
             try {
                 const guild = client.guilds.cache.first();
                 if (!guild) return;
-                const voiceStates = guild.voiceStates.cache;
-                const activeVCs = new Map();
                 
-                // VCのXP処理
-                voiceStates.forEach(vs => {
-                    if (vs.channel && !vs.serverMute && !vs.selfMute && !vs.member.user.bot) {
-                        const members = activeVCs.get(vs.channelId) || [];
-                        members.push(vs.member);
-                        activeVCs.set(vs.channelId, members);
-                    }
-                });
-                const now = Date.now();
-                for (const members of activeVCs.values()) {
-                    if (members.length > 1) {
-                        console.log(`[ボイスXP] チャンネル内のメンバー数: ${members.length}人`);
-                        for (const member of members) {
-                            if (member.roles.cache.has(config.XP_EXCLUDED_ROLE_ID)) {
-                                console.log(`[ボイスXP] ${member.user.tag} はXP除外ロールを持っているためスキップ`);
-                                continue;
-                            }
-                            const cooldownKey = `xp_cooldown:voice:${member.id}`;
-                            const lastXpTime = await redis.get(cooldownKey);
-                            if (!lastXpTime || (now - lastXpTime > config.VOICE_XP_COOLDOWN)) {
-                                const mainAccountId = await redis.hget(`user:${member.id}`, 'mainAccountId') || member.id;
-                                const mainMember = await guild.members.fetch(mainAccountId).catch(() => null);
-                                if (!mainMember) {
-                                    console.log(`[ボイスXP] ${member.user.tag} のメインアカウントが見つかりません`);
-                                    continue;
-                                }
-
-                                try {
-                                    const xp = config.VOICE_XP_AMOUNT;
-                                    const monthlyKey = `monthly_xp:voice:${new Date().toISOString().slice(0, 7)}:${mainAccountId}`;
-                                    const dailyKey = `daily_xp:voice:${new Date().toISOString().slice(0, 10)}:${mainAccountId}`;
-
-                                    // ユーザーデータの初期化（必要な場合）
-                                    const userKey = `user:${mainAccountId}`;
-                                    const userData = await redis.hgetall(userKey);
-                                    if (!userData || Object.keys(userData).length === 0) {
-                                        await redis.hset(userKey, {
-                                            textXp: '0',
-                                            voiceXp: '0'
-                                        });
-                                        console.log(`[ボイスXP] ${mainMember.user.tag} のユーザーデータを初期化しました`);
-                                    }
-
-                                    // 月間・日間XPの初期化（必要な場合）
-                                    const [monthlyExists, dailyExists] = await Promise.all([
-                                        redis.exists(monthlyKey),
-                                        redis.exists(dailyKey)
-                                    ]);
-
-                                    if (!monthlyExists) {
-                                        await redis.set(monthlyKey, '0', { ex: 60 * 60 * 24 * 32 });
-                                        console.log(`[ボイスXP] ${mainMember.user.tag} の月間XPデータを初期化しました`);
-                                    }
-                                    if (!dailyExists) {
-                                        await redis.set(dailyKey, '0', { ex: 60 * 60 * 24 * 2 });
-                                        console.log(`[ボイスXP] ${mainMember.user.tag} の日間XPデータを初期化しました`);
-                                    }
-
-                                    // XPの更新
-                                    await Promise.all([
-                                        redis.hincrby(userKey, 'voiceXp', xp),
-                                        redis.incrby(monthlyKey, xp),
-                                        redis.incrby(dailyKey, xp)
-                                    ]);
-
-                                    await redis.set(cooldownKey, now, { ex: 350 });
-                                    await updateLevelRoles(mainMember, redis, client);
-                                    console.log(`[ボイスXP] ${member.user.tag} に ${xp} XPを付与しました（メインアカウント: ${mainMember.user.tag}）`);
-                                } catch (error) {
-                                    console.error(`[ボイスXP] ${member.user.tag} のXP付与中にエラー:`, error);
-                                }
-                            } else {
-                                console.log(`[ボイスXP] ${member.user.tag} はクールダウン中です（残り: ${Math.ceil((config.VOICE_XP_COOLDOWN - (now - lastXpTime)) / 1000)}秒）`);
-                            }
-                        }
-                    } else {
-                        console.log(`[ボイスXP] チャンネル内のメンバーが1人以下のためXP付与をスキップ`);
-                    }
-                }
                 await updatePermanentRankings(guild, redis, notion);
             } catch (e) {
                 console.error('ランキング自動更新cronエラー:', e);
@@ -299,33 +218,6 @@ module.exports = {
         };
         cron.schedule('0 0 * * *', flushClubMessageCounts, { scheduled: true, timezone: 'Asia/Tokyo' });
 
-        // 毎日深夜0時にRedisキーのクリーンアップを実行
-        cron.schedule('0 0 * * *', async () => {
-            try {
-                const now = Date.now();
-                const yesterday = new Date();
-                yesterday.setDate(yesterday.getDate() - 1);
-                const yesterdayKey = yesterday.toISOString().slice(0, 10);
 
-                // 期限切れの日次XPデータを削除
-                const dailyKeys = await getAllKeys(redis, `daily_xp:*:${yesterdayKey}:*`);
-                if (dailyKeys.length > 0) {
-                    await redis.del(...dailyKeys);
-                }
-
-                // 不要なクールダウンキーを削除
-                const cooldownKeys = await getAllKeys(redis, 'xp_cooldown:*');
-                for (const key of cooldownKeys) {
-                    const timestamp = await redis.get(key);
-                    if (now - timestamp > 24 * 60 * 60 * 1000) {
-                        await redis.del(key);
-                    }
-                }
-
-                console.log('Redisキーのクリーンアップが完了しました。');
-            } catch (error) {
-                console.error('Redisキーのクリーンアップ中にエラー:', error);
-            }
-        }, { scheduled: true, timezone: "Asia/Tokyo" });
 	},
 };
