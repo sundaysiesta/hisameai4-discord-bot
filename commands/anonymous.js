@@ -1,5 +1,6 @@
-const { SlashCommandBuilder, AttachmentBuilder } = require('discord.js');
+const { SlashCommandBuilder, AttachmentBuilder, EmbedBuilder } = require('discord.js');
 const crypto = require('crypto');
+const config = require('../config.js');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -73,16 +74,62 @@ module.exports = {
         // 投稿
         await interaction.deferReply({ ephemeral: true });
         try {
-            await webhook.send({
+            const sentMessage = await webhook.send({
                 content: content,
                 files: file ? [file] : [],
                 username: displayName,
                 avatarURL: null,
                 allowedMentions: { parse: [] }
             });
+
+            // 管理者ログチャンネルに投稿情報を送信
+            await this.sendAdminLog(interaction, sentMessage, hash, displayName);
+
             await interaction.editReply({ content: '匿名で投稿しました。', ephemeral: true });
         } catch (e) {
             await interaction.editReply({ content: '投稿に失敗しました。', ephemeral: true });
         }
     },
+
+    // 管理者ログチャンネルに投稿情報を送信する関数
+    async sendAdminLog(interaction, sentMessage, hash, displayName) {
+        try {
+            const adminLogChannel = interaction.client.channels.cache.get(config.ADMIN_LOG_CHANNEL_ID);
+            if (!adminLogChannel) {
+                console.warn('管理者ログチャンネルが見つかりません:', config.ADMIN_LOG_CHANNEL_ID);
+                return;
+            }
+
+            const embed = new EmbedBuilder()
+                .setTitle('🔒 匿名投稿ログ')
+                .setColor(0x00ff00)
+                .addFields(
+                    { name: '投稿者', value: `${interaction.user.tag} (${interaction.user.id})`, inline: true },
+                    { name: '匿名ID', value: hash, inline: true },
+                    { name: '表示名', value: displayName, inline: true },
+                    { name: '投稿チャンネル', value: `${interaction.channel.name} (${interaction.channel.id})`, inline: true },
+                    { name: '投稿時刻', value: new Date().toLocaleString('ja-JP'), inline: true },
+                    { name: '投稿内容', value: interaction.options.getString('内容') || 'なし' }
+                )
+                .setTimestamp()
+                .setFooter({ text: '管理者専用ログ' });
+
+            // 添付ファイルがある場合は追加
+            const file = interaction.options.getAttachment('添付ファイル');
+            if (file) {
+                embed.addFields({ name: '添付ファイル', value: `[${file.name}](${file.url})`, inline: false });
+            }
+
+            // 投稿メッセージへのリンクを追加
+            embed.addFields({ 
+                name: '投稿メッセージ', 
+                value: `[メッセージを表示](${sentMessage.url})`, 
+                inline: false 
+            });
+
+            await adminLogChannel.send({ embeds: [embed] });
+        } catch (error) {
+            console.error('管理者ログの送信に失敗しました:', error);
+        }
+    }
 }; 
