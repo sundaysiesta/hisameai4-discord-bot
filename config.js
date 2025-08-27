@@ -24,6 +24,12 @@ module.exports = {
     MENTION_COOLDOWN: 30 * 1000, // 30秒（anonymousと同じ）
     MENTION_HELP_COOLDOWN: 5 * 60 * 1000, // 5分（説明表示用）
     MENTION_MAX_LENGTH: 144, // 最大文字数（anonymousと同じ）
+    // ファイルサイズ制限設定
+    MAX_FILE_SIZE: 25 * 1024 * 1024, // 25MB（Discordの制限）
+    MAX_IMAGE_SIZE: 10 * 1024 * 1024, // 10MB（画像用）
+    MAX_VIDEO_SIZE: 25 * 1024 * 1024, // 25MB（動画用）
+    ALLOWED_IMAGE_TYPES: ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'],
+    ALLOWED_VIDEO_TYPES: ['video/mp4', 'video/webm', 'video/quicktime'],
     PHRASES_TO_COMBINE: ['確認してください', 'よろしくお願いします'],
     STOP_WORDS: new Set([
         'する', 'いる', 'なる', 'れる', 'ある', 'ない', 'です', 'ます', 'こと', 'もの',

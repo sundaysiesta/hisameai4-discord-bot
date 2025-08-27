@@ -104,5 +104,70 @@ async function getAllKeys(redis, pattern) {
     return keys;
 }
 
+// ファイルサイズとタイプの検証関数
+function validateFile(file, config) {
+    const errors = [];
+    
+    // ファイルサイズチェック
+    if (file.size > config.MAX_FILE_SIZE) {
+        errors.push(`ファイルサイズが大きすぎます（最大${Math.round(config.MAX_FILE_SIZE / 1024 / 1024)}MB）`);
+    }
+    
+    // 画像ファイルの場合
+    if (file.contentType && file.contentType.startsWith('image/')) {
+        if (file.size > config.MAX_IMAGE_SIZE) {
+            errors.push(`画像ファイルが大きすぎます（最大${Math.round(config.MAX_IMAGE_SIZE / 1024 / 1024)}MB）`);
+        }
+        if (!config.ALLOWED_IMAGE_TYPES.includes(file.contentType)) {
+            errors.push(`サポートされていない画像形式です（${file.contentType}）`);
+        }
+    }
+    
+    // 動画ファイルの場合
+    if (file.contentType && file.contentType.startsWith('video/')) {
+        if (file.size > config.MAX_VIDEO_SIZE) {
+            errors.push(`動画ファイルが大きすぎます（最大${Math.round(config.MAX_VIDEO_SIZE / 1024 / 1024)}MB）`);
+        }
+        if (!config.ALLOWED_VIDEO_TYPES.includes(file.contentType)) {
+            errors.push(`サポートされていない動画形式です（${file.contentType}）`);
+        }
+    }
+    
+    return {
+        isValid: errors.length === 0,
+        errors: errors
+    };
+}
+
+// ファイルの安全な処理関数
+async function processFileSafely(file, config) {
+    try {
+        // ファイルサイズとタイプの検証
+        const validation = validateFile(file, config);
+        if (!validation.isValid) {
+            return {
+                success: false,
+                error: validation.errors.join(', ')
+            };
+        }
+        
+        // ファイルサイズが大きすぎる場合は警告
+        if (file.size > 5 * 1024 * 1024) { // 5MB以上
+            console.warn(`大きなファイルが処理されています: ${file.name} (${Math.round(file.size / 1024 / 1024)}MB)`);
+        }
+        
+        return {
+            success: true,
+            file: file
+        };
+    } catch (error) {
+        console.error('ファイル処理中にエラーが発生しました:', error);
+        return {
+            success: false,
+            error: 'ファイルの処理中にエラーが発生しました'
+        };
+    }
+}
+
 // 【最重要修正】toHalfWidthをエクスポートリストに追加
-module.exports = { postStickyMessage, sortClubChannels, getGenerationRoleName, safeIncrby, toKanjiNumber, toHalfWidth, getAllKeys };
+module.exports = { postStickyMessage, sortClubChannels, getGenerationRoleName, safeIncrby, toKanjiNumber, toHalfWidth, getAllKeys, validateFile, processFileSafely };

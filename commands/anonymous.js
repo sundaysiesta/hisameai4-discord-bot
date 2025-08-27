@@ -1,6 +1,7 @@
 const { SlashCommandBuilder, AttachmentBuilder, EmbedBuilder } = require('discord.js');
 const crypto = require('crypto');
 const config = require('../config.js');
+const { processFileSafely } = require('../utils/utility.js');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -13,12 +14,12 @@ module.exports = {
         )
         .addAttachmentOption(option =>
             option.setName('添付ファイル')
-                .setDescription('画像や動画などの添付ファイル')
+                .setDescription('画像や動画などの添付ファイル（最大25MB）')
                 .setRequired(false)
         )
         .addAttachmentOption(option =>
             option.setName('アイコン')
-                .setDescription('表示用アイコン画像')
+                .setDescription('表示用アイコン画像（最大10MB）')
                 .setRequired(false)
         )
         .addStringOption(option =>
@@ -44,6 +45,21 @@ module.exports = {
 
         if (content.includes('\n') || content.length > 144) {
             return interaction.reply({ content: '内容は改行禁止・144文字以内です。', ephemeral: true });
+        }
+
+        // ファイルサイズチェック
+        if (file) {
+            const fileCheck = await processFileSafely(file, config);
+            if (!fileCheck.success) {
+                return interaction.reply({ content: `添付ファイルエラー: ${fileCheck.error}`, ephemeral: true });
+            }
+        }
+
+        if (icon) {
+            const iconCheck = await processFileSafely(icon, config);
+            if (!iconCheck.success) {
+                return interaction.reply({ content: `アイコンファイルエラー: ${iconCheck.error}`, ephemeral: true });
+            }
         }
 
         // 匿名ID生成
@@ -87,7 +103,17 @@ module.exports = {
 
             await interaction.editReply({ content: '匿名で投稿しました。', ephemeral: true });
         } catch (e) {
-            await interaction.editReply({ content: '投稿に失敗しました。', ephemeral: true });
+            console.error('匿名投稿エラー:', e);
+            let errorMessage = '投稿に失敗しました。';
+            
+            // ファイルサイズ関連のエラーの場合
+            if (e.message && e.message.includes('size')) {
+                errorMessage = 'ファイルサイズが大きすぎます。Discordの制限（25MB）を確認してください。';
+            } else if (e.message && e.message.includes('413')) {
+                errorMessage = 'ファイルサイズが大きすぎます。Discordの制限（25MB）を確認してください。';
+            }
+            
+            await interaction.editReply({ content: errorMessage, ephemeral: true });
         }
     },
 
