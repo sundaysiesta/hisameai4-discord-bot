@@ -8,6 +8,10 @@ const { WebhookClient, EmbedBuilder } = require('discord.js');
 if (!global.dailyMessageBuffer) global.dailyMessageBuffer = {};
 const dailyMessageBuffer = global.dailyMessageBuffer;
 
+// メンション機能用のグローバル変数
+if (!global.mentionCooldown) global.mentionCooldown = {};
+if (!global.mentionHelpCooldown) global.mentionHelpCooldown = {};
+
 // テキストXP関連のクールダウンや付与処理は削除
 
 module.exports = {
@@ -32,8 +36,45 @@ module.exports = {
         const urlRegex = /https?:\/\/[\w/:%#\$&\?\(\)~\.=\+\-]+/gi;
         const hasUrl = urlRegex.test(textWithoutMention);
 
-        // 返信、everyoneメンション、または添付・リンクなしの場合は代理投稿しない
-        if (isMentionToBot && !isReply && !isEveryoneMention && (hasMedia || hasUrl)) {
+        // メンションのみの場合の説明表示（サーバー間クールダウン5分）
+        if (isMentionToBot && !isReply && !isEveryoneMention && !hasMedia && !hasUrl && !hasText) {
+            const now = Date.now();
+            const lastHelp = global.mentionHelpCooldown[message.guildId] || 0;
+            if (now - lastHelp < config.MENTION_HELP_COOLDOWN) {
+                return; // クールダウン中は何もしない
+            }
+            
+            // 使い方案内を表示
+            const helpEmbed = new EmbedBuilder()
+                .setColor('#0099ff')
+                .setTitle('📚 Botの使い方')
+                .setDescription('Botへのメンション付きで画像や動画、またはリンクを送信すると、代理で投稿します。\n\n**使い方例:**\n@Bot名 画像や動画（＋任意のテキスト）\n@Bot名 https://example.com\n@Bot名 テキストのみ（144文字以内・改行禁止）\n\n※以下の場合は代理投稿されません：\n• 返信メッセージ\n• @everyoneメンション');
+            
+            await message.reply({ embeds: [helpEmbed], flags: MessageFlags.Ephemeral }).catch(() => {});
+            global.mentionHelpCooldown[message.guildId] = now;
+            return;
+        }
+
+        // 返信、everyoneメンション、または添付・リンク・テキストなしの場合は代理投稿しない
+        if (isMentionToBot && !isReply && !isEveryoneMention && (hasMedia || hasUrl || hasText)) {
+            // ユーザーごとのクールダウンチェック（30秒）
+            const now = Date.now();
+            const lastMention = global.mentionCooldown[message.author.id] || 0;
+            if (now - lastMention < config.MENTION_COOLDOWN) {
+                const wait = Math.ceil((config.MENTION_COOLDOWN - (now - lastMention)) / 1000);
+                await message.reply({ content: `クールダウン中です。あと${wait}秒お待ちください。`, flags: MessageFlags.Ephemeral }).catch(() => {});
+                return;
+            }
+            global.mentionCooldown[message.author.id] = now;
+
+            // テキストのみの場合の文字数・改行チェック
+            if (hasText && !hasMedia && !hasUrl) {
+                if (textWithoutMention.includes('\n') || textWithoutMention.length > config.MENTION_MAX_LENGTH) {
+                    await message.reply({ content: `テキストは改行禁止・${config.MENTION_MAX_LENGTH}文字以内です。`, flags: MessageFlags.Ephemeral }).catch(() => {});
+                    return;
+                }
+            }
+
             // webhook取得または作成
             let webhook = null;
             const webhooks = await message.channel.fetchWebhooks();
@@ -66,7 +107,7 @@ module.exports = {
             // メッセージ削除を並列で実行
             message.delete().catch(() => {});
             const sent = await webhook.send({
-                content: (content || hasUrl) ? content : undefined,
+                content: content || undefined,
                 files: files,
                 username: displayName,
                 avatarURL: message.author.displayAvatarURL({ dynamic: true }),
@@ -79,13 +120,13 @@ module.exports = {
             return;
         }
 
-        // 返信、everyoneメンション、または添付・リンクなしの場合の処理
-        if (isMentionToBot && (isReply || isEveryoneMention || (!hasMedia && !hasUrl))) {
+        // 返信、everyoneメンションの場合の処理
+        if (isMentionToBot && (isReply || isEveryoneMention)) {
             // 使い方案内を表示
             const helpEmbed = new EmbedBuilder()
                 .setColor('#0099ff')
                 .setTitle('📚 Botの使い方')
-                .setDescription('Botへのメンション付きで画像や動画、またはリンクを送信すると、代理で投稿します。\n\n**使い方例:**\n@Bot名 画像や動画（＋任意のテキスト）\n@Bot名 https://example.com\n\n※以下の場合は代理投稿されません：\n• 返信メッセージ\n• @everyoneメンション\n• 添付ファイル・リンクがない場合');
+                .setDescription('Botへのメンション付きで画像や動画、またはリンクを送信すると、代理で投稿します。\n\n**使い方例:**\n@Bot名 画像や動画（＋任意のテキスト）\n@Bot名 https://example.com\n@Bot名 テキストのみ（144文字以内・改行禁止）\n\n※以下の場合は代理投稿されません：\n• 返信メッセージ\n• @everyoneメンション');
             await message.reply({ embeds: [helpEmbed], flags: MessageFlags.Ephemeral }).catch(() => {});
             return;
         }

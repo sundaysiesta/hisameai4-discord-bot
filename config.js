@@ -14,6 +14,16 @@ module.exports = {
     RESTART_NOTIFICATION_CHANNEL_ID: '1369627467991486605',
     NOTION_DATABASE_ID: process.env.NOTION_DATABASE_ID,
     NOTION_API_KEY: process.env.NOTION_API_KEY,
+    // 部活ランキング更新設定（週1回、日曜日の午前0時に更新）
+    CLUB_RANKING_UPDATE_CRON: '0 0 * * 0',
+    // メモリ管理設定
+    MEMORY_CLEANUP_INTERVAL: 60 * 60 * 1000, // 1時間ごと
+    ANONYMOUS_COOLDOWN_EXPIRY: 24 * 60 * 60 * 1000, // 24時間
+    PROXY_DELETE_MAP_EXPIRY: 7 * 24 * 60 * 60 * 1000, // 7日間
+    // メンション機能用設定
+    MENTION_COOLDOWN: 30 * 1000, // 30秒（anonymousと同じ）
+    MENTION_HELP_COOLDOWN: 5 * 60 * 1000, // 5分（説明表示用）
+    MENTION_MAX_LENGTH: 144, // 最大文字数（anonymousと同じ）
     PHRASES_TO_COMBINE: ['確認してください', 'よろしくお願いします'],
     STOP_WORDS: new Set([
         'する', 'いる', 'なる', 'れる', 'ある', 'ない', 'です', 'ます', 'こと', 'もの',

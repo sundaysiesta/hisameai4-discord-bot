@@ -36,83 +36,69 @@ async function getLatestCommitInfo() {
   }
 }
 
-
-async function postOrEdit(channel, redisKey, payload) {
-    const messageId = await channel.client.redis.get(redisKey);
-    let message;
-    if (messageId) {
-        try {
-            message = await channel.messages.fetch(messageId);
-            await message.edit(payload);
-        } catch (error) {
-            console.error(`Failed to edit message ${messageId}, posting new one.`, error);
-            message = await channel.send(payload);
-            await channel.client.redis.set(redisKey, message.id);
+// グローバル変数のクリーンアップ関数
+function cleanupGlobalVariables() {
+    const now = Date.now();
+    
+    // 匿名投稿クールダウンのクリーンアップ
+    if (global.anonymousCooldown) {
+        for (const [userId, timestamp] of Object.entries(global.anonymousCooldown)) {
+            if (now - timestamp > config.ANONYMOUS_COOLDOWN_EXPIRY) {
+                delete global.anonymousCooldown[userId];
+            }
         }
-    } else {
-        message = await channel.send(payload);
-        await channel.client.redis.set(redisKey, message.id);
     }
-    return message;
+    
+    // 代理投稿削除マップのクリーンアップ
+    if (global.proxyDeleteMap) {
+        for (const [messageId, timestamp] of Object.entries(global.proxyDeleteMap)) {
+            if (now - timestamp > config.PROXY_DELETE_MAP_EXPIRY) {
+                delete global.proxyDeleteMap[messageId];
+            }
+        }
+    }
+    
+    // メンション機能クールダウンのクリーンアップ（24時間以上古いデータ）
+    if (global.mentionCooldown) {
+        const oneDay = 24 * 60 * 60 * 1000;
+        for (const [userId, timestamp] of Object.entries(global.mentionCooldown)) {
+            if (now - timestamp > oneDay) {
+                delete global.mentionCooldown[userId];
+            }
+        }
+    }
+    
+    // メンション機能説明表示クールダウンのクリーンアップ（1時間以上古いデータ）
+    if (global.mentionHelpCooldown) {
+        const oneHour = 60 * 60 * 1000;
+        for (const [guildId, timestamp] of Object.entries(global.mentionHelpCooldown)) {
+            if (now - timestamp > oneHour) {
+                delete global.mentionHelpCooldown[guildId];
+            }
+        }
+    }
+    
+    // 日次メッセージバッファのクリーンアップ（1週間以上古いデータ）
+    if (global.dailyMessageBuffer) {
+        const oneWeek = 7 * 24 * 60 * 60 * 1000;
+        for (const [channelId, lastUpdate] of Object.entries(global.dailyMessageBuffer)) {
+            if (now - lastUpdate > oneWeek) {
+                delete global.dailyMessageBuffer[channelId];
+            }
+        }
+    }
+    
+    console.log('グローバル変数のクリーンアップを実行しました');
 }
 
-async function updatePermanentRankings(guild, redis, notion) {
-    const rankingChannel = await guild.client.channels.fetch(config.RANKING_CHANNEL_ID).catch(() => null);
-    if (!rankingChannel) return;
-
-    let clubMessage;
-
+// 部活チャンネルのソートのみを実行する関数（ランキング表示なし）
+async function sortClubChannelsOnly(guild, redis) {
     try {
-        const clubCategory = await guild.channels.fetch(config.CLUB_CATEGORY_ID).catch(() => null);
-        let clubRankingEmbed = new EmbedBuilder().setTitle('部活アクティブランキング (週間)').setColor(0x82E0AA).setTimestamp();
-        if (clubCategory) {
-             await guild.members.fetch(); // 全メンバーをキャッシュ
-             const clubChannels = clubCategory.children.cache.filter(ch => !config.EXCLUDED_CHANNELS.includes(ch.id) && ch.type === ChannelType.GuildText);
-             let clubRanking = [];
-             for (const channel of clubChannels.values()) {
-                 const count = await redis.get(`weekly_message_count:${channel.id}`) || 0;
-                 clubRanking.push({ id: channel.id, count: Number(count), position: channel.position });
-             }
-             clubRanking.sort((a, b) => (b.count !== a.count) ? b.count - a.count : a.position - b.position);
-             if (clubRanking.length === 0) {
-                 clubRankingEmbed.setDescription('現在、活動中の部活はありません。');
-             } else {
-                 const descriptionPromises = clubRanking.map(async (club, i) => {
-                     // 1. redisから部長ロールID取得
-                     let leaderRoleId = await redis.get(`leader_roles:${club.id}`);
-                     // 2. なければNotionから取得（ここは省略可、必要なら追加）
-                     let leaderMention = '未設定';
-                     if (leaderRoleId) {
-                         // 3. Notion人物DBから部長ロールプロパティ一致の人物を検索
-                         const notionResponse = await notion.databases.query({
-                             database_id: config.NOTION_DATABASE_ID,
-                             filter: {
-                                 or: [
-                                     { property: '部長ロール', rich_text: { equals: leaderRoleId } },
-                                     { property: '部長ロール', rich_text: { contains: leaderRoleId } }
-                                 ]
-                             }
-                         });
-                         if (notionResponse.results.length > 0) {
-                             const userId = notionResponse.results[0].properties['DiscordユーザーID']?.rich_text?.[0]?.plain_text;
-                             if (userId) {
-                                 leaderMention = `<@${userId}>`;
-                             } else {
-                                 leaderMention = '不在';
-                             }
-                         } else {
-                             leaderMention = '不在';
-                         }
-                     }
-                     return `**${i + 1}位:** <#${club.id}>  **部長:** ${leaderMention}`;
-                 });
-                 clubRankingEmbed.setDescription((await Promise.all(descriptionPromises)).join('\n'));
-             }
-         } else {
-             clubRankingEmbed.setDescription('部活カテゴリが見つかりません。');
-         }
-        clubMessage = await postOrEdit(rankingChannel, 'club_ranking_message_id', { embeds: [clubRankingEmbed] });
-    } catch(e) { console.error("部活ランキング更新エラー:", e); }
+        await sortClubChannels(redis, guild);
+        console.log('部活チャンネルのソートを実行しました');
+    } catch (error) {
+        console.error('部活チャンネルソートエラー:', error);
+    }
 }
 
 // グローバル: 部活チャンネルごとのメッセージ数をメモリ内でカウント
@@ -138,6 +124,9 @@ module.exports = {
                 lastLogTime = now;
             }
         }, 60 * 1000); // 1分ごとにチェック
+
+        // 定期的なメモリクリーンアップ
+        setInterval(cleanupGlobalVariables, config.MEMORY_CLEANUP_INTERVAL);
 
         try {
             const savedStatus = await redis.get('bot_status_text');
@@ -183,26 +172,26 @@ module.exports = {
             if (!counterExists) await redis.set('anonymous_message_counter', 216);
         } catch (error) { console.error('起動時の初期化処理でエラー:', error); }
 
-        // ---【追加】起動時に即時ランキング更新---
+        // ---【修正】起動時に即時部活ソート実行---
         try {
             const guild = client.guilds.cache.first();
             if (guild) {
-                await updatePermanentRankings(guild, redis, notion);
-                console.log('起動時にランキングを即時更新しました。');
+                await sortClubChannelsOnly(guild, redis);
+                console.log('起動時に部活チャンネルのソートを実行しました。');
             }
         } catch (e) {
-            console.error('起動時ランキング即時更新エラー:', e);
+            console.error('起動時部活ソートエラー:', e);
         }
 
-        // ---【修正】cron式を5分ごとに---
-        cron.schedule('*/5 * * * *', async () => {
+        // ---【修正】部活ソートを週1回（日曜日午前0時）に実行---
+        cron.schedule(config.CLUB_RANKING_UPDATE_CRON, async () => {
             try {
                 const guild = client.guilds.cache.first();
                 if (!guild) return;
                 
-                await updatePermanentRankings(guild, redis, notion);
+                await sortClubChannelsOnly(guild, redis);
             } catch (e) {
-                console.error('ランキング自動更新cronエラー:', e);
+                console.error('部活ソート自動実行cronエラー:', e);
             }
         });
         
@@ -217,7 +206,6 @@ module.exports = {
             console.log('部活メッセージ数を1日分まとめてRedisに反映しました。');
         };
         cron.schedule('0 0 * * *', flushClubMessageCounts, { scheduled: true, timezone: 'Asia/Tokyo' });
-
 
 	},
 };
