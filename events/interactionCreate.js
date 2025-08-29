@@ -3,6 +3,7 @@ const config = require('../config.js');
 const { postStickyMessage } = require('../utils/utility.js'); // postStickyMessageをインポート
 
 const cooldowns = new Map();
+const clubCreationCooldowns = new Map(); // 部活作成用のクールダウン管理
 const webhookClient = new WebhookClient({ url: config.ANONYMOUS_WEBHOOK_URL });
 
 module.exports = {
@@ -32,6 +33,25 @@ module.exports = {
                     await interaction.showModal(modal);
                 }
                 if (interaction.customId === config.CREATE_CLUB_BUTTON_ID) {
+                    // 部活作成のクールダウンチェック
+                    const now = Date.now();
+                    const userClubCooldown = clubCreationCooldowns.get(interaction.user.id);
+                    if (userClubCooldown && now < userClubCooldown) {
+                        const remainingHours = Math.ceil((userClubCooldown - now) / (1000 * 60 * 60));
+                        const remainingMinutes = Math.ceil(((userClubCooldown - now) % (1000 * 60 * 60)) / (1000 * 60));
+                        let remainingText = '';
+                        if (remainingHours > 0) {
+                            remainingText = `あと ${remainingHours} 時間`;
+                            if (remainingMinutes > 0) {
+                                remainingText += ` ${remainingMinutes} 分`;
+                            }
+                        } else {
+                            remainingText = `あと ${remainingMinutes} 分`;
+                        }
+                        remainingText += 'お待ちください。';
+                        return interaction.reply({ content: `部活作成は24時間に1回までです。${remainingText}`, flags: [MessageFlags.Ephemeral] });
+                    }
+                    
                     const modal = new ModalBuilder().setCustomId(config.CREATE_CLUB_MODAL_ID).setTitle('部活作成フォーム');
                     const nameInput = new TextInputBuilder().setCustomId('club_name').setLabel('部活名').setStyle(TextInputStyle.Short).setRequired(true);
                     const activityInput = new TextInputBuilder().setCustomId('club_activity').setLabel('活動内容').setStyle(TextInputStyle.Paragraph).setRequired(true);
@@ -101,6 +121,7 @@ module.exports = {
                         }
                         
                         await interaction.editReply({ content: `部活「${clubName}」を設立しました！ ${newChannel} を確認してください。` });
+                        clubCreationCooldowns.set(interaction.user.id, Date.now() + 24 * 60 * 60 * 1000); // 部活作成完了後にクールダウンを設定
 
                     } catch (error) {
                         console.error('部活作成プロセス中にエラー:', error);
