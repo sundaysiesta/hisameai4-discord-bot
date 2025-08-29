@@ -4,7 +4,7 @@ const { postStickyMessage } = require('../utils/utility.js'); // postStickyMessa
 
 const cooldowns = new Map();
 const clubCreationCooldowns = new Map(); // 部活作成用のクールダウン管理
-const webhookClient = new WebhookClient({ url: config.ANONYMOUS_WEBHOOK_URL });
+let webhookClient = null; // 遅延初期化に変更
 
 module.exports = {
 	name: Events.InteractionCreate,
@@ -77,6 +77,12 @@ module.exports = {
             else if (interaction.isModalSubmit()) {
                 if (interaction.customId === config.ANONYMOUS_MODAL_ID) {
                     await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
+                    if (!config.ANONYMOUS_WEBHOOK_URL) {
+                        return interaction.editReply({ content: '匿名投稿は現在利用できません（設定未完了）。管理者に連絡してください。' });
+                    }
+                    if (!webhookClient) {
+                        webhookClient = new WebhookClient({ url: config.ANONYMOUS_WEBHOOK_URL });
+                    }
                     const messageContent = interaction.fields.getTextInputValue('messageInput');
                     if (messageContent.includes('\n')) {
                         return interaction.editReply({ content: 'エラー: メッセージに改行を含めることはできません。' });

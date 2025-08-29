@@ -77,13 +77,17 @@ module.exports = {
 
             // ファイルサイズチェック
             if (hasMedia) {
+                const preparedFiles = [];
                 for (const attachment of attachments.values()) {
                     const fileCheck = await processFileSafely(attachment, config);
                     if (!fileCheck.success) {
                         await message.reply({ content: `ファイルエラー: ${fileCheck.error}`, flags: MessageFlags.Ephemeral }).catch(() => {});
                         return;
                     }
+                    preparedFiles.push(fileCheck.file);
                 }
+                // preparedFilesを後段で使用するのでスコープに残す
+                message._preparedFiles = preparedFiles;
             }
 
             try {
@@ -106,7 +110,7 @@ module.exports = {
                     });
                 }
                 // 送信内容構築
-                const files = Array.from(attachments.values());
+                const files = hasMedia ? (message._preparedFiles || Array.from(attachments.values())) : Array.from(attachments.values());
                 let content = textWithoutMention;
                 // 削除ボタン追加
                 const delBtn = new ActionRowBuilder().addComponents(

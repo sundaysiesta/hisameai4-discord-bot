@@ -92,7 +92,7 @@ module.exports = {
         try {
             const sentMessage = await webhook.send({
                 content: content,
-                files: file ? [file] : [],
+                files: file ? [ (file.attachment ? file : file) ] : [],
                 username: displayName,
                 avatarURL: null,
                 allowedMentions: { parse: [] }

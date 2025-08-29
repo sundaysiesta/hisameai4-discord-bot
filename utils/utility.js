@@ -1,5 +1,6 @@
 const { ChannelType } = require('discord.js');
 const config = require('../config');
+const { createCanvas, loadImage } = require('canvas');
 
 const levelUpLocks = new Set();
 
@@ -7,13 +8,16 @@ async function postStickyMessage(client, channel, stickyCustomId, createMessageP
     try {
         const messages = await channel.messages.fetch({ limit: 10 });
         const lastMessage = messages.first();
-        if (lastMessage?.author.id === client.user.id && lastMessage.components[0]?.components[0]?.customId === stickyCustomId) {
+        const lastComponents = Array.isArray(lastMessage?.components) ? lastMessage.components : [];
+        const lastCustomId = lastComponents[0]?.components?.[0]?.customId;
+        if (lastMessage?.author?.id === client.user.id && lastCustomId === stickyCustomId) {
             return;
         }
-        const oldStickyMessages = messages.filter(msg =>
-            msg.author.id === client.user.id &&
-            msg.components[0]?.components[0]?.customId === stickyCustomId
-        );
+        const oldStickyMessages = messages.filter(msg => {
+            const comps = Array.isArray(msg?.components) ? msg.components : [];
+            const cid = comps[0]?.components?.[0]?.customId;
+            return msg.author?.id === client.user.id && cid === stickyCustomId;
+        });
         for (const msg of oldStickyMessages.values()) {
             await msg.delete().catch(() => {});
         }
@@ -136,70 +140,143 @@ async function getAllKeys(redis, pattern) {
     return keys;
 }
 
-// ファイルサイズとタイプの検証関数
+function getFileExtension(name) {
+    if (!name) return '';
+    const idx = name.lastIndexOf('.');
+    return idx >= 0 ? name.slice(idx + 1).toLowerCase() : '';
+}
+
+function isAllowedImageType(file, config) {
+    const byMime = !!(file.contentType && config.ALLOWED_IMAGE_TYPES.includes(file.contentType));
+    const ext = getFileExtension(file.name);
+    const allowedExts = ['jpg','jpeg','png','gif','webp'];
+    const byExt = allowedExts.includes(ext);
+    return byMime || byExt;
+}
+
+async function getImageDimensions(url) {
+    try {
+        const res = await fetch(url);
+        const arrayBuffer = await res.arrayBuffer();
+        const buffer = Buffer.from(arrayBuffer);
+        const sizeOf = require('image-size');
+        const dim = sizeOf(buffer);
+        return { width: dim.width || 0, height: dim.height || 0 };
+    } catch { return { width: 0, height: 0 }; }
+}
+
+// 画像の長辺ピクセル制限
+const MAX_IMAGE_EDGE_PX = 4096;
+
+// 画像を最大辺に合わせてリサイズ。JPEGに再エンコード。
+async function resizeImageFromUrl(url, targetMaxEdgePx, outputExt = 'jpeg') {
+    const res = await fetch(url);
+    const arrayBuffer = await res.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    const img = await loadImage(buffer);
+    const width = img.width;
+    const height = img.height;
+    if (!width || !height) return null;
+    const maxEdge = Math.max(width, height);
+    const scale = Math.min(1, targetMaxEdgePx / maxEdge);
+    if (scale >= 1) return null; // リサイズ不要
+    const newW = Math.max(1, Math.round(width * scale));
+    const newH = Math.max(1, Math.round(height * scale));
+    const canvas = createCanvas(newW, newH);
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0, newW, newH);
+    const mime = outputExt === 'png' ? 'image/png' : 'image/jpeg';
+    const outBuffer = outputExt === 'png' ? canvas.toBuffer('image/png') : canvas.toBuffer('image/jpeg', { quality: 0.85 });
+    return { buffer: outBuffer, mime };
+}
+
+// ファイルサイズとタイプの検証関数（動画は許可、画像に厳格適用）
 function validateFile(file, config) {
     const errors = [];
-    
-    // ファイルサイズチェック
+    if (!file) {
+        errors.push('ファイルが存在しません');
+        return { isValid: false, errors };
+    }
+
+    // 共通: Discord上限および独自上限
     if (file.size > config.MAX_FILE_SIZE) {
         errors.push(`ファイルサイズが大きすぎます（最大${Math.round(config.MAX_FILE_SIZE / 1024 / 1024)}MB）`);
     }
-    
-    // 画像ファイルの場合
+
+    // 画像の場合
     if (file.contentType && file.contentType.startsWith('image/')) {
         if (file.size > config.MAX_IMAGE_SIZE) {
-            errors.push(`画像ファイルが大きすぎます（最大${Math.round(config.MAX_IMAGE_SIZE / 1024 / 1024)}MB）`);
+            // リサイズ前提なので即エラーにはしない（prepareで縮小を試みる）。ここでは警告だけ。
         }
-        if (!config.ALLOWED_IMAGE_TYPES.includes(file.contentType)) {
-            errors.push(`サポートされていない画像形式です（${file.contentType}）`);
+        if (!isAllowedImageType(file, config)) {
+            errors.push(`サポートされていない画像形式または拡張子です（${file.contentType || 'unknown'}/${getFileExtension(file.name)}）`);
         }
     }
-    
-    // 動画ファイルの場合
+
+    // 動画はタイプ許可とサイズ上限のみ（変換はしない）
     if (file.contentType && file.contentType.startsWith('video/')) {
-        if (file.size > config.MAX_VIDEO_SIZE) {
-            errors.push(`動画ファイルが大きすぎます（最大${Math.round(config.MAX_VIDEO_SIZE / 1024 / 1024)}MB）`);
-        }
         if (!config.ALLOWED_VIDEO_TYPES.includes(file.contentType)) {
             errors.push(`サポートされていない動画形式です（${file.contentType}）`);
         }
+        if (file.size > config.MAX_VIDEO_SIZE) {
+            errors.push(`動画ファイルが大きすぎます（最大${Math.round(config.MAX_VIDEO_SIZE / 1024 / 1024)}MB）`);
+        }
     }
-    
+
     return {
         isValid: errors.length === 0,
         errors: errors
     };
 }
 
-// ファイルの安全な処理関数
+// 送信用に添付を準備（必要なら画像を縮小）。
+// 戻り値: そのままdiscord.jsのfilesに渡せるオブジェクト。
+async function prepareFileForSend(file, config) {
+    // まず基本検証
+    const validation = validateFile(file, config);
+    if (!validation.isValid) {
+        return { success: false, error: validation.errors.join(', ') };
+    }
+
+    // 画像は長辺・サイズを確認して縮小を試みる
+    if (file.contentType && file.contentType.startsWith('image/')) {
+        try {
+            const { width, height } = await getImageDimensions(file.url);
+            const maxEdge = Math.max(width, height);
+            const needResizeByEdge = maxEdge > MAX_IMAGE_EDGE_PX;
+            const needResizeBySize = file.size > config.MAX_IMAGE_SIZE;
+            if (needResizeByEdge || needResizeBySize) {
+                const out = await resizeImageFromUrl(file.url, MAX_IMAGE_EDGE_PX, 'jpeg');
+                if (out && out.buffer) {
+                    const baseName = file.name ? file.name.replace(/\.[^.]+$/, '') : 'image';
+                    return {
+                        success: true,
+                        file: { attachment: out.buffer, name: `${baseName}.jpg` }
+                    };
+                }
+            }
+        } catch (e) {
+            console.warn('画像リサイズに失敗したため原本を使用します:', e?.message || e);
+        }
+    }
+
+    // リサイズ不要、または動画・その他はそのまま返す
+    return { success: true, file };
+}
+
+// ファイルの安全な処理関数（後方互換: 以前のインターフェースを維持）
 async function processFileSafely(file, config) {
     try {
-        // ファイルサイズとタイプの検証
-        const validation = validateFile(file, config);
-        if (!validation.isValid) {
-            return {
-                success: false,
-                error: validation.errors.join(', ')
-            };
+        const prepared = await prepareFileForSend(file, config);
+        if (!prepared.success) {
+            return { success: false, error: prepared.error };
         }
-        
-        // ファイルサイズが大きすぎる場合は警告
-        if (file.size > 5 * 1024 * 1024) { // 5MB以上
-            console.warn(`大きなファイルが処理されています: ${file.name} (${Math.round(file.size / 1024 / 1024)}MB)`);
-        }
-        
-        return {
-            success: true,
-            file: file
-        };
+        return { success: true, file: prepared.file };
     } catch (error) {
         console.error('ファイル処理中にエラーが発生しました:', error);
-        return {
-            success: false,
-            error: 'ファイルの処理中にエラーが発生しました'
-        };
+        return { success: false, error: 'ファイルの処理中にエラーが発生しました' };
     }
 }
 
 // 【最重要修正】toHalfWidthをエクスポートリストに追加
-module.exports = { postStickyMessage, sortClubChannels, getGenerationRoleName, safeIncrby, toKanjiNumber, toHalfWidth, getAllKeys, validateFile, processFileSafely };
+module.exports = { postStickyMessage, sortClubChannels, getGenerationRoleName, safeIncrby, toKanjiNumber, toHalfWidth, getAllKeys, validateFile, processFileSafely, prepareFileForSend };
