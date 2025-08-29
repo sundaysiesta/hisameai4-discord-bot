@@ -172,17 +172,6 @@ module.exports = {
             if (!counterExists) await redis.set('anonymous_message_counter', 216);
         } catch (error) { console.error('起動時の初期化処理でエラー:', error); }
 
-        // ---【修正】起動時に即時部活ソート実行---
-        try {
-            const guild = client.guilds.cache.first();
-            if (guild) {
-                await sortClubChannelsOnly(guild, redis);
-                console.log('起動時に部活チャンネルのソートを実行しました。');
-            }
-        } catch (e) {
-            console.error('起動時部活ソートエラー:', e);
-        }
-
         // ---【修正】部活ソートを週1回（日曜日午前0時）に実行---
         cron.schedule(config.CLUB_RANKING_UPDATE_CRON, async () => {
             try {

@@ -102,11 +102,26 @@ module.exports = {
                     const clubActivity = interaction.fields.getTextInputValue('club_activity');
                     const creator = interaction.member;
                     try {
+                        // カテゴリー1のチャンネル数をチェック
+                        const category1 = await interaction.guild.channels.fetch(config.CLUB_CATEGORY_ID).catch(() => null);
+                        let targetCategoryId = config.CLUB_CATEGORY_ID;
+                        
+                        if (category1 && category1.children.cache.size >= 50) {
+                            // カテゴリー1が50チャンネルに達している場合、カテゴリー2を使用
+                            const category2 = await interaction.guild.channels.fetch(config.CLUB_CATEGORY_ID_2).catch(() => null);
+                            if (category2) {
+                                targetCategoryId = config.CLUB_CATEGORY_ID_2;
+                                console.log(`カテゴリー1が満杯のため、カテゴリー2に部活「${clubName}」を作成します。`);
+                            } else {
+                                throw new Error('カテゴリー2が見つかりません。');
+                            }
+                        }
+                        
                         const leaderRole = await interaction.guild.roles.create({ name: `${clubName}部長` });
                         const newChannel = await interaction.guild.channels.create({
                             name: clubName,
                             type: ChannelType.GuildText,
-                            parent: config.CLUB_CATEGORY_ID,
+                            parent: targetCategoryId,
                             topic: `部長: <@${creator.id}>\n活動内容: ${clubActivity}`,
                             permissionOverwrites: [
                                 { id: leaderRole.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.ManageChannels, PermissionsBitField.Flags.ManageMessages] },
@@ -120,7 +135,8 @@ module.exports = {
                             if(roleToRemove) await creator.roles.remove(roleToRemove);
                         }
                         
-                        await interaction.editReply({ content: `部活「${clubName}」を設立しました！ ${newChannel} を確認してください。` });
+                        const categoryName = targetCategoryId === config.CLUB_CATEGORY_ID ? 'カテゴリー1' : 'カテゴリー2';
+                        await interaction.editReply({ content: `部活「${clubName}」を${categoryName}に設立しました！ ${newChannel} を確認してください。` });
                         clubCreationCooldowns.set(interaction.user.id, Date.now() + 24 * 60 * 60 * 1000); // 部活作成完了後にクールダウンを設定
 
                     } catch (error) {

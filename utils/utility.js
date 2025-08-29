@@ -23,21 +23,53 @@ async function postStickyMessage(client, channel, stickyCustomId, createMessageP
     }
 }
 async function sortClubChannels(redis, guild) {
-    const category = await guild.channels.fetch(config.CLUB_CATEGORY_ID).catch(() => null);
-    if (!category || category.type !== ChannelType.GuildCategory) return;
-    const clubChannels = category.children.cache.filter(ch => !config.EXCLUDED_CHANNELS.includes(ch.id) && ch.type === ChannelType.GuildText);
-    let ranking = [];
-    for (const channel of clubChannels.values()) {
-        const count = await redis.get(`weekly_message_count:${channel.id}`) || 0;
-        ranking.push({ id: channel.id, count: Number(count), position: channel.position });
+    let allClubChannels = [];
+    
+    // 両方のカテゴリーから部活チャンネルを取得
+    for (const categoryId of config.CLUB_CATEGORIES) {
+        const category = await guild.channels.fetch(categoryId).catch(() => null);
+        if (category && category.type === ChannelType.GuildCategory) {
+            const clubChannels = category.children.cache.filter(ch => 
+                !config.EXCLUDED_CHANNELS.includes(ch.id) && 
+                ch.type === ChannelType.GuildText
+            );
+            allClubChannels.push(...clubChannels.values());
+        }
     }
+    
+    if (allClubChannels.length === 0) return;
+    
+    // メッセージ数でランキングを作成
+    let ranking = [];
+    for (const channel of allClubChannels) {
+        const count = await redis.get(`weekly_message_count:${channel.id}`) || 0;
+        ranking.push({ 
+            id: channel.id, 
+            count: Number(count), 
+            position: channel.position,
+            categoryId: channel.parentId 
+        });
+    }
+    
+    // メッセージ数でソート（同じ場合は位置でソート）
     ranking.sort((a, b) => (b.count !== a.count) ? b.count - a.count : a.position - b.position);
-    const topChannelOffset = 2; 
-    for (let i = 0; i < ranking.length; i++) {
-        const channel = await guild.channels.fetch(ranking[i].id).catch(() => null);
-        const newPosition = i + topChannelOffset;
-        if (channel && channel.position !== newPosition) {
-            await channel.setPosition(newPosition).catch(e => console.error(`setPosition Error: ${e.message}`));
+    
+    // 各カテゴリー内でソート
+    for (const categoryId of config.CLUB_CATEGORIES) {
+        const category = await guild.channels.fetch(categoryId).catch(() => null);
+        if (!category) continue;
+        
+        const categoryChannels = ranking.filter(r => r.categoryId === categoryId);
+        const topChannelOffset = 2;
+        
+        for (let i = 0; i < categoryChannels.length; i++) {
+            const channel = await guild.channels.fetch(categoryChannels[i].id).catch(() => null);
+            const newPosition = i + topChannelOffset;
+            if (channel && channel.position !== newPosition) {
+                await channel.setPosition(newPosition).catch(e => 
+                    console.error(`setPosition Error for ${channel.name}: ${e.message}`)
+                );
+            }
         }
     }
 }
