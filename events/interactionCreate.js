@@ -1,4 +1,4 @@
-const { Events, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, WebhookClient, PermissionsBitField, ChannelType, ButtonBuilder, ButtonStyle, MessageFlags } = require('discord.js');
+const { Events, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, WebhookClient, PermissionsBitField, ChannelType, ButtonBuilder, ButtonStyle, MessageFlags, EmbedBuilder } = require('discord.js');
 const config = require('../config.js');
 const { postStickyMessage } = require('../utils/utility.js'); // postStickyMessageをインポート
 
@@ -144,6 +144,36 @@ module.exports = {
                         const categoryName = targetCategoryId === config.CLUB_CATEGORY_ID ? 'カテゴリー1' : 'カテゴリー2';
                         await interaction.editReply({ content: `部活「${clubName}」を${categoryName}に設立しました！ ${newChannel} を確認してください。` });
                         clubCreationCooldowns.set(interaction.user.id, Date.now() + 24 * 60 * 60 * 1000); // 部活作成完了後にクールダウンを設定
+
+                        // 部活作成完了の埋め込みメッセージを作成
+                        const clubEmbed = new EmbedBuilder()
+                            .setColor(0x00ff00)
+                            .setTitle('🎉 新しい部活が設立されました！')
+                            .addFields(
+                                { name: '部活名', value: clubName, inline: true },
+                                { name: '部長', value: `<@${creator.id}>`, inline: true },
+                                { name: '活動内容', value: clubActivity, inline: false },
+                                { name: 'チャンネル', value: `${newChannel}`, inline: false }
+                            )
+                            .setTimestamp()
+                            .setFooter({ text: 'HisameAI Mark.4' });
+
+                        // 部活チャンネルに埋め込みメッセージを送信
+                        try {
+                            await newChannel.send({ embeds: [clubEmbed] });
+                        } catch (error) {
+                            console.error('部活チャンネルへの埋め込みメッセージ送信エラー:', error);
+                        }
+
+                        // メインチャンネルに埋め込みメッセージを送信
+                        try {
+                            const mainChannel = await interaction.guild.channels.fetch(config.MAIN_CHANNEL_ID);
+                            if (mainChannel) {
+                                await mainChannel.send({ embeds: [clubEmbed] });
+                            }
+                        } catch (error) {
+                            console.error('メインチャンネルへの埋め込みメッセージ送信エラー:', error);
+                        }
 
                     } catch (error) {
                         console.error('部活作成プロセス中にエラー:', error);

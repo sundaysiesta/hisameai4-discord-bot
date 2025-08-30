@@ -17,10 +17,10 @@ if (!global.mentionHelpCooldown) global.mentionHelpCooldown = {};
 module.exports = {
     name: Events.MessageCreate,
     async execute(message, redis, notion) {
+        // 匿名投稿のwebhookメッセージが送信された場合、ボタンを更新
         if (message.webhookId && message.channel.id === config.ANONYMOUS_CHANNEL_ID) {
-            const payload = { components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(config.STICKY_BUTTON_ID).setLabel('書き込む').setStyle(ButtonStyle.Success).setEmoji('✍️'))] };
-            await postStickyMessage(message.client, message.channel, config.STICKY_BUTTON_ID, payload);
-            return;
+            // 匿名投稿のwebhookメッセージの場合のみボタンを更新
+            // 通常の投稿処理は続行する
         }
         if (message.author.bot || !message.inGuild()) return;
 
