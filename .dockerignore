@@ -2,3 +2,7 @@
 .gitignore
 node_modules
 .env
+README.md
+Cursor.lnk
+gpush.sh
+.github
