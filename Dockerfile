@@ -1,28 +1,35 @@
-# Node.jsの公式イメージをベースにする
-FROM node:18-slim
+# Node.jsの公式イメージをベースにする（より安定したバージョン）
+FROM node:18-alpine
 
-# 【修正】日本語フォント(Noto Sans JP)をインストールする手順を追加
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    libcairo2-dev \
-    libpango1.0-dev \
-    libjpeg-dev \
-    libgif-dev \
-    librsvg2-dev \
-    fonts-noto-cjk \
-    && rm -rf /var/lib/apt/lists/*
+# 必要なパッケージをインストール
+RUN apk add --no-cache \
+    build-base \
+    cairo-dev \
+    pango-dev \
+    jpeg-dev \
+    giflib-dev \
+    librsvg-dev \
+    fontconfig \
+    ttf-dejavu \
+    && fc-cache -fv
 
 # アプリケーションの作業場所を作成
 WORKDIR /app
 
+# npmのキャッシュをクリア
+RUN npm cache clean --force
+
 # 最初にパッケージ管理ファイルだけをコピー
 COPY package*.json ./
 
-# 本番環境向けの、より信頼性の高いインストールコマンドを使用する
-RUN npm ci --only=production
+# 依存関係をインストール
+RUN npm ci --production=false
 
 # Botの全ソースコードを作業場所にコピー
 COPY . .
+
+# 不要なファイルを削除してイメージサイズを削減
+RUN npm prune --production
 
 # Botを起動するコマンド
 CMD ["node", "index.js"]
