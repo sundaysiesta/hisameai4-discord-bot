@@ -10,7 +10,7 @@ RUN apk add --no-cache \
     giflib-dev \
     librsvg-dev \
     fontconfig \
-    ttf-dejavu \
+    font-noto-cjk \
     && fc-cache -fv
 
 # アプリケーションの作業場所を作成
