@@ -62,9 +62,11 @@ async function createWeeklyRankingEmbed(client, redis) {
         });
         
         // 全部活表示（文字数制限対応）
-        let rankingText = '';
-        let currentLength = 0;
         const maxLength = 1000; // 安全マージン
+        const embeds = [];
+        let currentEmbedText = '';
+        let currentLength = 0;
+        let embedCount = 0;
         
         for (let i = 0; i < ranking.length; i++) {
             const club = ranking[i];
@@ -72,31 +74,60 @@ async function createWeeklyRankingEmbed(client, redis) {
             const clubText = `${medal} **${club.name}** 📊${club.messageCount} 👥${club.activeMembers}人`;
             
             // 文字数チェック
-            if (currentLength + clubText.length + (i > 0 ? 3 : 0) > maxLength) {
-                rankingText += `\n...他${ranking.length - i}部活`;
-                break;
+            if (currentLength + clubText.length + (currentEmbedText ? 3 : 0) > maxLength) {
+                // 現在の埋め込みを完成させる
+                if (currentEmbedText) {
+                    const embed = new EmbedBuilder()
+                        .setColor(0xFFD700)
+                        .setTitle(embedCount === 0 ? '🏆 週間部活ランキング' : `🏆 週間部活ランキング (続き)`)
+                        .setDescription(embedCount === 0 ? 'アクティブ・部員数順の週間ランキングです\n（日曜0時に更新・部活チャンネルも自動で並び替えられます）' : '')
+                        .addFields(
+                            { name: '📈 ランキング', value: currentEmbedText, inline: false }
+                        )
+                        .setTimestamp()
+                        .setFooter({ text: 'HisameAI Mark.4' });
+                    embeds.push(embed);
+                }
+                
+                // 新しい埋め込みを開始
+                currentEmbedText = clubText;
+                currentLength = clubText.length;
+                embedCount++;
+            } else {
+                if (currentEmbedText) currentEmbedText += '\n';
+                currentEmbedText += clubText;
+                currentLength = currentEmbedText.length;
             }
-            
-            if (i > 0) rankingText += ' | ';
-            rankingText += clubText;
-            currentLength = rankingText.length;
         }
         
-        if (rankingText === '') {
-            rankingText = 'データがありません';
+        // 最後の埋め込みを追加
+        if (currentEmbedText) {
+            const embed = new EmbedBuilder()
+                .setColor(0xFFD700)
+                .setTitle(embedCount === 0 ? '🏆 週間部活ランキング' : `🏆 週間部活ランキング (続き)`)
+                .setDescription(embedCount === 0 ? 'アクティブ・部員数順の週間ランキングです\n（日曜0時に更新・部活チャンネルも自動で並び替えられます）' : '')
+                .addFields(
+                    { name: '📈 ランキング', value: currentEmbedText, inline: false }
+                )
+                .setTimestamp()
+                .setFooter({ text: 'HisameAI Mark.4' });
+            embeds.push(embed);
         }
         
-        const embed = new EmbedBuilder()
-            .setColor(0xFFD700)
-            .setTitle('🏆 週間部活ランキング')
-            .setDescription('アクティブ・部員数順の週間ランキングです\n（日曜0時に更新・部活チャンネルも自動で並び替えられます）')
-            .addFields(
-                { name: '📈 ランキング', value: rankingText, inline: false }
-            )
-            .setTimestamp()
-            .setFooter({ text: 'HisameAI Mark.4' });
+        if (embeds.length === 0) {
+            const embed = new EmbedBuilder()
+                .setColor(0xFFD700)
+                .setTitle('🏆 週間部活ランキング')
+                .setDescription('アクティブ・部員数順の週間ランキングです\n（日曜0時に更新・部活チャンネルも自動で並び替えられます）')
+                .addFields(
+                    { name: '📈 ランキング', value: 'データがありません', inline: false }
+                )
+                .setTimestamp()
+                .setFooter({ text: 'HisameAI Mark.4' });
+            embeds.push(embed);
+        }
             
-        return embed;
+        return embeds;
     } catch (error) {
         console.error('週間ランキング作成エラー:', error);
         return null;
@@ -133,7 +164,7 @@ module.exports = {
             }
             
             // 週間ランキングを取得
-            const rankingEmbed = await createWeeklyRankingEmbed(interaction.client, redis);
+            const rankingEmbeds = await createWeeklyRankingEmbed(interaction.client, redis);
             
             // 部活作成パネルの埋め込みを作成
             const clubPanelEmbed = new EmbedBuilder()
@@ -149,8 +180,9 @@ module.exports = {
                 .setFooter({ text: 'HisameAI Mark.4' });
 
             // 週間ランキングと部活作成パネルを送信
+            const allEmbeds = rankingEmbeds ? [...rankingEmbeds, clubPanelEmbed] : [clubPanelEmbed];
             const messagePayload = {
-                embeds: rankingEmbed ? [rankingEmbed, clubPanelEmbed] : [clubPanelEmbed],
+                embeds: allEmbeds,
                 components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(config.CREATE_CLUB_BUTTON_ID).setLabel('部活を作成する').setStyle(ButtonStyle.Primary).setEmoji('🎫'))]
             };
             
