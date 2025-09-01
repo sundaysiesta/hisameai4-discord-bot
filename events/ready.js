@@ -151,15 +151,13 @@ async function createWeeklyRankingEmbed(client, redis) {
             return a.position - b.position;
         });
         
-        // トップ10のみ表示
-        const top10 = ranking.slice(0, 10);
-        
+        // 全部活表示
         let rankingText = '';
-        for (let i = 0; i < top10.length; i++) {
-            const club = top10[i];
+        for (let i = 0; i < ranking.length; i++) {
+            const club = ranking[i];
             const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`;
-            rankingText += `${medal} **${club.name}**\n`;
-            rankingText += `   📊 メッセージ: ${club.messageCount} | 👥 アクティブ: ${club.activeMembers}人\n\n`;
+            rankingText += `${medal} **${club.name}** 📊${club.messageCount} 👥${club.activeMembers}人`;
+            if (i < ranking.length - 1) rankingText += ' | ';
         }
         
         if (rankingText === '') {
@@ -169,7 +167,7 @@ async function createWeeklyRankingEmbed(client, redis) {
         const embed = new EmbedBuilder()
             .setColor(0xFFD700)
             .setTitle('🏆 週間部活ランキング')
-            .setDescription('アクティブ・部員数順の週間ランキングです\n（日曜0時に更新）')
+            .setDescription('アクティブ・部員数順の週間ランキングです\n（日曜0時に更新・部活チャンネルも自動で並び替えられます）')
             .addFields(
                 { name: '📈 ランキング', value: rankingText, inline: false }
             )
@@ -283,7 +281,7 @@ module.exports = {
                     .addFields(
                         { name: '📋 必要な情報', value: '• 部活名\n• 活動内容', inline: true },
                         { name: '⏰ 作成制限', value: '24時間に1回', inline: true },
-                        { name: '🎯 作成場所', value: 'カテゴリー1または2', inline: true }
+                        { name: '🎯 作成場所', value: '部室棟1または2', inline: true }
                     )
                     .setTimestamp()
                     .setFooter({ text: 'HisameAI Mark.4' });
@@ -333,7 +331,7 @@ module.exports = {
                         .addFields(
                             { name: '📋 必要な情報', value: '• 部活名\n• 活動内容', inline: true },
                             { name: '⏰ 作成制限', value: '24時間に1回', inline: true },
-                            { name: '🎯 作成場所', value: 'カテゴリー1または2', inline: true }
+                            { name: '🎯 作成場所', value: '部室棟1または2', inline: true }
                         )
                         .setTimestamp()
                         .setFooter({ text: 'HisameAI Mark.4' });
