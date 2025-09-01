@@ -260,6 +260,18 @@ module.exports = {
             if (anonyChannel) await postStickyMessage(client, anonyChannel, config.STICKY_BUTTON_ID, { components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(config.STICKY_BUTTON_ID).setLabel('書き込む').setStyle(ButtonStyle.Success).setEmoji('✍️'))] });
             const panelChannel = await client.channels.fetch(config.CLUB_PANEL_CHANNEL_ID).catch(() => null);
             if (panelChannel) {
+                // 既存のメッセージを削除
+                const messages = await panelChannel.messages.fetch({ limit: 10 });
+                const oldMessages = messages.filter(msg => 
+                    msg.author.id === client.user.id && 
+                    msg.components.length > 0 &&
+                    msg.components[0].components.some(comp => comp.customId === config.CREATE_CLUB_BUTTON_ID)
+                );
+                
+                for (const msg of oldMessages.values()) {
+                    await msg.delete().catch(() => {});
+                }
+                
                 // 週間ランキングを取得
                 const rankingEmbed = await createWeeklyRankingEmbed(client, redis);
                 
@@ -282,7 +294,7 @@ module.exports = {
                     components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(config.CREATE_CLUB_BUTTON_ID).setLabel('部活を作成する').setStyle(ButtonStyle.Primary).setEmoji('🎫'))]
                 };
                 
-                await postStickyMessage(client, panelChannel, config.CREATE_CLUB_BUTTON_ID, messagePayload);
+                await panelChannel.send(messagePayload);
             }
             const counterExists = await redis.exists('anonymous_message_counter');
             if (!counterExists) await redis.set('anonymous_message_counter', 216);
@@ -300,6 +312,18 @@ module.exports = {
                 // 週間ランキングの更新（部活作成パネルの更新）
                 const panelChannel = await client.channels.fetch(config.CLUB_PANEL_CHANNEL_ID).catch(() => null);
                 if (panelChannel) {
+                    // 既存のメッセージを削除
+                    const messages = await panelChannel.messages.fetch({ limit: 10 });
+                    const oldMessages = messages.filter(msg => 
+                        msg.author.id === client.user.id && 
+                        msg.components.length > 0 &&
+                        msg.components[0].components.some(comp => comp.customId === config.CREATE_CLUB_BUTTON_ID)
+                    );
+                    
+                    for (const msg of oldMessages.values()) {
+                        await msg.delete().catch(() => {});
+                    }
+                    
                     const rankingEmbed = await createWeeklyRankingEmbed(client, redis);
                     
                     const clubPanelEmbed = new EmbedBuilder()
@@ -319,7 +343,7 @@ module.exports = {
                         components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(config.CREATE_CLUB_BUTTON_ID).setLabel('部活を作成する').setStyle(ButtonStyle.Primary).setEmoji('🎫'))]
                     };
                     
-                    await postStickyMessage(client, panelChannel, config.CREATE_CLUB_BUTTON_ID, messagePayload);
+                    await panelChannel.send(messagePayload);
                 }
                 
                 console.log('週間ランキングと部活作成パネルを更新しました');
