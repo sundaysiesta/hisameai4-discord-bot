@@ -195,7 +195,7 @@ module.exports = {
             
             const backgroundUrl = props['プロフカードURL']?.url;
             try {
-                if (backgroundUrl) {
+                if (backgroundUrl && backgroundUrl.trim() !== '' && !backgroundUrl.includes('null')) {
                     const background = await loadImage(backgroundUrl);
                     ctx.drawImage(background, 0, 0, canvas.width, canvas.height);
                 } else {
@@ -222,8 +222,19 @@ module.exports = {
             ctx.arc(avatarX + avatarSize / 2, avatarY + avatarSize / 2, avatarSize / 2, 0, Math.PI * 2, true);
             ctx.closePath();
             ctx.clip();
-            const avatar = await loadImage(targetUser.displayAvatarURL({ extension: 'png', size: 256 }));
-            ctx.drawImage(avatar, avatarX, avatarY, avatarSize, avatarSize);
+            try {
+                const avatarUrl = targetUser.displayAvatarURL({ extension: 'png', size: 256 });
+                if (!avatarUrl || avatarUrl.includes('null')) {
+                    throw new Error('Invalid avatar URL');
+                }
+                const avatar = await loadImage(avatarUrl);
+                ctx.drawImage(avatar, avatarX, avatarY, avatarSize, avatarSize);
+            } catch (avatarError) {
+                console.error("Failed to load avatar image:", avatarError);
+                // アバター読み込みに失敗した場合、デフォルトの円形を描画
+                ctx.fillStyle = '#747F8D';
+                ctx.fillRect(avatarX, avatarY, avatarSize, avatarSize);
+            }
             ctx.restore();
             
             ctx.beginPath();
@@ -275,7 +286,10 @@ module.exports = {
 
         } catch (error) {
             console.error('Notion API /profile error:', error);
-            await interaction.editReply('プロフィールの取得中にエラーが発生しました。');
+            console.error('Error stack:', error.stack);
+            console.error('Target user:', targetUser?.username || 'Unknown');
+            console.error('Notion page ID:', notionPage?.id || 'Unknown');
+            await interaction.editReply('プロフィールの取得中にエラーが発生しました。しばらく時間をおいて再度お試しください。');
         }
     },
 };
