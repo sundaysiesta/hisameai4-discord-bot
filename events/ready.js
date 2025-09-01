@@ -151,13 +151,25 @@ async function createWeeklyRankingEmbed(client, redis) {
             return a.position - b.position;
         });
         
-        // 全部活表示
+        // 全部活表示（文字数制限対応）
         let rankingText = '';
+        let currentLength = 0;
+        const maxLength = 1000; // 安全マージン
+        
         for (let i = 0; i < ranking.length; i++) {
             const club = ranking[i];
             const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`;
-            rankingText += `${medal} **${club.name}** 📊${club.messageCount} 👥${club.activeMembers}人`;
-            if (i < ranking.length - 1) rankingText += ' | ';
+            const clubText = `${medal} **${club.name}** 📊${club.messageCount} 👥${club.activeMembers}人`;
+            
+            // 文字数チェック
+            if (currentLength + clubText.length + (i > 0 ? 3 : 0) > maxLength) {
+                rankingText += `\n...他${ranking.length - i}部活`;
+                break;
+            }
+            
+            if (i > 0) rankingText += ' | ';
+            rankingText += clubText;
+            currentLength = rankingText.length;
         }
         
         if (rankingText === '') {
