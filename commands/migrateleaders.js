@@ -17,17 +17,19 @@ module.exports = {
             let updatedLeaders = 0;
             let notionUpdates = 0;
 
-            // すべての対象チャンネルを列挙
+            // キャッシュにないチャンネル/メンバーも対象にするため事前フェッチ
+            const allFetchedChannels = await guild.channels.fetch();
+            await guild.members.fetch();
+
+            // すべての対象チャンネルを列挙（親カテゴリ一致でフィルタ）
             let allClubChannels = [];
             for (const categoryId of config.CLUB_CATEGORIES) {
-                const category = await guild.channels.fetch(categoryId).catch(() => null);
-                if (category && category.type === ChannelType.GuildCategory) {
-                    const clubChannels = category.children.cache.filter(ch =>
-                        !config.EXCLUDED_CHANNELS.includes(ch.id) &&
-                        ch.type === ChannelType.GuildText
-                    );
-                    allClubChannels.push(...clubChannels.values());
-                }
+                const clubChannels = allFetchedChannels.filter(ch =>
+                    ch && ch.parentId === categoryId &&
+                    !config.EXCLUDED_CHANNELS.includes(ch.id) &&
+                    ch.type === ChannelType.GuildText
+                );
+                allClubChannels.push(...clubChannels.values());
             }
 
             for (const channel of allClubChannels) {
