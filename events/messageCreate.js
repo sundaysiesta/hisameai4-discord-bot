@@ -137,6 +137,8 @@ module.exports = {
                     allowedMentions: { parse: [] },
                     components: [delBtn]
                 });
+                // 一時参照解放
+                try { delete message._preparedFiles; } catch {}
                 // 送信者IDとメッセージIDを紐付けて保存（削除権限判定用）
                 if (!global.proxyDeleteMap) global.proxyDeleteMap = {};
                 global.proxyDeleteMap[sent.id] = message.author.id;

@@ -1,6 +1,8 @@
 const { ChannelType } = require('discord.js');
 const config = require('../config');
-const { createCanvas, loadImage } = require('canvas');
+// 画像処理は sharp に移行（libvips ベースで低メモリ）
+let sharp;
+try { sharp = require('sharp'); } catch (_) { sharp = null; }
 
 const levelUpLocks = new Set();
 
@@ -172,24 +174,29 @@ const MAX_IMAGE_EDGE_PX = 4096;
 
 // 画像を最大辺に合わせてリサイズ。JPEGに再エンコード。
 async function resizeImageFromUrl(url, targetMaxEdgePx, outputExt = 'jpeg') {
+    if (!sharp) return null;
     const res = await fetch(url);
     const arrayBuffer = await res.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-    const img = await loadImage(buffer);
-    const width = img.width;
-    const height = img.height;
-    if (!width || !height) return null;
-    const maxEdge = Math.max(width, height);
-    const scale = Math.min(1, targetMaxEdgePx / maxEdge);
-    if (scale >= 1) return null; // リサイズ不要
-    const newW = Math.max(1, Math.round(width * scale));
-    const newH = Math.max(1, Math.round(height * scale));
-    const canvas = createCanvas(newW, newH);
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(img, 0, 0, newW, newH);
-    const mime = outputExt === 'png' ? 'image/png' : 'image/jpeg';
-    const outBuffer = outputExt === 'png' ? canvas.toBuffer('image/png') : canvas.toBuffer('image/jpeg', { quality: 0.85 });
-    return { buffer: outBuffer, mime };
+    let buffer = Buffer.from(arrayBuffer);
+    try {
+        // メタデータからサイズを取得して inside リサイズ
+        const transformer = sharp(buffer, { failOnError: false });
+        const meta = await transformer.metadata();
+        const width = meta.width || 0;
+        const height = meta.height || 0;
+        if (!width || !height) return null;
+        const maxEdge = Math.max(width, height);
+        if (maxEdge <= targetMaxEdgePx) return null; // リサイズ不要
+        const format = outputExt === 'png' ? 'png' : 'jpeg';
+        const outBuffer = await transformer
+            .resize({ width: targetMaxEdgePx, height: targetMaxEdgePx, fit: 'inside', withoutEnlargement: true })
+            [format]({ quality: 85 })
+            .toBuffer();
+        return { buffer: outBuffer, mime: format === 'png' ? 'image/png' : 'image/jpeg' };
+    } finally {
+        // 参照解放の明示
+        buffer = null;
+    }
 }
 
 // ファイルサイズとタイプの検証関数（動画は許可、画像に厳格適用）
@@ -233,6 +240,23 @@ function validateFile(file, config) {
 
 // 送信用に添付を準備（必要なら画像を縮小）。
 // 戻り値: そのままdiscord.jsのfilesに渡せるオブジェクト。
+// 画像処理の並列実行を制限する簡易セマフォ
+const IMAGE_CONCURRENCY = 2;
+let imageActive = 0;
+const imageQueue = [];
+async function runWithImageSemaphore(task) {
+    if (imageActive >= IMAGE_CONCURRENCY) {
+        await new Promise(resolve => imageQueue.push(resolve));
+    }
+    imageActive++;
+    try { return await task(); }
+    finally {
+        imageActive--;
+        const next = imageQueue.shift();
+        if (next) next();
+    }
+}
+
 async function prepareFileForSend(file, config) {
     // まず基本検証
     const validation = validateFile(file, config);
@@ -242,24 +266,27 @@ async function prepareFileForSend(file, config) {
 
     // 画像は長辺・サイズを確認して縮小を試みる
     if (file.contentType && file.contentType.startsWith('image/')) {
-        try {
-            const { width, height } = await getImageDimensions(file.url);
-            const maxEdge = Math.max(width, height);
-            const needResizeByEdge = maxEdge > MAX_IMAGE_EDGE_PX;
-            const needResizeBySize = file.size > config.MAX_IMAGE_SIZE;
-            if (needResizeByEdge || needResizeBySize) {
-                const out = await resizeImageFromUrl(file.url, MAX_IMAGE_EDGE_PX, 'jpeg');
-                if (out && out.buffer) {
-                    const baseName = file.name ? file.name.replace(/\.[^.]+$/, '') : 'image';
-                    return {
-                        success: true,
-                        file: { attachment: out.buffer, name: `${baseName}.jpg` }
-                    };
+        return await runWithImageSemaphore(async () => {
+            try {
+                const { width, height } = await getImageDimensions(file.url);
+                const maxEdge = Math.max(width, height);
+                const needResizeByEdge = maxEdge > MAX_IMAGE_EDGE_PX;
+                const needResizeBySize = file.size > config.MAX_IMAGE_SIZE;
+                if (needResizeByEdge || needResizeBySize) {
+                    const out = await resizeImageFromUrl(file.url, MAX_IMAGE_EDGE_PX, 'jpeg');
+                    if (out && out.buffer) {
+                        const baseName = file.name ? file.name.replace(/\.[^.]+$/, '') : 'image';
+                        return {
+                            success: true,
+                            file: { attachment: out.buffer, name: `${baseName}.jpg` }
+                        };
+                    }
                 }
+            } catch (e) {
+                console.warn('画像リサイズに失敗したため原本を使用します:', e?.message || e);
             }
-        } catch (e) {
-            console.warn('画像リサイズに失敗したため原本を使用します:', e?.message || e);
-        }
+            return { success: true, file };
+        });
     }
 
     // リサイズ不要、または動画・その他はそのまま返す
