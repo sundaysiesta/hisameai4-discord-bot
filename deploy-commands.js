@@ -28,6 +28,7 @@ const commands = [
         { name: 'アイコン', type: 11, description: '表示用アイコン画像', required: false },
         { name: '名前', type: 3, description: '表示名（未入力の場合は「名無しのロメダ民」）', required: false }
     ] },
+    { name: 'migrateleaders', description: '旧部長ロール方式から個別権限方式へ移行します。(管理者限定)' },
 ].map(command => command);
 
 const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_BOT_TOKEN);
