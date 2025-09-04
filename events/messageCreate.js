@@ -49,8 +49,15 @@ module.exports = {
                 .setColor('#0099ff')
                 .setTitle('📚 Botの使い方')
                 .setDescription('Botへのメンション付きで画像や動画、またはリンクを送信すると、代理で投稿します。\n\n**使い方例:**\n@Bot名 画像や動画（＋任意のテキスト）\n@Bot名 https://example.com\n@Bot名 テキストのみ（144文字以内・改行禁止）\n\n※以下の場合は代理投稿されません：\n• 返信メッセージ\n• @everyoneメンション\n\n**ファイル制限:**\n• 画像: 最大10MB\n• 動画: 最大25MB');
-            
-            await message.reply({ embeds: [helpEmbed], flags: MessageFlags.Ephemeral }).catch(() => {});
+
+            // チャンネルには表示せず、ユーザーにのみDMで説明を送信
+            try {
+                await message.author.send({ embeds: [helpEmbed] });
+                // DM送信済みの目印としてリアクションを付与（他のユーザーには内容は見えない）
+                await message.react('📬').catch(() => {});
+            } catch {
+                // DMが拒否されている場合は何もしない（公開メッセージは出さない）
+            }
             global.mentionHelpCooldown[message.guildId] = now;
             return;
         }
