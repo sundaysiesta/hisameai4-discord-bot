@@ -11,6 +11,8 @@ async function postStickyMessage(client, channel, stickyCustomId, createMessageP
         const lastComponents = Array.isArray(lastMessage?.components) ? lastMessage.components : [];
         const lastCustomId = lastComponents[0]?.components?.[0]?.customId;
         if (lastMessage?.author?.id === client.user.id && lastCustomId === stickyCustomId) {
+            // 既存のスティッキーメッセージを上書き編集（ランキング等の内容更新を反映）
+            await lastMessage.edit(createMessagePayload).catch(() => {});
             return;
         }
         const oldStickyMessages = messages.filter(msg => {
