@@ -20,18 +20,12 @@ module.exports = {
         }
 
         try {
-            // 部長情報の取得
-            const leaderRoleId = await redis.get(`leader_roles:${channel.id}`);
+            // 部長情報の取得（新方式: 個人ID）
             let leaderMention = '未設定';
-            if (leaderRoleId) {
-                const role = await interaction.guild.roles.fetch(leaderRoleId, { force: true }).catch(() => null);
-                if (role) {
-                    if (role.members.size > 0) {
-                        leaderMention = role.members.map(m => m.toString()).join(', ');
-                    } else {
-                        leaderMention = '不在';
-                    }
-                }
+            const leaderUserId = await redis.get(`leader_user:${channel.id}`);
+            if (leaderUserId) {
+                const member = await interaction.guild.members.fetch(leaderUserId).catch(()=>null);
+                leaderMention = member ? member.toString() : '不在';
             }
 
             // 部活説明の取得

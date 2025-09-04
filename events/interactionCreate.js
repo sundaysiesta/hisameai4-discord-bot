@@ -123,19 +123,36 @@ module.exports = {
                             }
                         }
                         
-                        const leaderRole = await interaction.guild.roles.create({ name: `${clubName}部長` });
                         const newChannel = await interaction.guild.channels.create({
                             name: clubName,
                             type: ChannelType.GuildText,
                             parent: targetCategoryId,
                             topic: `部長: <@${creator.id}>\n活動内容: ${clubActivity}`,
                             permissionOverwrites: [
-                                { id: leaderRole.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.ManageChannels, PermissionsBitField.Flags.ManageMessages] },
+                                { id: creator.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.ManageChannels, PermissionsBitField.Flags.ManageMessages] },
                                 { id: interaction.client.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] }
                             ],
                         });
-                        await redis.set(`leader_roles:${newChannel.id}`, leaderRole.id);
-                        await creator.roles.add(leaderRole);
+                        // 新方式: チャンネルごとの部長（ユーザーID）を保存
+                        await redis.set(`leader_user:${newChannel.id}`, creator.id);
+                        // Notionの『部長』プロパティにチャンネルIDを追記
+                        try {
+                            const notionRes = await notion.databases.query({
+                                database_id: config.NOTION_DATABASE_ID,
+                                filter: { property: 'DiscordユーザーID', rich_text: { equals: creator.id } }
+                            });
+                            if (notionRes.results.length > 0) {
+                                const pageId = notionRes.results[0].id;
+                                const current = notionRes.results[0].properties?.['部長'];
+                                const prev = (current && current.rich_text && current.rich_text[0]?.plain_text) ? current.rich_text[0].plain_text : '';
+                                const ids = new Set((prev || '').split(',').map(s => s.trim()).filter(Boolean));
+                                ids.add(newChannel.id);
+                                await notion.pages.update({
+                                    page_id: pageId,
+                                    properties: { '部長': { rich_text: [{ text: { content: Array.from(ids).join(',') } }] } }
+                                });
+                            }
+                        } catch (e) { console.error('Notion 部長更新エラー:', e); }
                         if (config.ROLE_TO_REMOVE_ON_CREATE) {
                             const roleToRemove = await interaction.guild.roles.fetch(config.ROLE_TO_REMOVE_ON_CREATE).catch(()=>null);
                             if(roleToRemove) await creator.roles.remove(roleToRemove);

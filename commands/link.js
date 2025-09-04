@@ -80,6 +80,25 @@ module.exports = {
                 }
             }
 
+            // 新方式: Notionの『部長』に記録されたチャンネルIDへ個人権限を付与
+            try {
+                const managerChannelsRaw = props['部長'];
+                const channelsText = (managerChannelsRaw && managerChannelsRaw.rich_text && managerChannelsRaw.rich_text[0]?.plain_text) ? managerChannelsRaw.rich_text[0].plain_text : '';
+                const channelIds = channelsText.split(',').map(s => s.trim()).filter(Boolean);
+                for (const chId of channelIds) {
+                    const ch = await interaction.guild.channels.fetch(chId).catch(() => null);
+                    if (ch) {
+                        await ch.permissionOverwrites.edit(targetUser.id, {
+                            ViewChannel: true,
+                            ManageChannels: true,
+                            ManageMessages: true
+                        }).catch(e => console.error(`権限付与失敗 ${chId}:`, e));
+                    }
+                }
+            } catch (e) {
+                console.error('部長権限付与エラー:', e);
+            }
+
             let replyMessage = `成功！ ${targetUser.username} を「${characterName}」に紐付けました。`;
             if (addedRoles.length > 0) {
                 replyMessage += `\n付与されたロール: ${addedRoles.join(', ')}`;
