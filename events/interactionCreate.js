@@ -2,9 +2,7 @@ const { Events, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder
 const config = require('../config.js');
 const { postStickyMessage } = require('../utils/utility.js'); // postStickyMessageをインポート
 
-const cooldowns = new Map();
 const clubCreationCooldowns = new Map(); // 部活作成用のクールダウン管理
-let webhookClient = null; // 遅延初期化に変更
 
 module.exports = {
 	name: Events.InteractionCreate,
@@ -20,18 +18,6 @@ module.exports = {
             }
             // ボタンの処理
             else if (interaction.isButton()) {
-                if (interaction.customId === config.STICKY_BUTTON_ID) {
-                    const now = Date.now();
-                    const userCooldown = cooldowns.get(interaction.user.id);
-                    if (userCooldown && now < userCooldown) {
-                        const remaining = Math.ceil((userCooldown - now) / 1000);
-                        return interaction.reply({ content: `クールダウン中です。あと ${remaining} 秒お待ちください。`, flags: [MessageFlags.Ephemeral] });
-                    }
-                    const modal = new ModalBuilder().setCustomId(config.ANONYMOUS_MODAL_ID).setTitle('匿名メッセージ投稿');
-                    const messageInput = new TextInputBuilder().setCustomId('messageInput').setLabel('メッセージ内容 (改行不可・140字以内)').setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(140);
-                    modal.addComponents(new ActionRowBuilder().addComponents(messageInput));
-                    await interaction.showModal(modal);
-                }
                 if (interaction.customId === config.CREATE_CLUB_BUTTON_ID) {
                     // 部活作成のクールダウンチェック
                     const now = Date.now();
@@ -75,33 +61,6 @@ module.exports = {
             }
             // フォーム送信の処理
             else if (interaction.isModalSubmit()) {
-                if (interaction.customId === config.ANONYMOUS_MODAL_ID) {
-                    await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
-                    if (!config.ANONYMOUS_WEBHOOK_URL) {
-                        return interaction.editReply({ content: '匿名投稿は現在利用できません（設定未完了）。管理者に連絡してください。' });
-                    }
-                    if (!webhookClient) {
-                        webhookClient = new WebhookClient({ url: config.ANONYMOUS_WEBHOOK_URL });
-                    }
-                    const messageContent = interaction.fields.getTextInputValue('messageInput');
-                    if (messageContent.includes('\n')) {
-                        return interaction.editReply({ content: 'エラー: メッセージに改行を含めることはできません。' });
-                    }
-                    try {
-                        const newCounter = await redis.incr('anonymous_message_counter');
-                        await webhookClient.send({ content: messageContent, username: newCounter.toString(), allowedMentions: { parse: [] } });
-                        
-                        // 【最重要修正】ここでSticky Messageを直接更新
-                        const payload = { components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(config.STICKY_BUTTON_ID).setLabel('書き込む').setStyle(ButtonStyle.Success).setEmoji('✍️'))] };
-                        await postStickyMessage(interaction.client, interaction.channel, config.STICKY_BUTTON_ID, payload);
-                        
-                        await interaction.editReply({ content: 'メッセージを匿名で投稿しました。' });
-                        cooldowns.set(interaction.user.id, Date.now() + 60 * 1000);
-                    } catch (error) {
-                        console.error("Anonymous post error:", error);
-                        await interaction.editReply({ content: 'エラーが発生し、メッセージを投稿できませんでした。' });
-                    }
-                }
                 if (interaction.customId === config.CREATE_CLUB_MODAL_ID) {
                     await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
                     const clubName = interaction.fields.getTextInputValue('club_name');
