@@ -2,7 +2,7 @@ const { Events, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder
 const config = require('../config.js');
 const { postStickyMessage } = require('../utils/utility.js'); // postStickyMessageをインポート
 
-const clubCreationCooldowns = new Map(); // 部活作成用のクールダウン管理
+// 部活作成用のクールダウン管理はRedisに移行（メモリ節約）
 
 module.exports = {
 	name: Events.InteractionCreate,
@@ -19,23 +19,27 @@ module.exports = {
             // ボタンの処理
             else if (interaction.isButton()) {
                 if (interaction.customId === config.CREATE_CLUB_BUTTON_ID) {
-                    // 部活作成のクールダウンチェック
-                    const now = Date.now();
-                    const userClubCooldown = clubCreationCooldowns.get(interaction.user.id);
-                    if (userClubCooldown && now < userClubCooldown) {
-                        const remainingHours = Math.ceil((userClubCooldown - now) / (1000 * 60 * 60));
-                        const remainingMinutes = Math.ceil(((userClubCooldown - now) % (1000 * 60 * 60)) / (1000 * 60));
-                        let remainingText = '';
-                        if (remainingHours > 0) {
-                            remainingText = `あと ${remainingHours} 時間`;
-                            if (remainingMinutes > 0) {
-                                remainingText += ` ${remainingMinutes} 分`;
+                    // 部活作成のクールダウンチェック（Redis使用）
+                    const cooldownKey = `club_creation_cooldown:${interaction.user.id}`;
+                    const cooldownEnd = await redis.get(cooldownKey);
+                    if (cooldownEnd) {
+                        const now = Date.now();
+                        const remaining = parseInt(cooldownEnd) - now;
+                        if (remaining > 0) {
+                            const remainingDays = Math.ceil(remaining / (1000 * 60 * 60 * 24));
+                            const remainingHours = Math.ceil((remaining % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+                            let remainingText = '';
+                            if (remainingDays > 0) {
+                                remainingText = `あと ${remainingDays} 日`;
+                                if (remainingHours > 0) {
+                                    remainingText += ` ${remainingHours} 時間`;
+                                }
+                            } else {
+                                remainingText = `あと ${remainingHours} 時間`;
                             }
-                        } else {
-                            remainingText = `あと ${remainingMinutes} 分`;
+                            remainingText += 'お待ちください。';
+                            return interaction.reply({ content: `部活作成は7日に1回までです。${remainingText}`, flags: [MessageFlags.Ephemeral] });
                         }
-                        remainingText += 'お待ちください。';
-                        return interaction.reply({ content: `部活作成は24時間に1回までです。${remainingText}`, flags: [MessageFlags.Ephemeral] });
                     }
                     
                     const modal = new ModalBuilder().setCustomId(config.CREATE_CLUB_MODAL_ID).setTitle('部活作成フォーム');
@@ -63,9 +67,35 @@ module.exports = {
             else if (interaction.isModalSubmit()) {
                 if (interaction.customId === config.CREATE_CLUB_MODAL_ID) {
                     await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
-                    const clubName = interaction.fields.getTextInputValue('club_name');
-                    const clubActivity = interaction.fields.getTextInputValue('club_activity');
+                    const clubName = interaction.fields.getTextInputValue('club_name').trim();
+                    const clubActivity = interaction.fields.getTextInputValue('club_activity').trim();
                     const creator = interaction.member;
+                    
+                    // 入力検証
+                    if (clubName.length < 2 || clubName.length > 20) {
+                        return interaction.editReply({ content: '部活名は2文字以上20文字以下で入力してください。' });
+                    }
+                    if (clubActivity.length < 10 || clubActivity.length > 200) {
+                        return interaction.editReply({ content: '活動内容は10文字以上200文字以下で入力してください。' });
+                    }
+                    
+                    // 部活名の重複チェック
+                    const existingChannels = [];
+                    for (const categoryId of config.CLUB_CATEGORIES) {
+                        const category = await interaction.guild.channels.fetch(categoryId).catch(() => null);
+                        if (category && category.children) {
+                            const channels = category.children.cache.filter(ch => 
+                                ch.type === ChannelType.GuildText && 
+                                ch.name.toLowerCase() === clubName.toLowerCase()
+                            );
+                            existingChannels.push(...channels.values());
+                        }
+                    }
+                    
+                    if (existingChannels.length > 0) {
+                        return interaction.editReply({ content: `部活名「${clubName}」は既に存在します。別の名前を選択してください。` });
+                    }
+                    
                     try {
                         // カテゴリー1のチャンネル数をチェック
                         const category1 = await interaction.guild.channels.fetch(config.CLUB_CATEGORY_ID).catch(() => null);
@@ -119,7 +149,9 @@ module.exports = {
                         
                         const categoryName = targetCategoryId === config.CLUB_CATEGORY_ID ? 'カテゴリー1' : 'カテゴリー2';
                         await interaction.editReply({ content: `部活「${clubName}」を${categoryName}に設立しました！ ${newChannel} を確認してください。` });
-                        clubCreationCooldowns.set(interaction.user.id, Date.now() + 24 * 60 * 60 * 1000); // 部活作成完了後にクールダウンを設定
+                        // 部活作成完了後にクールダウンを設定（Redis使用）
+                        const cooldownEnd = Date.now() + config.CLUB_CREATION_COOLDOWN;
+                        await redis.setex(cooldownKey, Math.ceil(config.CLUB_CREATION_COOLDOWN / 1000), cooldownEnd.toString());
 
                         // 部活作成完了の埋め込みメッセージを作成
                         const clubEmbed = new EmbedBuilder()

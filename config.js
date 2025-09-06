@@ -21,8 +21,8 @@ module.exports = {
     MEMORY_CLEANUP_INTERVAL: 60 * 60 * 1000, // 1時間ごと
     ANONYMOUS_COOLDOWN_EXPIRY: 24 * 60 * 60 * 1000, // 24時間
     PROXY_DELETE_MAP_EXPIRY: 7 * 24 * 60 * 60 * 1000, // 7日間
-    // 部活作成のクールダウン設定（24時間）
-    CLUB_CREATION_COOLDOWN: 24 * 60 * 60 * 1000, // 24時間
+    // 部活作成のクールダウン設定（7日間）
+    CLUB_CREATION_COOLDOWN: 7 * 24 * 60 * 60 * 1000, // 7日間
     // メンション機能用設定
     MENTION_COOLDOWN: 30 * 1000, // 30秒（anonymousと同じ）
     MENTION_HELP_COOLDOWN: 5 * 60 * 1000, // 5分（説明表示用）
