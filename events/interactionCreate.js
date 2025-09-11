@@ -152,6 +152,7 @@ module.exports = {
                         // 部活作成完了後にクールダウンを設定（Redis使用）
                         const cooldownEnd = Date.now() + config.CLUB_CREATION_COOLDOWN;
                         await redis.setex(cooldownKey, Math.ceil(config.CLUB_CREATION_COOLDOWN / 1000), cooldownEnd.toString());
+                        console.log(`部活作成クールダウン設定: ユーザー ${interaction.user.id}, 終了時刻: ${new Date(cooldownEnd).toLocaleString()}`);
 
                         // 部活作成完了の埋め込みメッセージを作成
                         const clubEmbed = new EmbedBuilder()

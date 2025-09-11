@@ -62,22 +62,52 @@ async function sortClubChannels(redis, guild) {
     // メッセージ数でソート（同じ場合は位置でソート）
     ranking.sort((a, b) => (b.count !== a.count) ? b.count - a.count : a.position - b.position);
     
-    // 各カテゴリー内でソート
-    for (const categoryId of config.CLUB_CATEGORIES) {
-        const category = await guild.channels.fetch(categoryId).catch(() => null);
-        if (!category) continue;
+    // カテゴリーを跨いでソート（1つ目のカテゴリーが50チャンネルで上限の場合、2つ目以降に移動）
+    const maxChannelsPerCategory = 50;
+    const topChannelOffset = 2;
+    
+    for (let i = 0; i < ranking.length; i++) {
+        const channelData = ranking[i];
+        const channel = await guild.channels.fetch(channelData.id).catch(() => null);
+        if (!channel) continue;
         
-        const categoryChannels = ranking.filter(r => r.categoryId === categoryId);
-        const topChannelOffset = 2;
+        // どのカテゴリーに配置するかを決定
+        let targetCategoryId;
+        let positionInCategory;
         
-        for (let i = 0; i < categoryChannels.length; i++) {
-            const channel = await guild.channels.fetch(categoryChannels[i].id).catch(() => null);
-            const newPosition = i + topChannelOffset;
-            if (channel && channel.position !== newPosition) {
-                await channel.setPosition(newPosition).catch(e => 
-                    console.error(`setPosition Error for ${channel.name}: ${e.message}`)
+        if (i < maxChannelsPerCategory - topChannelOffset) {
+            // 1つ目のカテゴリーに配置
+            targetCategoryId = config.CLUB_CATEGORIES[0];
+            positionInCategory = i + topChannelOffset;
+        } else {
+            // 2つ目以降のカテゴリーに配置
+            const categoryIndex = Math.floor((i - (maxChannelsPerCategory - topChannelOffset)) / (maxChannelsPerCategory - topChannelOffset)) + 1;
+            if (categoryIndex < config.CLUB_CATEGORIES.length) {
+                targetCategoryId = config.CLUB_CATEGORIES[categoryIndex];
+                positionInCategory = (i - (maxChannelsPerCategory - topChannelOffset)) % (maxChannelsPerCategory - topChannelOffset) + topChannelOffset;
+            } else {
+                // カテゴリーが足りない場合は最後のカテゴリーに配置
+                targetCategoryId = config.CLUB_CATEGORIES[config.CLUB_CATEGORIES.length - 1];
+                positionInCategory = i + topChannelOffset;
+            }
+        }
+        
+        // カテゴリーが変更された場合は移動
+        if (channel.parentId !== targetCategoryId) {
+            const targetCategory = await guild.channels.fetch(targetCategoryId).catch(() => null);
+            if (targetCategory) {
+                await channel.setParent(targetCategoryId).catch(e => 
+                    console.error(`setParent Error for ${channel.name}: ${e.message}`)
                 );
             }
+        }
+        
+        // 位置を設定
+        const newPosition = positionInCategory;
+        if (channel.position !== newPosition) {
+            await channel.setPosition(newPosition).catch(e => 
+                console.error(`setPosition Error for ${channel.name}: ${e.message}`)
+            );
         }
     }
 }
