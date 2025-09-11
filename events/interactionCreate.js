@@ -71,6 +71,9 @@ module.exports = {
                     const clubActivity = interaction.fields.getTextInputValue('club_activity').trim();
                     const creator = interaction.member;
                     
+                    // クールダウンキーを先に定義
+                    const cooldownKey = `club_creation_cooldown:${interaction.user.id}`;
+                    
                     // 入力検証
                     if (clubName.length < 2 || clubName.length > 20) {
                         return interaction.editReply({ content: '部活名は2文字以上20文字以下で入力してください。' });
