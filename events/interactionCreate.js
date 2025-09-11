@@ -177,14 +177,14 @@ module.exports = {
                             console.error('部活チャンネルへの埋め込みメッセージ送信エラー:', error);
                         }
 
-                        // メインチャンネルに埋め込みメッセージを送信
+                        // 部活作成通知チャンネルに埋め込みメッセージを送信
                         try {
-                            const mainChannel = await interaction.guild.channels.fetch(config.MAIN_CHANNEL_ID);
-                            if (mainChannel) {
-                                await mainChannel.send({ embeds: [clubEmbed] });
+                            const notificationChannel = await interaction.guild.channels.fetch(config.RESTART_NOTIFICATION_CHANNEL_ID);
+                            if (notificationChannel) {
+                                await notificationChannel.send({ embeds: [clubEmbed] });
                             }
                         } catch (error) {
-                            console.error('メインチャンネルへの埋め込みメッセージ送信エラー:', error);
+                            console.error('部活作成通知チャンネルへの埋め込みメッセージ送信エラー:', error);
                         }
 
                     } catch (error) {
