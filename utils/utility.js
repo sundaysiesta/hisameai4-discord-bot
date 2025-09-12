@@ -45,6 +45,16 @@ async function sortClubChannels(redis, guild) {
         }
     }
     
+    // 廃部候補カテゴリからも部活チャンネルを取得
+    const inactiveCategory = await guild.channels.fetch(config.INACTIVE_CLUB_CATEGORY_ID).catch(() => null);
+    if (inactiveCategory && inactiveCategory.type === ChannelType.GuildCategory) {
+        const inactiveChannels = inactiveCategory.children.cache.filter(ch => 
+            !config.EXCLUDED_CHANNELS.includes(ch.id) && 
+            ch.type === ChannelType.GuildText
+        );
+        allClubChannels.push(...inactiveChannels.values());
+    }
+    
     if (allClubChannels.length === 0) return;
     
     // メッセージ数でランキングを作成
@@ -75,7 +85,11 @@ async function sortClubChannels(redis, guild) {
         let targetCategoryId;
         let positionInCategory;
         
-        if (i < maxChannelsPerCategory - topChannelOffset) {
+        // 廃部候補判定：メッセージ数が閾値以下の場合
+        if (channelData.count <= config.INACTIVE_CLUB_THRESHOLD) {
+            targetCategoryId = config.INACTIVE_CLUB_CATEGORY_ID;
+            positionInCategory = i; // 廃部候補カテゴリ内ではメッセージ数順
+        } else if (i < maxChannelsPerCategory - topChannelOffset) {
             // 1つ目のカテゴリーに配置
             targetCategoryId = config.CLUB_CATEGORIES[0];
             positionInCategory = i + topChannelOffset;
