@@ -2,6 +2,7 @@ const { SlashCommandBuilder, AttachmentBuilder, EmbedBuilder } = require('discor
 const crypto = require('crypto');
 const config = require('../config.js');
 const { processFileSafely } = require('../utils/utility.js');
+const { shouldRevealAnonymous, resetCounter, createRevealedEmbed } = require('../utils/anonymousEvent.js');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -69,6 +70,25 @@ module.exports = {
         const displayNameRaw = (nameOpt && nameOpt.trim().length > 0) ? nameOpt.trim() : '名無しのロメダ民';
         const displayName = `${displayNameRaw} ID: ${hash}`;
 
+        // 匿名イベントチェック
+        const shouldReveal = shouldRevealAnonymous();
+        let finalDisplayName = displayName;
+        let finalAvatar = icon ? icon.url : null;
+        let isRevealed = false;
+
+        if (shouldReveal) {
+            // 匿名が剥がれる場合 - 名前やアイコンのオプションは無効化
+            finalDisplayName = interaction.user.username;
+            finalAvatar = interaction.user.displayAvatarURL();
+            isRevealed = true;
+            resetCounter(); // カウンターをリセット
+            
+            // 匿名が剥がれた場合は名前やアイコンのオプションを無視
+            if (nameOpt || icon) {
+                console.log(`匿名が剥がれたため、名前やアイコンのオプションは無効化されました。ユーザー: ${interaction.user.tag}`);
+            }
+        }
+
         // webhook取得または作成
         const channel = interaction.channel;
         const clientUser = interaction.client.user;
@@ -77,31 +97,49 @@ module.exports = {
         webhook = webhooks.find(wh => wh.owner && wh.owner.id === clientUser.id);
         if (!webhook) {
             webhook = await channel.createWebhook({
-                name: displayName,
-                avatar: icon ? icon.url : null
+                name: finalDisplayName,
+                avatar: finalAvatar
             });
         } else {
             await webhook.edit({
-                name: displayName,
-                avatar: icon ? icon.url : null
+                name: finalDisplayName,
+                avatar: finalAvatar
             });
         }
 
         // 投稿
         await interaction.deferReply({ ephemeral: true });
         try {
-            const sentMessage = await webhook.send({
-                content: content,
-                files: file ? [ (file.attachment ? file : file) ] : [],
-                username: displayName,
-                avatarURL: null,
-                allowedMentions: { parse: [] }
-            });
+            let sentMessage;
+            
+            if (isRevealed) {
+                // 匿名が剥がれた場合は特別なEmbedで投稿
+                const revealedEmbed = createRevealedEmbed(interaction.user, content, hash);
+                sentMessage = await webhook.send({
+                    embeds: [revealedEmbed],
+                    files: file ? [ (file.attachment ? file : file) ] : [],
+                    username: finalDisplayName,
+                    avatarURL: finalAvatar,
+                    allowedMentions: { parse: [] }
+                });
+            } else {
+                // 通常の匿名投稿
+                sentMessage = await webhook.send({
+                    content: content,
+                    files: file ? [ (file.attachment ? file : file) ] : [],
+                    username: finalDisplayName,
+                    avatarURL: finalAvatar,
+                    allowedMentions: { parse: [] }
+                });
+            }
 
             // 管理者ログチャンネルに投稿情報を送信
-            await this.sendAdminLog(interaction, sentMessage, hash, displayName);
+            await this.sendAdminLog(interaction, sentMessage, hash, finalDisplayName, isRevealed);
 
-            await interaction.editReply({ content: '匿名で投稿しました。', ephemeral: true });
+            const replyMessage = isRevealed 
+                ? '🎭 匿名が剥がれました！元の名前とアイコンで投稿されました。' 
+                : '匿名で投稿しました。';
+            await interaction.editReply({ content: replyMessage, ephemeral: true });
         } catch (e) {
             console.error('匿名投稿エラー:', e);
             let errorMessage = '投稿に失敗しました。';
@@ -118,7 +156,7 @@ module.exports = {
     },
 
     // 管理者ログチャンネルに投稿情報を送信する関数
-    async sendAdminLog(interaction, sentMessage, hash, displayName) {
+    async sendAdminLog(interaction, sentMessage, hash, displayName, isRevealed = false) {
         try {
             const adminLogChannel = interaction.client.channels.cache.get(config.ADMIN_LOG_CHANNEL_ID);
             if (!adminLogChannel) {
@@ -127,8 +165,8 @@ module.exports = {
             }
 
             const embed = new EmbedBuilder()
-                .setTitle('🔒 匿名投稿ログ')
-                .setColor(0x00ff00)
+                .setTitle(isRevealed ? '🎭 匿名剥がれログ' : '🔒 匿名投稿ログ')
+                .setColor(isRevealed ? 0xff6b6b : 0x00ff00)
                 .addFields(
                     { name: '投稿者', value: `${interaction.user.tag} (${interaction.user.id})`, inline: true },
                     { name: '匿名ID', value: hash, inline: true },
@@ -139,6 +177,13 @@ module.exports = {
                 )
                 .setTimestamp()
                 .setFooter({ text: '管理者専用ログ' });
+
+            // 匿名が剥がれた場合の特別な情報を追加
+            if (isRevealed) {
+                embed.addFields(
+                    { name: '🎭 匿名イベント', value: '100回目の投稿で匿名が剥がれました！', inline: false }
+                );
+            }
 
             // 添付ファイルがある場合は追加
             const file = interaction.options.getAttachment('添付ファイル');

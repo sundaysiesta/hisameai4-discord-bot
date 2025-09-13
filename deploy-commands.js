@@ -28,6 +28,27 @@ const commands = [
         { name: 'アイコン', type: 11, description: '表示用アイコン画像', required: false },
         { name: '名前', type: 3, description: '表示名（未入力の場合は「名無しのロメダ民」）', required: false }
     ] },
+    { 
+        name: 'anonymousevent', 
+        description: '匿名イベントの開始/停止を管理します（100回に1回で匿名が剥がれます）', 
+        options: [
+            {
+                name: 'start',
+                type: 1, // SUB_COMMAND
+                description: '匿名イベントを開始します'
+            },
+            {
+                name: 'stop',
+                type: 1, // SUB_COMMAND
+                description: '匿名イベントを停止します'
+            },
+            {
+                name: 'status',
+                type: 1, // SUB_COMMAND
+                description: '現在のイベント状態を確認します'
+            }
+        ]
+    },
     { name: 'migrateleaders', description: '旧部長ロール方式から個別権限方式へ移行します。(管理者限定)' },
 ].map(command => command);
 
