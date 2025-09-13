@@ -2,7 +2,7 @@ const { SlashCommandBuilder, AttachmentBuilder, EmbedBuilder } = require('discor
 const crypto = require('crypto');
 const config = require('../config.js');
 const { processFileSafely } = require('../utils/utility.js');
-const { shouldRevealAnonymous, resetCounter, createRevealedEmbed } = require('../utils/anonymousEvent.js');
+const { shouldRevealAnonymous, createRevealedEmbed } = require('../utils/anonymousEvent.js');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -70,7 +70,7 @@ module.exports = {
         const displayNameRaw = (nameOpt && nameOpt.trim().length > 0) ? nameOpt.trim() : '名無しのロメダ民';
         const displayName = `${displayNameRaw} ID: ${hash}`;
 
-        // 匿名イベントチェック
+        // 匿名剥がれチェック（常に1%の確率）
         const shouldReveal = shouldRevealAnonymous();
         let finalDisplayName = displayName;
         let finalAvatar = icon ? icon.url : null;
@@ -81,7 +81,6 @@ module.exports = {
             finalDisplayName = interaction.user.username;
             finalAvatar = interaction.user.displayAvatarURL();
             isRevealed = true;
-            resetCounter(); // カウンターをリセット
             
             // 匿名が剥がれた場合は名前やアイコンのオプションを無視
             if (nameOpt || icon) {
@@ -181,7 +180,7 @@ module.exports = {
             // 匿名が剥がれた場合の特別な情報を追加
             if (isRevealed) {
                 embed.addFields(
-                    { name: '🎭 匿名イベント', value: '100回目の投稿で匿名が剥がれました！', inline: false }
+                    { name: '🎭 匿名剥がれ', value: '1%の確率で匿名が剥がれました！', inline: false }
                 );
             }
 
