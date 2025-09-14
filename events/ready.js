@@ -325,7 +325,7 @@ module.exports = {
 
                 let allClubChannels = [];
                 
-                // 全ての部活カテゴリと廃部候補カテゴリからチャンネルを取得
+                // 全ての部活カテゴリからチャンネルを取得
                 for (const categoryId of config.CLUB_CATEGORIES) {
                     const category = await guild.channels.fetch(categoryId).catch(() => null);
                     if (category && category.type === ChannelType.GuildCategory) {
@@ -337,7 +337,7 @@ module.exports = {
                     }
                 }
                 
-                // 廃部候補カテゴリからも取得
+                // 廃部候補カテゴリからも取得して部室棟に戻す
                 const inactiveCategory = await guild.channels.fetch(config.INACTIVE_CLUB_CATEGORY_ID).catch(() => null);
                 if (inactiveCategory && inactiveCategory.type === ChannelType.GuildCategory) {
                     const inactiveChannels = inactiveCategory.children.cache.filter(ch => 

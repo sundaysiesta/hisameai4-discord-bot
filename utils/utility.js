@@ -45,7 +45,7 @@ async function sortClubChannels(redis, guild) {
         }
     }
     
-    // 廃部候補カテゴリからも部活チャンネルを取得
+    // 廃部候補カテゴリからも部活チャンネルを取得して部室棟に戻す
     const inactiveCategory = await guild.channels.fetch(config.INACTIVE_CLUB_CATEGORY_ID).catch(() => null);
     if (inactiveCategory && inactiveCategory.type === ChannelType.GuildCategory) {
         const inactiveChannels = inactiveCategory.children.cache.filter(ch => 
@@ -69,23 +69,16 @@ async function sortClubChannels(redis, guild) {
         });
     }
     
-    // アクティブな部活と廃部候補を分離
-    const activeClubs = ranking.filter(club => club.count > config.INACTIVE_CLUB_THRESHOLD);
-    const inactiveClubs = ranking.filter(club => club.count <= config.INACTIVE_CLUB_THRESHOLD);
-    
-    // アクティブな部活のみをメッセージ数でソート（同じ場合は位置でソート）
-    activeClubs.sort((a, b) => (b.count !== a.count) ? b.count - a.count : a.position - b.position);
-    
-    // 廃部候補は元の位置順を維持（ソートしない）
-    inactiveClubs.sort((a, b) => a.position - b.position);
+    // 全部活をメッセージ数でソート（同じ場合は位置でソート）
+    ranking.sort((a, b) => (b.count !== a.count) ? b.count - a.count : a.position - b.position);
     
     // カテゴリーを跨いでソート（1つ目のカテゴリーが50チャンネルで上限の場合、2つ目以降に移動）
     const maxChannelsPerCategory = 50;
     const topChannelOffset = 2;
     
-    // アクティブな部活を配置
-    for (let i = 0; i < activeClubs.length; i++) {
-        const channelData = activeClubs[i];
+    // 全部活を部室棟に配置
+    for (let i = 0; i < ranking.length; i++) {
+        const channelData = ranking[i];
         const channel = await guild.channels.fetch(channelData.id).catch(() => null);
         if (!channel) continue;
         
@@ -109,34 +102,6 @@ async function sortClubChannels(redis, guild) {
                 positionInCategory = i + topChannelOffset;
             }
         }
-        
-        // カテゴリーが変更された場合は移動
-        if (channel.parentId !== targetCategoryId) {
-            const targetCategory = await guild.channels.fetch(targetCategoryId).catch(() => null);
-            if (targetCategory) {
-                await channel.setParent(targetCategoryId).catch(e => 
-                    console.error(`setParent Error for ${channel.name}: ${e.message}`)
-                );
-            }
-        }
-        
-        // 位置を設定
-        const newPosition = positionInCategory;
-        if (channel.position !== newPosition) {
-            await channel.setPosition(newPosition).catch(e => 
-                console.error(`setPosition Error for ${channel.name}: ${e.message}`)
-            );
-        }
-    }
-    
-    // 廃部候補を配置（廃部候補カテゴリ内では元の位置順を維持）
-    for (let i = 0; i < inactiveClubs.length; i++) {
-        const channelData = inactiveClubs[i];
-        const channel = await guild.channels.fetch(channelData.id).catch(() => null);
-        if (!channel) continue;
-        
-        const targetCategoryId = config.INACTIVE_CLUB_CATEGORY_ID;
-        const positionInCategory = i; // 廃部候補カテゴリ内では元の順序を維持
         
         // カテゴリーが変更された場合は移動
         if (channel.parentId !== targetCategoryId) {

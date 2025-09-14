@@ -174,10 +174,9 @@ module.exports = {
         // --- テキストXP付与処理はここで削除 ---
 
         // --- 部活チャンネルのメッセージ数カウント（メモリ内のみ、日次でRedisに反映） ---
-        // 全ての部活カテゴリと廃部候補カテゴリをチェック
+        // 全ての部活カテゴリをチェック
         const isClubChannel = (
-            (config.CLUB_CATEGORIES.includes(message.channel.parentId) || 
-             message.channel.parentId === config.INACTIVE_CLUB_CATEGORY_ID) &&
+            config.CLUB_CATEGORIES.includes(message.channel.parentId) &&
             !config.EXCLUDED_CHANNELS.includes(message.channel.id)
         );
         
