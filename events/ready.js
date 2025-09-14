@@ -308,13 +308,56 @@ module.exports = {
         const flushClubMessageCounts = async () => {
             for (const [channelId, count] of Object.entries(dailyMessageBuffer)) {
                 if (count > 0) {
-                    await redis.set(`weekly_message_count:${channelId}`, count);
+                    await redis.incrby(`weekly_message_count:${channelId}`, count);
                     dailyMessageBuffer[channelId] = 0;
                 }
             }
             console.log('部活メッセージ数を1日分まとめてRedisに反映しました。');
         };
         cron.schedule('0 0 * * *', flushClubMessageCounts, { scheduled: true, timezone: 'Asia/Tokyo' });
+
+        // --- 週次リセット（日曜日午前0時） ---
+        const resetWeeklyCounts = async () => {
+            try {
+                // 全部活チャンネルの週間カウントを0にリセット
+                const guild = client.guilds.cache.first();
+                if (!guild) return;
+
+                let allClubChannels = [];
+                
+                // 全ての部活カテゴリと廃部候補カテゴリからチャンネルを取得
+                for (const categoryId of config.CLUB_CATEGORIES) {
+                    const category = await guild.channels.fetch(categoryId).catch(() => null);
+                    if (category && category.type === ChannelType.GuildCategory) {
+                        const clubChannels = category.children.cache.filter(ch => 
+                            !config.EXCLUDED_CHANNELS.includes(ch.id) && 
+                            ch.type === ChannelType.GuildText
+                        );
+                        allClubChannels.push(...clubChannels.values());
+                    }
+                }
+                
+                // 廃部候補カテゴリからも取得
+                const inactiveCategory = await guild.channels.fetch(config.INACTIVE_CLUB_CATEGORY_ID).catch(() => null);
+                if (inactiveCategory && inactiveCategory.type === ChannelType.GuildCategory) {
+                    const inactiveChannels = inactiveCategory.children.cache.filter(ch => 
+                        !config.EXCLUDED_CHANNELS.includes(ch.id) && 
+                        ch.type === ChannelType.GuildText
+                    );
+                    allClubChannels.push(...inactiveChannels.values());
+                }
+
+                // 全部活チャンネルの週間カウントを0にリセット
+                for (const channel of allClubChannels) {
+                    await redis.set(`weekly_message_count:${channel.id}`, 0);
+                }
+                
+                console.log('週間メッセージカウントをリセットしました。');
+            } catch (error) {
+                console.error('週次リセットエラー:', error);
+            }
+        };
+        cron.schedule('0 0 * * 0', resetWeeklyCounts, { scheduled: true, timezone: 'Asia/Tokyo' });
 
 	},
 };

@@ -173,8 +173,16 @@ module.exports = {
 
         // --- テキストXP付与処理はここで削除 ---
 
-        // --- 部活チャンネルのメッセージ数カウント（メモリ内のみ） ---
-        if (message.channel.parentId === config.CLUB_CATEGORY_ID && !config.EXCLUDED_CHANNELS.includes(message.channel.id)) {
+        // --- 部活チャンネルのメッセージ数カウント（メモリ内のみ、日次でRedisに反映） ---
+        // 全ての部活カテゴリと廃部候補カテゴリをチェック
+        const isClubChannel = (
+            (config.CLUB_CATEGORIES.includes(message.channel.parentId) || 
+             message.channel.parentId === config.INACTIVE_CLUB_CATEGORY_ID) &&
+            !config.EXCLUDED_CHANNELS.includes(message.channel.id)
+        );
+        
+        if (isClubChannel) {
+            // メモリ内カウント（日次バッチでRedisに反映）
             dailyMessageBuffer[message.channel.id] = (dailyMessageBuffer[message.channel.id] || 0) + 1;
         }
     },
