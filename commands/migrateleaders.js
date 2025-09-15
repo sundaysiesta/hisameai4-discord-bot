@@ -49,11 +49,16 @@ module.exports = {
                 updatedLeaders++;
 
                 // 権限をユーザーへ直接付与（旧ロールと共存）
-                await channel.permissionOverwrites.edit(leaderMember.id, {
-                    ViewChannel: true,
-                    ManageChannels: true,
-                    ManageMessages: true
-                }).catch(() => {});
+                try {
+                    await channel.permissionOverwrites.edit(leaderMember.id, {
+                        ViewChannel: true,
+                        SendMessages: true,
+                        ManageChannels: true,
+                        ManageMessages: true
+                    });
+                } catch (e) {
+                    console.error(`権限付与失敗: channel=${channel.id}, user=${leaderMember.id}`, e);
+                }
 
                 // Notionの『部長』プロパティにチャンネルIDを追記
                 try {
