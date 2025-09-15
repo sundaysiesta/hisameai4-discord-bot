@@ -154,9 +154,9 @@ async function createWeeklyRankingEmbeds(client, redis) {
                 beforeId = last.id;
             }
 
-            // 5回以上メッセージを送っているユーザーのみをカウント
+            // 1回以上メッセージを送っているユーザーをカウント（=その週の部員定義）
             const activeMembers = Array.from(messageCounts.entries())
-                .filter(([_, count]) => count >= 5)
+                .filter(([_, count]) => count >= 1)
                 .map(([userId]) => userId);
 
             const activeMemberCount = activeMembers.length;
