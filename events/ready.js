@@ -113,21 +113,42 @@ async function createWeeklyRankingEmbeds(client, redis) {
         
         if (allClubChannels.length === 0) return [];
         
-        // メッセージ数でランキングを作成（ソートと同一の集計キーを使用）
+        // アクティブ度（部員数 × メッセージ数）でランキングを作成
         let ranking = [];
         for (const channel of allClubChannels) {
             const messageCount = await redis.get(`weekly_message_count:${channel.id}`) || 0;
+            
+            // 部員数（アクティブユーザー数）の計算
+            const messages = await channel.messages.fetch({ limit: 100 });
+            const messageCounts = new Map();
+            messages.forEach(msg => {
+                if (!msg.author.bot) {
+                    const count = messageCounts.get(msg.author.id) || 0;
+                    messageCounts.set(msg.author.id, count + 1);
+                }
+            });
+
+            // 5回以上メッセージを送っているユーザーのみをカウント
+            const activeMembers = Array.from(messageCounts.entries())
+                .filter(([_, count]) => count >= 5)
+                .map(([userId]) => userId);
+
+            const activeMemberCount = activeMembers.length;
+            const activityScore = activeMemberCount * Number(messageCount);
+            
             ranking.push({ 
                 id: channel.id, 
                 name: channel.name,
                 messageCount: Number(messageCount),
+                activeMemberCount: activeMemberCount,
+                activityScore: activityScore,
                 position: channel.position
             });
         }
         
-        // メッセージ数でソート（同数の場合はチャンネル位置で安定化）
+        // アクティブ度（部員数 × メッセージ数）でソート（同数の場合はチャンネル位置で安定化）
         ranking.sort((a, b) => {
-            if (b.messageCount !== a.messageCount) return b.messageCount - a.messageCount;
+            if (b.activityScore !== a.activityScore) return b.activityScore - a.activityScore;
             return a.position - b.position;
         });
         // 全件をページ分割（1ページ最大20クラブ）
@@ -142,13 +163,13 @@ async function createWeeklyRankingEmbeds(client, redis) {
                 const club = ranking[i];
                 const place = i + 1;
                 const medal = place === 1 ? '🥇' : place === 2 ? '🥈' : place === 3 ? '🥉' : `${place}.`;
-                text += `${medal} <#${club.id}> — 📊 ${club.messageCount}\n`;
+                text += `${medal} <#${club.id}> — 👥 ${club.activeMemberCount}人 × 📊 ${club.messageCount} = ⭐ ${club.activityScore}\n`;
             }
             if (text.length === 0) text = 'データがありません';
             const embed = new EmbedBuilder()
                 .setColor(0xFFD700)
                 .setTitle(`🏆 週間部活ランキング (${page + 1}/${numPages})`)
-                .setDescription('ソートと同じ集計（weekly_message_count）に基づくランキングです\n（日曜0時に更新）')
+                .setDescription('アクティブ度（部員数 × メッセージ数）に基づくランキングです\n（日曜0時に更新）')
                 .addFields({ name: '📈 ランキング', value: text, inline: false })
                 .setTimestamp()
                 .setFooter({ text: 'HisameAI Mark.4' });

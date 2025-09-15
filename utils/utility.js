@@ -57,19 +57,40 @@ async function sortClubChannels(redis, guild) {
     
     if (allClubChannels.length === 0) return;
     
-    // メッセージ数でランキングを作成
+    // アクティブ度（部員数 × メッセージ数）でランキングを作成
     let ranking = [];
     for (const channel of allClubChannels) {
-        const count = await redis.get(`weekly_message_count:${channel.id}`) || 0;
+        const messageCount = await redis.get(`weekly_message_count:${channel.id}`) || 0;
+        
+        // 部員数（アクティブユーザー数）の計算
+        const messages = await channel.messages.fetch({ limit: 100 });
+        const messageCounts = new Map();
+        messages.forEach(msg => {
+            if (!msg.author.bot) {
+                const count = messageCounts.get(msg.author.id) || 0;
+                messageCounts.set(msg.author.id, count + 1);
+            }
+        });
+
+        // 5回以上メッセージを送っているユーザーのみをカウント
+        const activeMembers = Array.from(messageCounts.entries())
+            .filter(([_, count]) => count >= 5)
+            .map(([userId]) => userId);
+
+        const activeMemberCount = activeMembers.length;
+        const activityScore = activeMemberCount * Number(messageCount);
+        
         ranking.push({ 
             id: channel.id, 
-            count: Number(count), 
+            count: activityScore, // アクティブ度を使用
+            messageCount: Number(messageCount),
+            activeMemberCount: activeMemberCount,
             position: channel.position,
             categoryId: channel.parentId 
         });
     }
     
-    // 全部活をメッセージ数でソート（同じ場合は位置でソート）
+    // 全部活をアクティブ度でソート（同じ場合は位置でソート）
     ranking.sort((a, b) => (b.count !== a.count) ? b.count - a.count : a.position - b.position);
     
     // カテゴリーを跨いでソート（1つ目のカテゴリーが50チャンネルで上限の場合、2つ目以降に移動）

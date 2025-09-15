@@ -31,13 +31,36 @@ module.exports = {
             // 部活説明の取得
             const description = channel.topic || '説明はありません。';
 
-            // 部活順位の計算
+            // 部活順位の計算（アクティブ度で計算）
             const category = channel.parent;
             const clubChannels = category.children.cache.filter(ch => !config.EXCLUDED_CHANNELS.includes(ch.id) && ch.type === ChannelType.GuildText);
             let ranking = [];
             for (const ch of clubChannels.values()) {
-                const count = await redis.get(`weekly_message_count:${ch.id}`) || 0;
-                ranking.push({ id: ch.id, count: Number(count), position: ch.position });
+                const messageCount = await redis.get(`weekly_message_count:${ch.id}`) || 0;
+                
+                // 部員数（アクティブユーザー数）の計算
+                const messages = await ch.messages.fetch({ limit: 100 });
+                const messageCounts = new Map();
+                messages.forEach(msg => {
+                    if (!msg.author.bot) {
+                        const count = messageCounts.get(msg.author.id) || 0;
+                        messageCounts.set(msg.author.id, count + 1);
+                    }
+                });
+
+                // 5回以上メッセージを送っているユーザーのみをカウント
+                const activeMembers = Array.from(messageCounts.entries())
+                    .filter(([_, count]) => count >= 5)
+                    .map(([userId]) => userId);
+
+                const activeMemberCount = activeMembers.length;
+                const activityScore = activeMemberCount * Number(messageCount);
+                
+                ranking.push({ 
+                    id: ch.id, 
+                    count: activityScore, // アクティブ度を使用
+                    position: ch.position 
+                });
             }
             ranking.sort((a, b) => (b.count !== a.count) ? b.count - a.count : a.position - b.position);
             const rank = ranking.findIndex(r => r.id === channel.id) + 1;
