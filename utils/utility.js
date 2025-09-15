@@ -62,19 +62,41 @@ async function sortClubChannels(redis, guild) {
     for (const channel of allClubChannels) {
         const messageCount = await redis.get(`weekly_message_count:${channel.id}`) || 0;
         
-        // 部員数（アクティブユーザー数）の計算
-        const messages = await channel.messages.fetch({ limit: 100 });
-        const messageCounts = new Map();
-        messages.forEach(msg => {
-            if (!msg.author.bot) {
-                const count = messageCounts.get(msg.author.id) || 0;
-                messageCounts.set(msg.author.id, count + 1);
-            }
-        });
+        // 部員数（アクティブユーザー数）の計算（今週の開始＝JSTの日曜0時以降のみ、最大500件遡り）
+        const getStartOfWeekUtcMs = () => {
+            const now = new Date();
+            const jstNowMs = now.getTime() + 9 * 60 * 60 * 1000; // JST補正
+            const jstNow = new Date(jstNowMs);
+            const day = jstNow.getUTCDay();
+            const diffDays = day; // 日曜0
+            const jstStartMs = Date.UTC(jstNow.getUTCFullYear(), jstNow.getUTCMonth(), jstNow.getUTCDate()) - diffDays * 24 * 60 * 60 * 1000;
+            return jstStartMs - 9 * 60 * 60 * 1000; // UTCに戻す
+        };
+        const sinceUtcMs = getStartOfWeekUtcMs();
 
-        // 5回以上メッセージを送っているユーザーのみをカウント
+        const messageCounts = new Map();
+        let beforeId = undefined;
+        let fetchedTotal = 0;
+        const maxFetch = 500;
+        while (fetchedTotal < maxFetch) {
+            const batch = await channel.messages.fetch({ limit: Math.min(100, maxFetch - fetchedTotal), before: beforeId }).catch(() => null);
+            if (!batch || batch.size === 0) break;
+            for (const msg of batch.values()) {
+                if (msg.createdTimestamp < sinceUtcMs) { batch.clear(); break; }
+                if (!msg.author.bot) {
+                    const count = messageCounts.get(msg.author.id) || 0;
+                    messageCounts.set(msg.author.id, count + 1);
+                }
+            }
+            fetchedTotal += batch.size;
+            const last = batch.last();
+            if (!last || last.createdTimestamp < sinceUtcMs) break;
+            beforeId = last.id;
+        }
+
+        // 1回以上メッセージを送っているユーザーをカウント
         const activeMembers = Array.from(messageCounts.entries())
-            .filter(([_, count]) => count >= 5)
+            .filter(([_, count]) => count >= 1)
             .map(([userId]) => userId);
 
         const activeMemberCount = activeMembers.length;
@@ -82,7 +104,7 @@ async function sortClubChannels(redis, guild) {
         
         ranking.push({ 
             id: channel.id, 
-            count: activityScore, // アクティブ度を使用
+            count: activityScore, // アクティブ度を使用（下位互換のためプロパティ名は維持）
             messageCount: Number(messageCount),
             activeMemberCount: activeMemberCount,
             position: channel.position,
@@ -90,8 +112,11 @@ async function sortClubChannels(redis, guild) {
         });
     }
     
-    // 全部活をアクティブ度でソート（同じ場合は位置でソート）
-    ranking.sort((a, b) => (b.count !== a.count) ? b.count - a.count : a.position - b.position);
+    // 全部活をアクティブ度でソート（同数の場合はチャンネル位置で安定化）
+    ranking.sort((a, b) => {
+        if (b.count !== a.count) return b.count - a.count;
+        return a.position - b.position;
+    });
     
     // カテゴリーを跨いでソート（1つ目のカテゴリーが50チャンネルで上限の場合、2つ目以降に移動）
     const maxChannelsPerCategory = 50;
