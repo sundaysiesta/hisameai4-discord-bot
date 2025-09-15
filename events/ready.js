@@ -118,15 +118,41 @@ async function createWeeklyRankingEmbeds(client, redis) {
         for (const channel of allClubChannels) {
             const messageCount = await redis.get(`weekly_message_count:${channel.id}`) || 0;
             
-            // 部員数（アクティブユーザー数）の計算
-            const messages = await channel.messages.fetch({ limit: 100 });
+            // 部員数（アクティブユーザー数）の計算（今週の開始＝JSTの日曜0時以降のみ）
+            const getStartOfWeekUtcMs = () => {
+                const now = new Date();
+                // JSTに合わせるため+9時間して曜日を計算
+                const jstNowMs = now.getTime() + 9 * 60 * 60 * 1000;
+                const jstNow = new Date(jstNowMs);
+                const day = jstNow.getUTCDay(); // 0=Sun
+                const diffDays = day; // 今が日曜なら0日戻す
+                const jstStartMs = Date.UTC(jstNow.getUTCFullYear(), jstNow.getUTCMonth(), jstNow.getUTCDate()) - diffDays * 24 * 60 * 60 * 1000;
+                // JSTの0時 → UTCに戻すため-9時間
+                return jstStartMs - 9 * 60 * 60 * 1000;
+            };
+            const sinceUtcMs = getStartOfWeekUtcMs();
+
+            // 週の開始以降のメッセージのみからアクティブユーザーを算出（最大500件まで遡る）
             const messageCounts = new Map();
-            messages.forEach(msg => {
-                if (!msg.author.bot) {
-                    const count = messageCounts.get(msg.author.id) || 0;
-                    messageCounts.set(msg.author.id, count + 1);
+            let beforeId = undefined;
+            let fetchedTotal = 0;
+            const maxFetch = 500;
+            while (fetchedTotal < maxFetch) {
+                const batch = await channel.messages.fetch({ limit: Math.min(100, maxFetch - fetchedTotal), before: beforeId }).catch(() => null);
+                if (!batch || batch.size === 0) break;
+                for (const msg of batch.values()) {
+                    // 週開始より古い最古のメッセージに到達したら打ち切り
+                    if (msg.createdTimestamp < sinceUtcMs) { batch.clear(); break; }
+                    if (!msg.author.bot) {
+                        const count = messageCounts.get(msg.author.id) || 0;
+                        messageCounts.set(msg.author.id, count + 1);
+                    }
                 }
-            });
+                fetchedTotal += batch.size;
+                const last = batch.last();
+                if (!last || last.createdTimestamp < sinceUtcMs) break;
+                beforeId = last.id;
+            }
 
             // 5回以上メッセージを送っているユーザーのみをカウント
             const activeMembers = Array.from(messageCounts.entries())
