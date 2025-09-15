@@ -132,8 +132,7 @@ module.exports = {
                 });
             }
 
-            // 管理者ログチャンネルに投稿情報を送信
-            await this.sendAdminLog(interaction, sentMessage, hash, finalDisplayName, isRevealed);
+            // 管理者ログチャンネルへの送信は無効化（要望により匿名機能のログ送信を停止）
 
             const replyMessage = isRevealed 
                 ? '🎭 匿名が剥がれました！元の名前とアイコンで投稿されました。' 
