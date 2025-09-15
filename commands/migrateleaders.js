@@ -4,7 +4,7 @@ const config = require('../config.js');
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('migrateleaders')
-        .setDescription('旧「部長ロール」方式から新「個別権限」方式へデータ移行します。(管理者限定)'),
+        .setDescription('Notionの「部長」情報に基づきチャンネル権限・Redisを同期します。(管理者限定)'),
     async execute(interaction, redis, notion) {
         if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
             return interaction.reply({ content: 'このコマンドを使用する権限がありません。', ephemeral: true });
@@ -13,78 +13,106 @@ module.exports = {
 
         try {
             const guild = interaction.guild;
-            let processedChannels = 0;
-            let updatedLeaders = 0;
-            let notionUpdates = 0;
-
-            // キャッシュにないチャンネル/メンバーも対象にするため事前フェッチ
-            const allFetchedChannels = await guild.channels.fetch();
             await guild.members.fetch();
 
-            // すべての対象チャンネルを列挙（親カテゴリ一致でフィルタ）
-            let allClubChannels = [];
-            for (const categoryId of config.CLUB_CATEGORIES) {
-                const clubChannels = allFetchedChannels.filter(ch =>
-                    ch && ch.parentId === categoryId &&
-                    !config.EXCLUDED_CHANNELS.includes(ch.id) &&
-                    ch.type === ChannelType.GuildText
-                );
-                allClubChannels.push(...clubChannels.values());
-            }
+            // Notion全件取得（DiscordユーザーID・部長）
+            let startCursor = undefined;
+            const pages = [];
+            do {
+                const res = await notion.databases.query({
+                    database_id: config.NOTION_DATABASE_ID,
+                    start_cursor: startCursor,
+                });
+                pages.push(...res.results);
+                startCursor = res.has_more ? res.next_cursor : undefined;
+            } while (startCursor);
 
-            for (const channel of allClubChannels) {
-                processedChannels++;
-                // 旧データ: leader_roles:<channelId> -> roleId
-                const roleId = await redis.get(`leader_roles:${channel.id}`);
-                if (!roleId) continue;
-                const role = await guild.roles.fetch(roleId).catch(() => null);
-                if (!role || role.members.size === 0) continue;
+            let updatedPerms = 0;
+            let updatedRedis = 0;
+            let cleanedNotion = 0;
+            let missingMembers = 0;
+            let missingChannels = 0;
+            const conflicts = new Map(); // channelId -> Set<userId>
+            const assigned = new Map(); // channelId -> userId（優先割当）
 
-                // 最初のメンバーを部長として採用（複数いる場合は先頭のみ）
-                const leaderMember = role.members.first();
-                if (!leaderMember) continue;
+            for (const page of pages) {
+                const discordIdProp = page.properties?.['DiscordユーザーID'];
+                const leaderProp = page.properties?.['部長'];
+                const userId = (discordIdProp && discordIdProp.rich_text && discordIdProp.rich_text[0]?.plain_text) ? discordIdProp.rich_text[0].plain_text.trim() : '';
+                const raw = (leaderProp && leaderProp.rich_text && leaderProp.rich_text[0]?.plain_text) ? leaderProp.rich_text[0].plain_text : '';
+                const channelIds = raw.split(',').map(s => s.trim()).filter(Boolean);
 
-                // 新データ保存: leader_user:<channelId> = userId
-                await redis.set(`leader_user:${channel.id}`, leaderMember.id);
-                updatedLeaders++;
+                if (!userId || channelIds.length === 0) continue;
 
-                // 権限をユーザーへ直接付与（旧ロールと共存）
-                try {
-                    await channel.permissionOverwrites.edit(leaderMember.id, {
-                        ViewChannel: true,
-                        SendMessages: true,
-                        ManageChannels: true,
-                        ManageMessages: true
-                    });
-                } catch (e) {
-                    console.error(`権限付与失敗: channel=${channel.id}, user=${leaderMember.id}`, e);
-                }
+                const member = await guild.members.fetch(userId).catch(() => null);
+                if (!member) { missingMembers++; continue; }
 
-                // Notionの『部長』プロパティにチャンネルIDを追記
-                try {
-                    const notionRes = await notion.databases.query({
-                        database_id: config.NOTION_DATABASE_ID,
-                        filter: { property: 'DiscordユーザーID', rich_text: { equals: leaderMember.id } }
-                    });
-                    if (notionRes.results.length > 0) {
-                        const page = notionRes.results[0];
-                        const pageId = page.id;
-                        const current = page.properties?.['部長'];
-                        const prev = (current && current.rich_text && current.rich_text[0]?.plain_text) ? current.rich_text[0].plain_text : '';
-                        const ids = new Set((prev || '').split(',').map(s => s.trim()).filter(Boolean));
-                        ids.add(channel.id);
-                        await notion.pages.update({
-                            page_id: pageId,
-                            properties: { '部長': { rich_text: [{ text: { content: Array.from(ids).join(',') } }] } }
-                        });
-                        notionUpdates++;
+                const validChannels = [];
+                for (const channelId of channelIds) {
+                    const channel = await guild.channels.fetch(channelId).catch(() => null);
+                    if (!channel || channel.type !== ChannelType.GuildText) { missingChannels++; continue; }
+
+                    // 競合検出
+                    const prev = assigned.get(channelId);
+                    if (prev && prev !== userId) {
+                        const set = conflicts.get(channelId) || new Set([prev]);
+                        set.add(userId);
+                        conflicts.set(channelId, set);
+                        continue; // 最初の割当を優先
                     }
-                } catch (e) {
-                    console.error(`Notion更新失敗 (${channel.id}):`, e);
+
+                    // 権限付与
+                    try {
+                        await channel.permissionOverwrites.edit(userId, {
+                            ViewChannel: true,
+                            SendMessages: true,
+                            ManageChannels: true,
+                            ManageMessages: true
+                        });
+                        updatedPerms++;
+                        assigned.set(channelId, userId);
+                    } catch (e) {
+                        console.error(`権限付与失敗: channel=${channelId}, user=${userId}`, e);
+                    }
+
+                    // Redis更新
+                    try {
+                        await redis.set(`leader_user:${channelId}`, userId);
+                        updatedRedis++;
+                    } catch (e) {
+                        console.error(`Redis更新失敗: channel=${channelId}, user=${userId}`, e);
+                    }
+
+                    validChannels.push(channelId);
+                }
+
+                // Notion側のクリーニング（存在しないチャンネルID削除）
+                const newJoined = validChannels.join(',');
+                if (newJoined !== channelIds.join(',')) {
+                    try {
+                        await notion.pages.update({
+                            page_id: page.id,
+                            properties: { '部長': { rich_text: [{ text: { content: newJoined } }] } }
+                        });
+                        cleanedNotion++;
+                    } catch (e) {
+                        console.error(`Notionクリーニング失敗: user=${userId}`, e);
+                    }
                 }
             }
 
-            await interaction.editReply(`移行完了: 対象チャンネル ${processedChannels}、部長設定 ${updatedLeaders}、Notion更新 ${notionUpdates}。`);
+            let conflictText = '';
+            if (conflicts.size > 0) {
+                const lines = [];
+                for (const [cid, set] of conflicts.entries()) {
+                    lines.push(`${cid}: ${Array.from(set).join(', ')}`);
+                }
+                conflictText = `\n競合（同一チャンネルに複数の部長）:\n${lines.join('\n')}`;
+            }
+
+            await interaction.editReply(
+                `同期完了: 権限更新 ${updatedPerms}, Redis更新 ${updatedRedis}, Notion整理 ${cleanedNotion}, 不在ユーザー ${missingMembers}, 不在チャンネル ${missingChannels}.${conflictText}`
+            );
         } catch (error) {
             console.error('migrateleaders error:', error);
             await interaction.editReply('移行中にエラーが発生しました。ログを確認してください。');
