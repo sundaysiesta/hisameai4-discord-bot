@@ -4,7 +4,7 @@ require('dotenv').config();
 const commands = [
     { name: 'help', description: '利用可能なコマンドの一覧を表示します。' },
     { name: 'status', description: 'Botのステータスメッセージを変更します。(管理者限定)', options: [{ name: '内容', type: 3, description: '表示するステータスの内容', required: true }] },
-    { name: 'leader', description: '部活チャンネルに部長ロールを手動で設定します。(管理者限定)', options: [{ name: '部活', type: 7, description: '対象の部活チャンネル', required: true }, { name: '部長', type: 8, description: '設定する部長ロール', required: true }] },
+    { name: 'leader', description: '部活チャンネルに部長を手動で設定します。(管理者限定)', options: [{ name: '部活', type: 7, description: '対象の部活チャンネル', required: true }, { name: '部長', type: 3, description: 'Notionデータベース上の正確な名前（タイトル）', required: true }] },
     { name: 'club', description: '指定した部活の情報を表示します。', options: [{ name: 'channel', type: 7, description: '情報を表示する部活チャンネル', required: true }] },
     { name: 'sort', description: '部活チャンネルを現在のアクティブ順に手動で並び替えます。(管理者限定)' },
     { name: 'profile', description: 'プロフィールを画像で表示します。ユーザー指定か名前検索、または自身のプロフを表示します。', options: [{ name: 'user', type: 6, description: 'プロフィールを表示したいユーザー', required: false }, { name: 'name', type: 3, description: 'Notionデータベースの名前で検索', required: false }] },
