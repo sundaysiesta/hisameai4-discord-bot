@@ -44,8 +44,13 @@ module.exports = {
                     
                     const modal = new ModalBuilder().setCustomId(config.CREATE_CLUB_MODAL_ID).setTitle('部活作成フォーム');
                     const nameInput = new TextInputBuilder().setCustomId('club_name').setLabel('部活名').setStyle(TextInputStyle.Short).setRequired(true);
+                    const emojiInput = new TextInputBuilder().setCustomId('club_emoji').setLabel('絵文字（1文字）').setStyle(TextInputStyle.Short).setRequired(true).setPlaceholder('例: ⚽ 🎵 🎨 🎮').setMaxLength(1);
                     const activityInput = new TextInputBuilder().setCustomId('club_activity').setLabel('活動内容').setStyle(TextInputStyle.Paragraph).setRequired(true);
-                    modal.addComponents(new ActionRowBuilder().addComponents(nameInput), new ActionRowBuilder().addComponents(activityInput));
+                    modal.addComponents(
+                        new ActionRowBuilder().addComponents(nameInput), 
+                        new ActionRowBuilder().addComponents(emojiInput),
+                        new ActionRowBuilder().addComponents(activityInput)
+                    );
                     await interaction.showModal(modal);
                 }
                 // 代理投稿削除ボタン
@@ -68,6 +73,7 @@ module.exports = {
                 if (interaction.customId === config.CREATE_CLUB_MODAL_ID) {
                     await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
                     const clubName = interaction.fields.getTextInputValue('club_name').trim();
+                    const clubEmoji = interaction.fields.getTextInputValue('club_emoji').trim();
                     const clubActivity = interaction.fields.getTextInputValue('club_activity').trim();
                     const creator = interaction.member;
                     
@@ -78,18 +84,24 @@ module.exports = {
                     if (clubName.length < 2 || clubName.length > 20) {
                         return interaction.editReply({ content: '部活名は2文字以上20文字以下で入力してください。' });
                     }
+                    if (!clubEmoji || clubEmoji.length === 0) {
+                        return interaction.editReply({ content: '絵文字を入力してください。' });
+                    }
                     if (clubActivity.length < 10 || clubActivity.length > 200) {
                         return interaction.editReply({ content: '活動内容は10文字以上200文字以下で入力してください。' });
                     }
                     
-                    // 部活名の重複チェック
+                    // 部活名を「絵文字｜部活名」の形式に変換
+                    const channelName = `${clubEmoji}｜${clubName}`;
+                    
+                    // 部活名の重複チェック（絵文字付きチャンネル名でチェック）
                     const existingChannels = [];
                     for (const categoryId of config.CLUB_CATEGORIES) {
                         const category = await interaction.guild.channels.fetch(categoryId).catch(() => null);
                         if (category && category.children) {
                             const channels = category.children.cache.filter(ch => 
                                 ch.type === ChannelType.GuildText && 
-                                ch.name.toLowerCase() === clubName.toLowerCase()
+                                ch.name.toLowerCase() === channelName.toLowerCase()
                             );
                             existingChannels.push(...channels.values());
                         }
@@ -116,7 +128,7 @@ module.exports = {
                         }
                         
                         const newChannel = await interaction.guild.channels.create({
-                            name: clubName,
+                            name: channelName,
                             type: ChannelType.GuildText,
                             parent: targetCategoryId,
                             topic: `部長: <@${creator.id}>\n活動内容: ${clubActivity}`,
