@@ -163,12 +163,28 @@ async function createWeeklyRankingEmbeds(client, redis) {
             const activeMemberCount = activeMembers.length;
             const activityScore = activeMemberCount * weeklyMessageCount;
             
+            // 前回のスコアを取得
+            const previousScore = await redis.get(`previous_score:${channel.id}`) || 0;
+            const previousScoreNum = Number(previousScore);
+            
+            // 伸び率を計算
+            let growthRate = 0;
+            if (previousScoreNum > 0) {
+                growthRate = Math.round(((activityScore - previousScoreNum) / previousScoreNum) * 100);
+            } else if (activityScore > 0) {
+                growthRate = 100; // 前回0で今回1以上の場合
+            }
+            
+            // 今回のスコアを保存（次回用）
+            await redis.setex(`previous_score:${channel.id}`, 7 * 24 * 60 * 60, activityScore.toString());
+            
             ranking.push({ 
                 id: channel.id, 
                 name: channel.name,
                 messageCount: weeklyMessageCount,
                 activeMemberCount: activeMemberCount,
                 activityScore: activityScore,
+                growthRate: growthRate,
                 position: channel.position
             });
         }
@@ -190,7 +206,16 @@ async function createWeeklyRankingEmbeds(client, redis) {
                 const club = ranking[i];
                 const place = i + 1;
                 const medal = place === 1 ? '🥇' : place === 2 ? '🥈' : place === 3 ? '🥉' : `${place}.`;
-                text += `${medal} <#${club.id}> — 👥 ${club.activeMemberCount}人 × 📊 ${club.messageCount} = ⭐ ${club.activityScore}\n`;
+                
+                // 伸び率の表示
+                let growthText = '';
+                if (club.growthRate > 0) {
+                    growthText = ` ↑+${club.growthRate}%`;
+                } else if (club.growthRate < 0) {
+                    growthText = ` ↓${club.growthRate}%`;
+                }
+                
+                text += `${medal} <#${club.id}> — ${club.activityScore}pt${growthText}\n`;
             }
             if (text.length === 0) text = 'データがありません';
             const embed = new EmbedBuilder()
@@ -291,8 +316,9 @@ module.exports = {
                 const clubPanelEmbed = new EmbedBuilder()
                     .setColor(0x5865F2)
                     .setTitle('🎫 部活作成パネル')
-                    .setDescription('新しい部活を設立するには、下のボタンを押してください。\n\n**流れ：**\n1. ボタンを押してフォームを開く\n2. 部活名・絵文字・活動内容を入力\n3. チャンネルが自動作成され、部長権限が付与される')
+                    .setDescription('**新規でもすぐ参加できる遊び場**\n\n気軽に部活を作ってみませんか？\n\n**流れ：**\n1. ボタンを押してフォームを開く\n2. 部活名・絵文字・活動内容を入力\n3. チャンネルが自動作成され、部長権限が付与される')
                     .addFields(
+                        { name: '💡 気軽に始めよう', value: '• まずは小規模でも作ってみてOK\n• 途中で放置しても大丈夫\n• 気が向いたときに活動すればOK', inline: false },
                         { name: '📝 入力項目', value: '部活名・絵文字・活動内容', inline: true },
                         { name: '⏰ 制限', value: '7日に1回', inline: true },
                         { name: '📍 場所', value: '人気・新着部活', inline: true },
@@ -330,11 +356,12 @@ module.exports = {
                     const clubPanelEmbed = new EmbedBuilder()
                         .setColor(0x5865F2)
                         .setTitle('🎫 部活作成パネル')
-                        .setDescription('新しい部活を設立するには、下のボタンを押してください。\n\n**流れ：**\n1. ボタンを押してフォームを開く\n2. 部活名・絵文字・活動内容を入力\n3. チャンネルが自動作成され、部長権限が付与される')
+                        .setDescription('**新規でもすぐ参加できる遊び場**\n\n気軽に部活を作ってみませんか？\n\n**流れ：**\n1. ボタンを押してフォームを開く\n2. 部活名・絵文字・活動内容を入力\n3. チャンネルが自動作成され、部長権限が付与される')
                         .addFields(
+                            { name: '💡 気軽に始めよう', value: '• まずは小規模でも作ってみてOK\n• 途中で放置しても大丈夫\n• 気が向いたときに活動すればOK', inline: false },
                             { name: '📝 入力項目', value: '部活名・絵文字・活動内容', inline: true },
                             { name: '⏰ 制限', value: '7日に1回', inline: true },
-                            { name: '📍 場所', value: '人気部活カテゴリ', inline: true },
+                            { name: '📍 場所', value: '人気・新着部活', inline: true },
                             { name: '🎨 絵文字例', value: '⚽ 🎵 🎨 🎮 📚 🎮', inline: false }
                         )
                         .setTimestamp()

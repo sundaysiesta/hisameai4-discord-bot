@@ -67,12 +67,28 @@ async function createCurrentRankingEmbeds(guild, redis) {
             const activeMemberCount = activeMembers.length;
             const activityScore = activeMemberCount * weeklyMessageCount;
             
+            // 前回のスコアを取得
+            const previousScore = await redis.get(`previous_score:${channel.id}`) || 0;
+            const previousScoreNum = Number(previousScore);
+            
+            // 伸び率を計算
+            let growthRate = 0;
+            if (previousScoreNum > 0) {
+                growthRate = Math.round(((activityScore - previousScoreNum) / previousScoreNum) * 100);
+            } else if (activityScore > 0) {
+                growthRate = 100; // 前回0で今回1以上の場合
+            }
+            
+            // 今回のスコアを保存（次回用）
+            await redis.setex(`previous_score:${channel.id}`, 7 * 24 * 60 * 60, activityScore.toString());
+            
             ranking.push({ 
                 id: channel.id, 
                 name: channel.name,
                 messageCount: weeklyMessageCount,
                 activeMemberCount: activeMemberCount,
                 activityScore: activityScore,
+                growthRate: growthRate,
                 position: channel.position
             });
         }
@@ -95,7 +111,16 @@ async function createCurrentRankingEmbeds(guild, redis) {
                 const club = ranking[i];
                 const place = i + 1;
                 const medal = place === 1 ? '🥇' : place === 2 ? '🥈' : place === 3 ? '🥉' : `${place}.`;
-                text += `${medal} <#${club.id}> — 👥 ${club.activeMemberCount}人 × 📊 ${club.messageCount} = ⭐ ${club.activityScore}\n`;
+                
+                // 伸び率の表示
+                let growthText = '';
+                if (club.growthRate > 0) {
+                    growthText = ` ↑+${club.growthRate}%`;
+                } else if (club.growthRate < 0) {
+                    growthText = ` ↓${club.growthRate}%`;
+                }
+                
+                text += `${medal} <#${club.id}> — ${club.activityScore}pt${growthText}\n`;
             }
             if (text.length === 0) text = 'データがありません';
             const embed = new EmbedBuilder()
