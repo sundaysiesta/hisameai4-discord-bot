@@ -33,8 +33,9 @@ async function postStickyMessage(client, channel, stickyCustomId, createMessageP
 async function sortClubChannels(redis, guild) {
     let allClubChannels = [];
     
-    // 両方のカテゴリーから部活チャンネルを取得
-    for (const categoryId of config.CLUB_CATEGORIES) {
+    // 全部活カテゴリーから部活チャンネルを取得（人気部活カテゴリも含む）
+    const allCategories = [...config.CLUB_CATEGORIES, config.POPULAR_CLUB_CATEGORY_ID];
+    for (const categoryId of allCategories) {
         const category = await guild.channels.fetch(categoryId).catch(() => null);
         if (category && category.type === ChannelType.GuildCategory) {
             const clubChannels = category.children.cache.filter(ch => 
@@ -122,7 +123,7 @@ async function sortClubChannels(redis, guild) {
     const maxChannelsPerCategory = 50;
     const topChannelOffset = 2;
     
-    // 全部活を部室棟に配置
+    // 全部活を適切なカテゴリーに配置
     for (let i = 0; i < ranking.length; i++) {
         const channelData = ranking[i];
         const channel = await guild.channels.fetch(channelData.id).catch(() => null);
@@ -132,20 +133,28 @@ async function sortClubChannels(redis, guild) {
         let targetCategoryId;
         let positionInCategory;
         
-        if (i < maxChannelsPerCategory - topChannelOffset) {
-            // 1つ目のカテゴリーに配置
-            targetCategoryId = config.CLUB_CATEGORIES[0];
-            positionInCategory = i + topChannelOffset;
+        if (i < 5) {
+            // 上位5つは人気部活カテゴリに配置
+            targetCategoryId = config.POPULAR_CLUB_CATEGORY_ID;
+            positionInCategory = i;
         } else {
-            // 2つ目以降のカテゴリーに配置
-            const categoryIndex = Math.floor((i - (maxChannelsPerCategory - topChannelOffset)) / (maxChannelsPerCategory - topChannelOffset)) + 1;
-            if (categoryIndex < config.CLUB_CATEGORIES.length) {
-                targetCategoryId = config.CLUB_CATEGORIES[categoryIndex];
-                positionInCategory = (i - (maxChannelsPerCategory - topChannelOffset)) % (maxChannelsPerCategory - topChannelOffset) + topChannelOffset;
+            // 6位以降は部室棟に配置
+            const adjustedIndex = i - 5; // 人気部活カテゴリ分を差し引く
+            if (adjustedIndex < maxChannelsPerCategory - topChannelOffset) {
+                // 1つ目のカテゴリーに配置
+                targetCategoryId = config.CLUB_CATEGORIES[0];
+                positionInCategory = adjustedIndex + topChannelOffset;
             } else {
-                // カテゴリーが足りない場合は最後のカテゴリーに配置
-                targetCategoryId = config.CLUB_CATEGORIES[config.CLUB_CATEGORIES.length - 1];
-                positionInCategory = i + topChannelOffset;
+                // 2つ目以降のカテゴリーに配置
+                const categoryIndex = Math.floor((adjustedIndex - (maxChannelsPerCategory - topChannelOffset)) / (maxChannelsPerCategory - topChannelOffset)) + 1;
+                if (categoryIndex < config.CLUB_CATEGORIES.length) {
+                    targetCategoryId = config.CLUB_CATEGORIES[categoryIndex];
+                    positionInCategory = (adjustedIndex - (maxChannelsPerCategory - topChannelOffset)) % (maxChannelsPerCategory - topChannelOffset) + topChannelOffset;
+                } else {
+                    // カテゴリーが足りない場合は最後のカテゴリーに配置
+                    targetCategoryId = config.CLUB_CATEGORIES[config.CLUB_CATEGORIES.length - 1];
+                    positionInCategory = adjustedIndex + topChannelOffset;
+                }
             }
         }
         

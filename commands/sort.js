@@ -7,8 +7,9 @@ async function createCurrentRankingEmbeds(guild, redis) {
     try {
         let allClubChannels = [];
         
-        // 両方のカテゴリーから部活チャンネルを取得
-        for (const categoryId of config.CLUB_CATEGORIES) {
+        // 全部活カテゴリーから部活チャンネルを取得（人気部活カテゴリも含む）
+        const allCategories = [...config.CLUB_CATEGORIES, config.POPULAR_CLUB_CATEGORY_ID];
+        for (const categoryId of allCategories) {
             const category = await guild.channels.fetch(categoryId).catch(() => null);
             if (category && category.type === ChannelType.GuildCategory) {
                 const clubChannels = category.children.cache.filter(ch => 

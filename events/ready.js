@@ -99,8 +99,9 @@ async function createWeeklyRankingEmbeds(client, redis) {
 
         let allClubChannels = [];
         
-        // 両方のカテゴリーから部活チャンネルを取得
-        for (const categoryId of config.CLUB_CATEGORIES) {
+        // 全部活カテゴリーから部活チャンネルを取得（人気部活カテゴリも含む）
+        const allCategories = [...config.CLUB_CATEGORIES, config.POPULAR_CLUB_CATEGORY_ID];
+        for (const categoryId of allCategories) {
             const category = await guild.channels.fetch(categoryId).catch(() => null);
             if (category && category.type === ChannelType.GuildCategory) {
                 const clubChannels = category.children.cache.filter(ch => 
@@ -290,7 +291,7 @@ module.exports = {
                 const clubPanelEmbed = new EmbedBuilder()
                     .setColor(0x5865F2)
                     .setTitle('🎫 部活作成パネル')
-                    .setDescription('新しい部活を設立するには、下のボタンを押してください。\n\n**部活設立の流れ：**\n1. ボタンを押して部活作成フォームを開く\n2. 部活名と活動内容を入力\n3. 部活チャンネルが自動で作成される\n4. 部長ロールが付与される\n\n**注意事項：**\n• 部活作成は7日に1回まで\n• 部活名は分かりやすい名前にする\n• 活動内容は具体的に記入する')
+                    .setDescription('新しい部活を設立するには、下のボタンを押してください。\n\n**部活設立の流れ：**\n1. ボタンを押して部活作成フォームを開く\n2. 部活名と活動内容を入力\n3. 部活チャンネルが自動で作成される\n\n**注意事項：**\n• 部活作成は7日に1回まで\n• 部活名は分かりやすい名前にする\n• 活動内容は具体的に記入する')
                     .addFields(
                         { name: '📋 必要な情報', value: '• 部活名\n• 活動内容', inline: true },
                         { name: '⏰ 作成制限', value: '7日に1回', inline: true },
@@ -328,7 +329,7 @@ module.exports = {
                     const clubPanelEmbed = new EmbedBuilder()
                         .setColor(0x5865F2)
                         .setTitle('🎫 部活作成パネル')
-                        .setDescription('新しい部活を設立するには、下のボタンを押してください。\n\n**部活設立の流れ：**\n1. ボタンを押して部活作成フォームを開く\n2. 部活名と活動内容を入力\n3. 部活チャンネルが自動で作成される\n4. 部長ロールが付与される\n\n**注意事項：**\n• 部活作成は7日に1回まで\n• 部活名は分かりやすい名前にする\n• 活動内容は具体的に記入する')
+                        .setDescription('新しい部活を設立するには、下のボタンを押してください。\n\n**部活設立の流れ：**\n1. ボタンを押して部活作成フォームを開く\n2. 部活名と活動内容を入力\n3. 部活チャンネルが自動で作成される\n\n**注意事項：**\n• 部活作成は7日に1回まで\n• 部活名は分かりやすい名前にする\n• 活動内容は具体的に記入する')
                         .addFields(
                             { name: '📋 必要な情報', value: '• 部活名\n• 活動内容', inline: true },
                             { name: '⏰ 作成制限', value: '7日に1回', inline: true },
