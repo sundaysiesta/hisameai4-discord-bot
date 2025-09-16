@@ -25,8 +25,6 @@ async function createCurrentRankingEmbeds(guild, redis) {
         // アクティブ度（部員数 × メッセージ数）でランキングを作成
         let ranking = [];
         for (const channel of allClubChannels) {
-            const messageCount = await redis.get(`weekly_message_count:${channel.id}`) || 0;
-            
             // 部員数（アクティブユーザー数）の計算（今週の開始＝JSTの日曜0時以降のみ）
             const getStartOfWeekUtcMs = () => {
                 const now = new Date();
@@ -40,6 +38,7 @@ async function createCurrentRankingEmbeds(guild, redis) {
             const sinceUtcMs = getStartOfWeekUtcMs();
 
             const messageCounts = new Map();
+            let weeklyMessageCount = 0; // リアルタイムでメッセージ数をカウント
             let beforeId = undefined;
             let fetchedTotal = 0;
             const maxFetch = 500;
@@ -51,6 +50,7 @@ async function createCurrentRankingEmbeds(guild, redis) {
                     if (!msg.author.bot) {
                         const count = messageCounts.get(msg.author.id) || 0;
                         messageCounts.set(msg.author.id, count + 1);
+                        weeklyMessageCount++; // メッセージ数をカウント
                     }
                 }
                 fetchedTotal += batch.size;
@@ -65,12 +65,12 @@ async function createCurrentRankingEmbeds(guild, redis) {
                 .map(([userId]) => userId);
 
             const activeMemberCount = activeMembers.length;
-            const activityScore = activeMemberCount * Number(messageCount);
+            const activityScore = activeMemberCount * weeklyMessageCount;
             
             ranking.push({ 
                 id: channel.id, 
                 name: channel.name,
-                messageCount: Number(messageCount),
+                messageCount: weeklyMessageCount,
                 activeMemberCount: activeMemberCount,
                 activityScore: activityScore,
                 position: channel.position

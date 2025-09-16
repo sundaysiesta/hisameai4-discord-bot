@@ -117,8 +117,6 @@ async function createWeeklyRankingEmbeds(client, redis) {
         // アクティブ度（部員数 × メッセージ数）でランキングを作成
         let ranking = [];
         for (const channel of allClubChannels) {
-            const messageCount = await redis.get(`weekly_message_count:${channel.id}`) || 0;
-            
             // 部員数（アクティブユーザー数）の計算（今週の開始＝JSTの日曜0時以降のみ）
             const getStartOfWeekUtcMs = () => {
                 const now = new Date();
@@ -133,8 +131,9 @@ async function createWeeklyRankingEmbeds(client, redis) {
             };
             const sinceUtcMs = getStartOfWeekUtcMs();
 
-            // 週の開始以降のメッセージのみからアクティブユーザーを算出（最大500件まで遡る）
+            // 週の開始以降のメッセージのみからアクティブユーザーとメッセージ数を算出（最大500件まで遡る）
             const messageCounts = new Map();
+            let weeklyMessageCount = 0; // リアルタイムでメッセージ数をカウント
             let beforeId = undefined;
             let fetchedTotal = 0;
             const maxFetch = 500;
@@ -147,6 +146,7 @@ async function createWeeklyRankingEmbeds(client, redis) {
                     if (!msg.author.bot) {
                         const count = messageCounts.get(msg.author.id) || 0;
                         messageCounts.set(msg.author.id, count + 1);
+                        weeklyMessageCount++; // メッセージ数をカウント
                     }
                 }
                 fetchedTotal += batch.size;
@@ -161,12 +161,12 @@ async function createWeeklyRankingEmbeds(client, redis) {
                 .map(([userId]) => userId);
 
             const activeMemberCount = activeMembers.length;
-            const activityScore = activeMemberCount * Number(messageCount);
+            const activityScore = activeMemberCount * weeklyMessageCount;
             
             ranking.push({ 
                 id: channel.id, 
                 name: channel.name,
-                messageCount: Number(messageCount),
+                messageCount: weeklyMessageCount,
                 activeMemberCount: activeMemberCount,
                 activityScore: activityScore,
                 position: channel.position
@@ -295,7 +295,7 @@ module.exports = {
                     .addFields(
                         { name: '📝 入力項目', value: '部活名・絵文字・活動内容', inline: true },
                         { name: '⏰ 制限', value: '7日に1回', inline: true },
-                        { name: '📍 場所', value: '人気部活カテゴリ', inline: true },
+                        { name: '📍 場所', value: '人気・新着部活', inline: true },
                         { name: '🎨 絵文字例', value: '⚽ 🎵 🎨 🎮 📚 🎮', inline: false }
                     )
                     .setTimestamp()

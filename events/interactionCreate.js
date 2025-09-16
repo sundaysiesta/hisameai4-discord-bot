@@ -44,7 +44,7 @@ module.exports = {
                     
                     const modal = new ModalBuilder().setCustomId(config.CREATE_CLUB_MODAL_ID).setTitle('部活作成フォーム');
                     const nameInput = new TextInputBuilder().setCustomId('club_name').setLabel('部活名').setStyle(TextInputStyle.Short).setRequired(true);
-                    const emojiInput = new TextInputBuilder().setCustomId('club_emoji').setLabel('絵文字（1文字）').setStyle(TextInputStyle.Short).setRequired(true).setPlaceholder('例: ⚽ 🎵 🎨 🎮').setMaxLength(1);
+                    const emojiInput = new TextInputBuilder().setCustomId('club_emoji').setLabel('絵文字').setStyle(TextInputStyle.Short).setRequired(true).setPlaceholder('例: ⚽ 🎵 🎨 🎮').setMaxLength(10);
                     const activityInput = new TextInputBuilder().setCustomId('club_activity').setLabel('活動内容').setStyle(TextInputStyle.Paragraph).setRequired(true);
                     modal.addComponents(
                         new ActionRowBuilder().addComponents(nameInput), 
@@ -91,8 +91,11 @@ module.exports = {
                         return interaction.editReply({ content: '活動内容は10文字以上200文字以下で入力してください。' });
                     }
                     
+                    // 絵文字の最初の文字のみを使用（複数絵文字が入力された場合の対応）
+                    const firstEmoji = clubEmoji.trim().split(' ')[0] || '🎯';
+                    
                     // 部活名を「絵文字｜部活名」の形式に変換
-                    const channelName = `${clubEmoji}｜${clubName}`;
+                    const channelName = `${firstEmoji}｜${clubName}`;
                     
                     // 部活名の重複チェック（絵文字付きチャンネル名でチェック）
                     const existingChannels = [];
