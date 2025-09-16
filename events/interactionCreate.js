@@ -112,20 +112,9 @@ module.exports = {
                     }
                     
                     try {
-                        // カテゴリー1のチャンネル数をチェック
-                        const category1 = await interaction.guild.channels.fetch(config.CLUB_CATEGORY_ID).catch(() => null);
-                        let targetCategoryId = config.CLUB_CATEGORY_ID;
-                        
-                        if (category1 && category1.children.cache.size >= 50) {
-                            // カテゴリー1が50チャンネルに達している場合、カテゴリー2を使用
-                            const category2 = await interaction.guild.channels.fetch(config.CLUB_CATEGORY_ID_2).catch(() => null);
-                            if (category2) {
-                                targetCategoryId = config.CLUB_CATEGORY_ID_2;
-                                console.log(`カテゴリー1が満杯のため、カテゴリー2に部活「${clubName}」を作成します。`);
-                            } else {
-                                throw new Error('カテゴリー2が見つかりません。');
-                            }
-                        }
+                        // 新しく作成した部活は人気部活カテゴリに配置
+                        let targetCategoryId = config.POPULAR_CLUB_CATEGORY_ID;
+                        console.log(`新規部活「${clubName}」を人気部活カテゴリに作成します。`);
                         
                         const newChannel = await interaction.guild.channels.create({
                             name: channelName,
@@ -162,8 +151,7 @@ module.exports = {
                             if(roleToRemove) await creator.roles.remove(roleToRemove);
                         }
                         
-                        const categoryName = targetCategoryId === config.CLUB_CATEGORY_ID ? 'カテゴリー1' : 'カテゴリー2';
-                        await interaction.editReply({ content: `部活「${clubName}」を${categoryName}に設立しました！ ${newChannel} を確認してください。` });
+                        await interaction.editReply({ content: `部活「${clubName}」を人気部活カテゴリに設立しました！ ${newChannel} を確認してください。` });
                         // 部活作成完了後にクールダウンを設定（Redis使用）
                         const cooldownEnd = Date.now() + config.CLUB_CREATION_COOLDOWN;
                         await redis.setex(cooldownKey, Math.ceil(config.CLUB_CREATION_COOLDOWN / 1000), cooldownEnd.toString());

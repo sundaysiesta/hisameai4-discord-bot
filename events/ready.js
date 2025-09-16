@@ -291,11 +291,12 @@ module.exports = {
                 const clubPanelEmbed = new EmbedBuilder()
                     .setColor(0x5865F2)
                     .setTitle('🎫 部活作成パネル')
-                    .setDescription('新しい部活を設立するには、下のボタンを押してください。\n\n**部活設立の流れ：**\n1. ボタンを押して部活作成フォームを開く\n2. 部活名、絵文字、活動内容を入力\n3. 部活チャンネルが自動で作成される\n\n**注意事項：**\n• 部活作成は7日に1回まで\n• 部活名は分かりやすい名前にする\n• 絵文字は1文字で入力（例：⚽ 🎵 🎨 🎮）\n• 活動内容は具体的に記入する')
+                    .setDescription('新しい部活を設立するには、下のボタンを押してください。\n\n**流れ：**\n1. ボタンを押してフォームを開く\n2. 部活名・絵文字・活動内容を入力\n3. チャンネルが自動作成され、部長権限が付与される')
                     .addFields(
-                        { name: '📋 必要な情報', value: '• 部活名\n• 絵文字\n• 活動内容', inline: true },
-                        { name: '⏰ 作成制限', value: '7日に1回', inline: true },
-                        { name: '🎯 作成場所', value: 'カテゴリー1または2', inline: true }
+                        { name: '📝 入力項目', value: '部活名・絵文字・活動内容', inline: true },
+                        { name: '⏰ 制限', value: '7日に1回', inline: true },
+                        { name: '📍 場所', value: '人気部活カテゴリ', inline: true },
+                        { name: '🎨 絵文字例', value: '⚽ 🎵 🎨 🎮 📚 🎮', inline: false }
                     )
                     .setTimestamp()
                     .setFooter({ text: 'HisameAI Mark.4' });
@@ -329,11 +330,12 @@ module.exports = {
                     const clubPanelEmbed = new EmbedBuilder()
                         .setColor(0x5865F2)
                         .setTitle('🎫 部活作成パネル')
-                        .setDescription('新しい部活を設立するには、下のボタンを押してください。\n\n**部活設立の流れ：**\n1. ボタンを押して部活作成フォームを開く\n2. 部活名、絵文字、活動内容を入力\n3. 部活チャンネルが自動で作成される\n\n**注意事項：**\n• 部活作成は7日に1回まで\n• 部活名は分かりやすい名前にする\n• 絵文字は1文字で入力（例：⚽ 🎵 🎨 🎮）\n• 活動内容は具体的に記入する')
+                        .setDescription('新しい部活を設立するには、下のボタンを押してください。\n\n**流れ：**\n1. ボタンを押してフォームを開く\n2. 部活名・絵文字・活動内容を入力\n3. チャンネルが自動作成され、部長権限が付与される')
                         .addFields(
-                            { name: '📋 必要な情報', value: '• 部活名\n• 絵文字\n• 活動内容', inline: true },
-                            { name: '⏰ 作成制限', value: '7日に1回', inline: true },
-                            { name: '🎯 作成場所', value: 'カテゴリー1または2', inline: true }
+                            { name: '📝 入力項目', value: '部活名・絵文字・活動内容', inline: true },
+                            { name: '⏰ 制限', value: '7日に1回', inline: true },
+                            { name: '📍 場所', value: '人気部活カテゴリ', inline: true },
+                            { name: '🎨 絵文字例', value: '⚽ 🎵 🎨 🎮 📚 🎮', inline: false }
                         )
                         .setTimestamp()
                         .setFooter({ text: 'HisameAI Mark.4' });
