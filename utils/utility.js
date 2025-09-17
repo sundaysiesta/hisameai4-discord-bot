@@ -175,6 +175,18 @@ async function sortClubChannels(redis, guild) {
                 console.error(`setPosition Error for ${channel.name}: ${e.message}`)
             );
         }
+        
+        // チャンネル名に活発度を追加
+        const currentName = channel.name;
+        const scorePattern = /⚡\d+$/; // 既存のスコアを検出
+        const baseName = currentName.replace(scorePattern, ''); // スコア部分を除去
+        const newName = `${baseName}⚡${channelData.count}`;
+        
+        if (currentName !== newName) {
+            await channel.setName(newName).catch(e => 
+                console.error(`setName Error for ${channel.name}: ${e.message}`)
+            );
+        }
     }
 }
 const toHalfWidth = (str) => {
