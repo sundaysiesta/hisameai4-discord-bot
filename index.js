@@ -60,5 +60,21 @@ for (const file of eventFiles) {
 	}
 }
 
+// グローバルエラーハンドリング
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('未処理のPromise拒否:', reason);
+    // プロセスを終了させずにログのみ出力
+});
+
+process.on('uncaughtException', (error) => {
+    console.error('未処理の例外:', error);
+    // プロセスを終了させずにログのみ出力
+});
+
+// Discordクライアントのエラーハンドリング
+client.on('error', (error) => {
+    console.error('Discordクライアントエラー:', error);
+});
+
 // BotをDiscordにログイン
 client.login(process.env.DISCORD_BOT_TOKEN);

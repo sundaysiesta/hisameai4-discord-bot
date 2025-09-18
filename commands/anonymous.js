@@ -107,7 +107,13 @@ module.exports = {
         }
 
         // 投稿
-        await interaction.deferReply({ ephemeral: true });
+        try {
+            await interaction.deferReply({ ephemeral: true });
+        } catch (deferError) {
+            console.error('deferReplyエラー:', deferError);
+            return; // deferReplyに失敗した場合は処理を終了
+        }
+
         try {
             let sentMessage;
             
@@ -137,7 +143,12 @@ module.exports = {
             const replyMessage = isRevealed 
                 ? '🎭 匿名が剥がれました！元の名前とアイコンで投稿されました。' 
                 : '匿名で投稿しました。';
-            await interaction.editReply({ content: replyMessage, ephemeral: true });
+            
+            try {
+                await interaction.editReply({ content: replyMessage, ephemeral: true });
+            } catch (editError) {
+                console.error('editReplyエラー:', editError);
+            }
         } catch (e) {
             console.error('匿名投稿エラー:', e);
             let errorMessage = '投稿に失敗しました。';
@@ -149,7 +160,11 @@ module.exports = {
                 errorMessage = 'ファイルサイズが大きすぎます。Discordの制限（25MB）を確認してください。';
             }
             
-            await interaction.editReply({ content: errorMessage, ephemeral: true });
+            try {
+                await interaction.editReply({ content: errorMessage, ephemeral: true });
+            } catch (editError) {
+                console.error('editReplyエラー（エラー処理中）:', editError);
+            }
         }
     },
 

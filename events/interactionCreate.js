@@ -14,7 +14,27 @@ module.exports = {
             if (interaction.isChatInputCommand()) {
                 const command = interaction.client.commands.get(interaction.commandName);
                 if (!command) return console.error(`No command matching ${interaction.commandName} was found.`);
-                await command.execute(interaction, redis, notion);
+                
+                try {
+                    await command.execute(interaction, redis, notion);
+                } catch (commandError) {
+                    console.error(`コマンド ${interaction.commandName} の実行中にエラー:`, commandError);
+                    
+                    // コマンド実行エラーの場合、適切に応答
+                    if (!interaction.replied && !interaction.deferred) {
+                        try {
+                            await interaction.reply({ content: 'コマンドの実行中にエラーが発生しました。', ephemeral: true });
+                        } catch (replyError) {
+                            console.error('コマンドエラー時のreply失敗:', replyError);
+                        }
+                    } else if (interaction.deferred && !interaction.replied) {
+                        try {
+                            await interaction.editReply({ content: 'コマンドの実行中にエラーが発生しました。' });
+                        } catch (editError) {
+                            console.error('コマンドエラー時のeditReply失敗:', editError);
+                        }
+                    }
+                }
             }
             // ボタンの処理
             else if (interaction.isButton()) {
@@ -198,10 +218,21 @@ module.exports = {
             }
         } catch (error) {
             console.error('インタラクション処理中に予期せぬエラーが発生しました:', error);
+            
+            // インタラクションが既に応答済みかどうかを確認
             if (interaction.replied || interaction.deferred) {
-                await interaction.followUp({ content: 'コマンドの実行中にエラーが発生しました。', flags: [MessageFlags.Ephemeral] });
+                try {
+                    await interaction.followUp({ content: 'コマンドの実行中にエラーが発生しました。', flags: [MessageFlags.Ephemeral] });
+                } catch (followUpError) {
+                    console.error('followUpエラー:', followUpError);
+                }
             } else {
-                await interaction.reply({ content: 'コマンドの実行中にエラーが発生しました。', flags: [MessageFlags.Ephemeral] });
+                try {
+                    await interaction.reply({ content: 'コマンドの実行中にエラーが発生しました。', flags: [MessageFlags.Ephemeral] });
+                } catch (replyError) {
+                    console.error('replyエラー:', replyError);
+                    // replyも失敗した場合は、エラーをログに記録するだけ
+                }
             }
         }
 	},
