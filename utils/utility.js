@@ -162,9 +162,26 @@ async function sortClubChannels(redis, guild) {
         if (channel.parentId !== targetCategoryId) {
             const targetCategory = await guild.channels.fetch(targetCategoryId).catch(() => null);
             if (targetCategory) {
+                // 現在の権限設定を保存
+                const currentOverwrites = channel.permissionOverwrites.cache.clone();
+                
                 await channel.setParent(targetCategoryId).catch(e => 
                     console.error(`setParent Error for ${channel.name}: ${e.message}`)
                 );
+                
+                // 権限設定を復元
+                try {
+                    for (const [id, overwrite] of currentOverwrites) {
+                        await channel.permissionOverwrites.edit(id, {
+                            allow: overwrite.allow,
+                            deny: overwrite.deny
+                        }).catch(e => 
+                            console.error(`Permission restore error for ${channel.name} (${id}): ${e.message}`)
+                        );
+                    }
+                } catch (e) {
+                    console.error(`Permission restore failed for ${channel.name}: ${e.message}`);
+                }
             }
         }
         
