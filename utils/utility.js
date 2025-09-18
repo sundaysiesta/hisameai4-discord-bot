@@ -195,9 +195,10 @@ async function sortClubChannels(redis, guild) {
         
         // チャンネル名に活発度を追加
         const currentName = channel.name;
-        const scorePattern = /⚡\d+$/; // 既存のスコアを検出
+        const scorePattern = /[🔥⚡🌱・]\d+$/; // 既存のスコアを検出（全アイコン対応）
         const baseName = currentName.replace(scorePattern, ''); // スコア部分を除去
-        const newName = `${baseName}⚡${channelData.count}`;
+        const activityIcon = getActivityIcon(channelData.count);
+        const newName = `${baseName}${activityIcon}${channelData.count}`;
         
         if (currentName !== newName) {
             await channel.setName(newName).catch(e => 
@@ -210,6 +211,14 @@ const toHalfWidth = (str) => {
     if (!str) return '';
     return str.replace(/[０-９]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xFEE0));
 };
+
+// 活発度に応じたアイコンを返す関数
+function getActivityIcon(score) {
+    if (score >= 10000) return '🔥';
+    if (score >= 1000) return '⚡';
+    if (score >= 100) return '🌱';
+    return '・';
+}
 function getGenerationRoleName(generationText) {
     if (!generationText || typeof generationText !== 'string') return null;
     const halfWidthText = toHalfWidth(generationText);
@@ -433,4 +442,4 @@ async function processFileSafely(file, config) {
 }
 
 // 【最重要修正】toHalfWidthをエクスポートリストに追加
-module.exports = { postStickyMessage, sortClubChannels, getGenerationRoleName, safeIncrby, toKanjiNumber, toHalfWidth, getAllKeys, validateFile, processFileSafely, prepareFileForSend };
+module.exports = { postStickyMessage, sortClubChannels, getGenerationRoleName, safeIncrby, toKanjiNumber, toHalfWidth, getAllKeys, validateFile, processFileSafely, prepareFileForSend, getActivityIcon };

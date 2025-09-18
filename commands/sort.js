@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, PermissionsBitField, EmbedBuilder, ChannelType } = require('discord.js');
-const { sortClubChannels } = require('../utils/utility.js');
+const { sortClubChannels, getActivityIcon } = require('../utils/utility.js');
 const config = require('../config.js');
 
 // 現在の週間ランキング埋め込みを作成する関数
@@ -115,7 +115,8 @@ async function createCurrentRankingEmbeds(guild, redis) {
                     changeText = ` ↓${club.pointChange}`;
                 }
                 
-                text += `${medal} <#${club.id}> — ${club.activityScore}pt${changeText}\n`;
+                const activityIcon = getActivityIcon(club.activityScore);
+                text += `${medal} <#${club.id}> — ${activityIcon}${club.activityScore}pt${changeText}\n`;
             }
             if (text.length === 0) text = 'データがありません';
             const embed = new EmbedBuilder()

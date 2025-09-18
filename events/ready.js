@@ -1,7 +1,7 @@
 const { Events, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, EmbedBuilder, ActivityType } = require('discord.js');
 const cron = require('node-cron');
 const config = require('../config.js');
-const { postStickyMessage, sortClubChannels, safeIncrby, getAllKeys } = require('../utils/utility.js');
+const { postStickyMessage, sortClubChannels, safeIncrby, getAllKeys, getActivityIcon } = require('../utils/utility.js');
 
 /**
  * 【新規追加】GitHub APIから最新のコミット情報を取得する関数
@@ -210,7 +210,8 @@ async function createWeeklyRankingEmbeds(client, redis) {
                     changeText = ` ↓${club.pointChange}`;
                 }
                 
-                text += `${medal} <#${club.id}> — ${club.activityScore}pt${changeText}\n`;
+                const activityIcon = getActivityIcon(club.activityScore);
+                text += `${medal} <#${club.id}> — ${activityIcon}${club.activityScore}pt${changeText}\n`;
             }
             if (text.length === 0) text = 'データがありません';
             const embed = new EmbedBuilder()
