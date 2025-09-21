@@ -17,7 +17,7 @@ module.exports = {
     MAIN_CHANNEL_ID: '1369627467991486605', // メインチャンネルID
     NOTION_DATABASE_ID: process.env.NOTION_DATABASE_ID,
     NOTION_API_KEY: process.env.NOTION_API_KEY,
-    // 部活ランキング更新設定（週1回、日曜日の午前0時に更新）
+    // 部活ランキング更新設定（週1回、日曜日の午前0時JSTに更新）
     CLUB_RANKING_UPDATE_CRON: '0 0 * * 0',
     // 廃部候補判定設定
     INACTIVE_CLUB_THRESHOLD: 5, // 週間メッセージ数がこの値以下の部活を廃部候補とする
