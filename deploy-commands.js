@@ -33,6 +33,20 @@ const commands = [
         { name: '日付', type: 3, description: '投稿日付（YYYY-MM-DD）', required: true }
     ] },
     { name: 'migrateleaders', description: '旧部長ロール方式から個別権限方式へ移行します。(管理者限定)' },
+    { name: 'kotehan', description: '匿名投稿用のコテハン（固定ハンドルネーム）を設定します', options: [
+        { name: 'set', type: 1, description: 'コテハンを設定します', options: [
+            { name: '名前', type: 3, description: '固定したいハンドルネーム（20文字以内）', required: true }
+        ]},
+        { name: 'view', type: 1, description: '現在のコテハンを確認します' },
+        { name: 'remove', type: 1, description: 'コテハンを削除します' }
+    ]},
+    { name: 'koteicon', description: '匿名投稿用の固定アイコンを設定します', options: [
+        { name: 'set', type: 1, description: '固定アイコンを設定します', options: [
+            { name: 'アイコン', type: 11, description: '固定したいアイコン画像（最大10MB）', required: true }
+        ]},
+        { name: 'view', type: 1, description: '現在の固定アイコンを確認します' },
+        { name: 'remove', type: 1, description: '固定アイコンを削除します' }
+    ]},
 ].map(command => command);
 
 const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_BOT_TOKEN);

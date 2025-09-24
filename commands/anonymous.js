@@ -74,8 +74,16 @@ module.exports = {
         // 表示名の決定（優先順位: /anonymousの名前指定 > コテハン > デフォルト）
         let displayNameRaw;
         if (nameOpt && nameOpt.trim().length > 0) {
+            const inputName = nameOpt.trim();
+            // #を含む名前は偽装防止のため無効化
+            if (inputName.includes('#')) {
+                return interaction.reply({ 
+                    content: '名前に「#」は使用できません。コテハン機能をご利用ください。', 
+                    ephemeral: true 
+                });
+            }
             // /anonymousで名前が指定された場合は上書き
-            displayNameRaw = nameOpt.trim();
+            displayNameRaw = inputName;
         } else if (kotehan) {
             // コテハンが設定されている場合はそれを使用
             displayNameRaw = `${kotehan.name}#${kotehan.tag}`;
