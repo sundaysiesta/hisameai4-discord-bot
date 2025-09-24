@@ -76,5 +76,35 @@ client.on('error', (error) => {
     console.error('Discordクライアントエラー:', error);
 });
 
+// コマンドの自動デプロイ機能
+async function deployCommands() {
+    const { REST, Routes } = require('discord.js');
+    
+    const commands = [];
+    for (const file of commandFiles) {
+        const filePath = path.join(commandsPath, file);
+        const command = require(filePath);
+        if ('data' in command && 'execute' in command) {
+            commands.push(command.data.toJSON());
+        }
+    }
+
+    const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_BOT_TOKEN);
+    
+    try {
+        console.log('スラッシュコマンドの登録を開始します...');
+        await rest.put(Routes.applicationCommands(process.env.DISCORD_APPLICATION_ID), { body: commands });
+        console.log('スラッシュコマンドの登録が正常に完了しました。');
+    } catch (error) {
+        console.error('スラッシュコマンドの登録に失敗しました:', error);
+    }
+}
+
+// Botが準備完了したらコマンドをデプロイ
+client.once('ready', async () => {
+    console.log(`${client.user.tag} がログインしました！`);
+    await deployCommands();
+});
+
 // BotをDiscordにログイン
 client.login(process.env.DISCORD_BOT_TOKEN);
