@@ -22,6 +22,11 @@ module.exports = {
                     '`/top` - ランキングを表示\n' +
                     '`/setrankbg` - ランクカードの背景を設定'
                 },
+                { name: '🔒 匿名投稿関連', value: 
+                    '`/anonymous` - 匿名でメッセージを投稿\n' +
+                    '`/kotehan` - コテハン（固定ハンドルネーム）を設定\n' +
+                    '`/koteicon` - 固定アイコンを設定'
+                },
                 { name: '🎮 その他の機能', value: 
                     '`/club` - 部活情報を表示\n' +
                     '`/wordcloud` - ワードクラウドを生成'
@@ -39,14 +44,20 @@ module.exports = {
                         '`/transferxp` - XPを移行\n' +
                         '`/clearxpdata` - XPデータをクリア\n' +
                         '`/syncleader` - 部長情報を同期\n' +
-                        '`/status` - ボットの状態を表示'
+                        '`/status` - ボットの状態を表示\n' +
+                        '`/sort` - 部活チャンネルを並び替え'
+                    },
+                    { name: '🔒 匿名・アイコン管理', value: 
+                        '`/anonlookup` - 匿名IDから送信者を特定\n' +
+                        '`/notionicon` - DiscordアイコンをNotionに同期'
                     },
                     { name: '🛠️ システムコマンド', value: 
                         '`/link` - アカウントを連携\n' +
                         '`/linkmain` - メインアカウントを連携\n' +
                         '`/listservers` - 参加サーバー一覧\n' +
                         '`/leftservers` - 退出サーバー一覧\n' +
-                        '`/migrateprobot` - ProBotからの移行'
+                        '`/migrateprobot` - ProBotからの移行\n' +
+                        '`/migrateleaders` - 部長ロール方式を移行'
                     }
                 )
                 .setFooter({ text: 'これらのコマンドは管理者のみが使用できます。' });
