@@ -47,11 +47,7 @@ const commands = [
         { name: 'view', type: 1, description: '現在の固定アイコンを確認します' },
         { name: 'remove', type: 1, description: '固定アイコンを削除します' }
     ]},
-    { name: 'notionicon', description: 'NotionデータベースとDiscordアイコンの同期を行います（管理者限定）', options: [
-        { name: 'set', type: 1, description: '指定したユーザーのNotionアイコンを固定アイコンとして設定します', options: [
-            { name: 'ユーザー', type: 6, description: 'アイコンを設定したいユーザー', required: true }
-        ]},
-        { name: 'setall', type: 1, description: '全ユーザーのNotionアイコンを一括で固定アイコンとして設定します' },
+    { name: 'notionicon', description: 'DiscordアイコンをNotionに同期します（管理者限定）', options: [
         { name: 'sync', type: 1, description: 'DiscordアイコンをNotionに一括で同期します' },
         { name: 'syncuser', type: 1, description: '指定したユーザーのDiscordアイコンをNotionに同期します', options: [
             { name: 'ユーザー', type: 6, description: 'アイコンを同期したいユーザー', required: true }

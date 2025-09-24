@@ -1,7 +1,7 @@
 const { SlashCommandBuilder, PermissionsBitField } = require('discord.js');
 const config = require('../config.js');
 const { notion, getNotionRelationTitles } = require('../utils/notionHelpers.js');
-const { getGenerationRoleName } = require('../utils/utility.js');
+const { getGenerationRoleName, setDiscordIconToNotion } = require('../utils/utility.js');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -99,10 +99,23 @@ module.exports = {
                 console.error('部長権限付与エラー:', e);
             }
 
+            // DiscordアイコンをNotionに自動同期
+            try {
+                const iconResult = await setDiscordIconToNotion(interaction.client, notion, config, targetUser.id);
+                if (iconResult.success) {
+                    console.log(`[Link] アイコン同期成功: ${targetUser.username} -> ${characterName}`);
+                } else {
+                    console.log(`[Link] アイコン同期失敗: ${targetUser.username} - ${iconResult.error}`);
+                }
+            } catch (iconError) {
+                console.error(`[Link] アイコン同期エラー: ${targetUser.username}`, iconError);
+            }
+
             let replyMessage = `成功！ ${targetUser.username} を「${characterName}」に紐付けました。`;
             if (addedRoles.length > 0) {
                 replyMessage += `\n付与されたロール: ${addedRoles.join(', ')}`;
             }
+            replyMessage += `\nDiscordアイコンをNotionに同期しました。`;
 
             await interaction.editReply(replyMessage);
 
