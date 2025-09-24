@@ -6,33 +6,27 @@ module.exports = {
     data: new SlashCommandBuilder()
         .setName('koteicon')
         .setDescription('匿名投稿用の固定アイコンを設定します')
-        .addSubcommand(subcommand =>
-            subcommand
-                .setName('set')
-                .setDescription('固定アイコンを設定します')
-                .addAttachmentOption(option =>
-                    option.setName('アイコン')
-                        .setDescription('固定したいアイコン画像（最大10MB）')
-                        .setRequired(true)
+        .addStringOption(option =>
+            option.setName('action')
+                .setDescription('実行する操作')
+                .setRequired(true)
+                .addChoices(
+                    { name: '設定', value: 'set' },
+                    { name: '確認', value: 'view' },
+                    { name: '削除', value: 'remove' }
                 )
         )
-        .addSubcommand(subcommand =>
-            subcommand
-                .setName('view')
-                .setDescription('現在の固定アイコンを確認します')
-        )
-        .addSubcommand(subcommand =>
-            subcommand
-                .setName('remove')
-                .setDescription('固定アイコンを削除します')
+        .addAttachmentOption(option =>
+            option.setName('アイコン')
+                .setDescription('固定したいアイコン画像（最大10MB）')
+                .setRequired(false)
         ),
     async execute(interaction) {
-        const subcommand = interaction.options.getSubcommand();
+        const action = interaction.options.getString('action');
+        const icon = interaction.options.getAttachment('アイコン');
         const userId = interaction.user.id;
 
-        if (subcommand === 'set') {
-            const icon = interaction.options.getAttachment('アイコン');
-            
+        if (action === 'set') {
             if (!icon) {
                 return interaction.reply({ content: 'アイコンを選択してください。', ephemeral: true });
             }
@@ -55,12 +49,12 @@ module.exports = {
             });
         }
 
-        if (subcommand === 'view') {
+        if (action === 'view') {
             const koteicon = getKoteicon(userId);
             
             if (!koteicon) {
                 return interaction.reply({ 
-                    content: '固定アイコンは設定されていません。\n`/koteicon set`で固定アイコンを設定できます。', 
+                    content: '固定アイコンは設定されていません。\n`/koteicon`で固定アイコンを設定できます。', 
                     ephemeral: true 
                 });
             }
@@ -72,7 +66,7 @@ module.exports = {
             });
         }
 
-        if (subcommand === 'remove') {
+        if (action === 'remove') {
             const removed = removeKoteicon(userId);
             
             if (removed) {

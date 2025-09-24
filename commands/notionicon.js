@@ -5,26 +5,21 @@ const config = require('../config.js');
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('notionicon')
-        .setDescription('NotionデータベースとDiscordアイコンの同期を行います（管理者限定）')
-        .addSubcommand(subcommand =>
-            subcommand
-                .setName('sync')
-                .setDescription('DiscordアイコンをNotionに一括で同期します')
-        )
-        .addSubcommand(subcommand =>
-            subcommand
-                .setName('syncuser')
-                .setDescription('指定したユーザーのDiscordアイコンをNotionに同期します')
-                .addUserOption(option =>
-                    option.setName('ユーザー')
-                        .setDescription('アイコンを同期したいユーザー')
-                        .setRequired(true)
+        .setDescription('DiscordアイコンをNotionに同期します（管理者限定）')
+        .addStringOption(option =>
+            option.setName('action')
+                .setDescription('実行する操作')
+                .setRequired(true)
+                .addChoices(
+                    { name: '一括同期', value: 'sync' },
+                    { name: '個別同期', value: 'syncuser' },
+                    { name: '状況確認', value: 'status' }
                 )
         )
-        .addSubcommand(subcommand =>
-            subcommand
-                .setName('status')
-                .setDescription('Notionアイコン設定の状況を確認します')
+        .addUserOption(option =>
+            option.setName('ユーザー')
+                .setDescription('アイコンを同期したいユーザー（個別同期時のみ）')
+                .setRequired(false)
         ),
     async execute(interaction, redis, notion) {
         // 管理者権限チェック
@@ -35,10 +30,10 @@ module.exports = {
             });
         }
 
-        const subcommand = interaction.options.getSubcommand();
+        const action = interaction.options.getString('action');
+        const targetUser = interaction.options.getUser('ユーザー');
 
-
-        if (subcommand === 'sync') {
+        if (action === 'sync') {
             await interaction.deferReply({ ephemeral: true });
 
             try {
@@ -84,8 +79,13 @@ module.exports = {
             }
         }
 
-        if (subcommand === 'syncuser') {
-            const targetUser = interaction.options.getUser('ユーザー');
+        if (action === 'syncuser') {
+            if (!targetUser) {
+                return interaction.reply({ 
+                    content: '個別同期を実行するにはユーザーを指定してください。', 
+                    ephemeral: true 
+                });
+            }
             
             await interaction.deferReply({ ephemeral: true });
 
@@ -109,7 +109,7 @@ module.exports = {
             }
         }
 
-        if (subcommand === 'status') {
+        if (action === 'status') {
             await interaction.deferReply({ ephemeral: true });
 
             try {

@@ -34,25 +34,28 @@ const commands = [
     ] },
     { name: 'migrateleaders', description: '旧部長ロール方式から個別権限方式へ移行します。(管理者限定)' },
     { name: 'kotehan', description: '匿名投稿用のコテハン（固定ハンドルネーム）を設定します', options: [
-        { name: 'set', type: 1, description: 'コテハンを設定します', options: [
-            { name: '名前', type: 3, description: '固定したいハンドルネーム（20文字以内）', required: true }
+        { name: 'action', type: 3, description: '実行する操作', required: true, choices: [
+            { name: '設定', value: 'set' },
+            { name: '確認', value: 'view' },
+            { name: '削除', value: 'remove' }
         ]},
-        { name: 'view', type: 1, description: '現在のコテハンを確認します' },
-        { name: 'remove', type: 1, description: 'コテハンを削除します' }
+        { name: '名前', type: 3, description: '固定したいハンドルネーム（20文字以内）', required: false }
     ]},
     { name: 'koteicon', description: '匿名投稿用の固定アイコンを設定します', options: [
-        { name: 'set', type: 1, description: '固定アイコンを設定します', options: [
-            { name: 'アイコン', type: 11, description: '固定したいアイコン画像（最大10MB）', required: true }
+        { name: 'action', type: 3, description: '実行する操作', required: true, choices: [
+            { name: '設定', value: 'set' },
+            { name: '確認', value: 'view' },
+            { name: '削除', value: 'remove' }
         ]},
-        { name: 'view', type: 1, description: '現在の固定アイコンを確認します' },
-        { name: 'remove', type: 1, description: '固定アイコンを削除します' }
+        { name: 'アイコン', type: 11, description: '固定したいアイコン画像（最大10MB）', required: false }
     ]},
     { name: 'notionicon', description: 'DiscordアイコンをNotionに同期します（管理者限定）', options: [
-        { name: 'sync', type: 1, description: 'DiscordアイコンをNotionに一括で同期します' },
-        { name: 'syncuser', type: 1, description: '指定したユーザーのDiscordアイコンをNotionに同期します', options: [
-            { name: 'ユーザー', type: 6, description: 'アイコンを同期したいユーザー', required: true }
+        { name: 'action', type: 3, description: '実行する操作', required: true, choices: [
+            { name: '一括同期', value: 'sync' },
+            { name: '個別同期', value: 'syncuser' },
+            { name: '状況確認', value: 'status' }
         ]},
-        { name: 'status', type: 1, description: 'Notionアイコン設定の状況を確認します' }
+        { name: 'ユーザー', type: 6, description: 'アイコンを同期したいユーザー（個別同期時のみ）', required: false }
     ]},
 ].map(command => command);
 
