@@ -441,5 +441,65 @@ async function processFileSafely(file, config) {
     }
 }
 
+// コテハンと固定アイコンのデータ管理
+const kotehanData = new Map(); // userId -> { name: string, tag: string }
+const koteiconData = new Map(); // userId -> { url: string, attachment: object }
+
+// コテハン用のランダムタグ生成（4桁の数字）
+function generateKotehanTag() {
+    return Math.floor(1000 + Math.random() * 9000).toString();
+}
+
+// コテハン設定
+function setKotehan(userId, name) {
+    const tag = generateKotehanTag();
+    kotehanData.set(userId, { name: name.trim(), tag });
+    return tag;
+}
+
+// コテハン取得
+function getKotehan(userId) {
+    return kotehanData.get(userId);
+}
+
+// コテハン削除
+function removeKotehan(userId) {
+    return kotehanData.delete(userId);
+}
+
+// 固定アイコン設定
+function setKoteicon(userId, iconData) {
+    koteiconData.set(userId, iconData);
+}
+
+// 固定アイコン取得
+function getKoteicon(userId) {
+    return koteiconData.get(userId);
+}
+
+// 固定アイコン削除
+function removeKoteicon(userId) {
+    return koteiconData.delete(userId);
+}
+
 // 【最重要修正】toHalfWidthをエクスポートリストに追加
-module.exports = { postStickyMessage, sortClubChannels, getGenerationRoleName, safeIncrby, toKanjiNumber, toHalfWidth, getAllKeys, validateFile, processFileSafely, prepareFileForSend, getActivityIcon };
+module.exports = { 
+    postStickyMessage, 
+    sortClubChannels, 
+    getGenerationRoleName, 
+    safeIncrby, 
+    toKanjiNumber, 
+    toHalfWidth, 
+    getAllKeys, 
+    validateFile, 
+    processFileSafely, 
+    prepareFileForSend, 
+    getActivityIcon,
+    setKotehan,
+    getKotehan,
+    removeKotehan,
+    setKoteicon,
+    getKoteicon,
+    removeKoteicon,
+    generateKotehanTag
+};

@@ -1,7 +1,7 @@
 const { SlashCommandBuilder, AttachmentBuilder, EmbedBuilder } = require('discord.js');
 const crypto = require('crypto');
 const config = require('../config.js');
-const { processFileSafely } = require('../utils/utility.js');
+const { processFileSafely, getKotehan, getKoteicon } = require('../utils/utility.js');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -66,12 +66,41 @@ module.exports = {
         const salt = process.env.ANONYMOUS_SALT || '';
         const date = new Date().toISOString().slice(0, 10);
         const hash = crypto.createHash('sha256').update(interaction.user.id + date + salt).digest('hex').slice(0, 8);
-        const displayNameRaw = (nameOpt && nameOpt.trim().length > 0) ? nameOpt.trim() : '名無しのロメダ民';
+        
+        // コテハンと固定アイコンの取得
+        const kotehan = getKotehan(interaction.user.id);
+        const koteicon = getKoteicon(interaction.user.id);
+        
+        // 表示名の決定（優先順位: /anonymousの名前指定 > コテハン > デフォルト）
+        let displayNameRaw;
+        if (nameOpt && nameOpt.trim().length > 0) {
+            // /anonymousで名前が指定された場合は上書き
+            displayNameRaw = nameOpt.trim();
+        } else if (kotehan) {
+            // コテハンが設定されている場合はそれを使用
+            displayNameRaw = `${kotehan.name}#${kotehan.tag}`;
+        } else {
+            // デフォルト
+            displayNameRaw = '名無しのロメダ民';
+        }
+        
         const displayName = `${displayNameRaw} ID: ${hash}`;
+
+        // アイコンの決定（優先順位: /anonymousのアイコン指定 > 固定アイコン > デフォルト）
+        let finalAvatar;
+        if (icon) {
+            // /anonymousでアイコンが指定された場合は上書き
+            finalAvatar = icon.url;
+        } else if (koteicon) {
+            // 固定アイコンが設定されている場合はそれを使用
+            finalAvatar = koteicon.url;
+        } else {
+            // デフォルト（null）
+            finalAvatar = null;
+        }
 
         // 匿名IDと表示名を設定
         const finalDisplayName = displayName;
-        const finalAvatar = icon ? icon.url : null;
 
         // webhook取得または作成
         const channel = interaction.channel;
