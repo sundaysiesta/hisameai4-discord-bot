@@ -482,6 +482,239 @@ function removeKoteicon(userId) {
     return koteiconData.delete(userId);
 }
 
+// Notionからアイコンを取得して固定アイコンとして設定
+async function setKoteiconFromNotion(userId, notion, config) {
+    try {
+        // Notionデータベースからユーザーのページを取得
+        const response = await notion.databases.query({
+            database_id: config.NOTION_DATABASE_ID,
+            filter: {
+                property: 'DiscordユーザーID',
+                rich_text: {
+                    equals: userId
+                }
+            }
+        });
+
+        if (response.results.length === 0) {
+            return { success: false, error: 'Notionデータベースにユーザーが見つかりません' };
+        }
+
+        const page = response.results[0];
+        
+        // ページのアイコンを取得
+        if (!page.icon || page.icon.type !== 'external') {
+            return { success: false, error: 'Notionページにアイコンが設定されていません' };
+        }
+
+        const iconUrl = page.icon.external.url;
+        
+        // アイコンをダウンロードして処理
+        const iconResponse = await fetch(iconUrl);
+        if (!iconResponse.ok) {
+            return { success: false, error: 'アイコンのダウンロードに失敗しました' };
+        }
+
+        const arrayBuffer = await iconResponse.arrayBuffer();
+        const buffer = Buffer.from(arrayBuffer);
+        
+        // ファイル処理
+        const processedIcon = await processFileSafely({
+            url: iconUrl,
+            attachment: buffer,
+            name: 'notion-icon.png',
+            contentType: 'image/png',
+            size: buffer.length
+        }, config);
+
+        if (!processedIcon.success) {
+            return { success: false, error: `アイコンの処理に失敗しました: ${processedIcon.error}` };
+        }
+
+        // 固定アイコンとして設定
+        setKoteicon(userId, {
+            url: iconUrl,
+            attachment: processedIcon.file
+        });
+
+        return { success: true, iconUrl: iconUrl };
+    } catch (error) {
+        console.error('Notionアイコン取得エラー:', error);
+        return { success: false, error: `エラーが発生しました: ${error.message}` };
+    }
+}
+
+// 全ユーザーのNotionアイコンを一括設定
+async function setAllNotionIcons(notion, config) {
+    const results = [];
+    
+    try {
+        // 全ページを取得
+        const response = await notion.databases.query({
+            database_id: config.NOTION_DATABASE_ID,
+            page_size: 100
+        });
+
+        for (const page of response.results) {
+            const discordId = getNotionPropertyText(page.properties['DiscordユーザーID']);
+            if (discordId === 'N/A' || !discordId) continue;
+
+            const result = await setKoteiconFromNotion(discordId, notion, config);
+            results.push({
+                userId: discordId,
+                pageTitle: getNotionPropertyText(page.properties['名前']),
+                success: result.success,
+                error: result.error
+            });
+        }
+
+        return results;
+    } catch (error) {
+        console.error('一括アイコン設定エラー:', error);
+        return { success: false, error: `エラーが発生しました: ${error.message}` };
+    }
+}
+
+// DiscordアイコンをNotionに一括設定
+async function setDiscordIconsToNotion(client, notion, config) {
+    const results = [];
+    
+    try {
+        // 全ページを取得
+        const response = await notion.databases.query({
+            database_id: config.NOTION_DATABASE_ID,
+            page_size: 100
+        });
+
+        for (const page of response.results) {
+            const discordId = getNotionPropertyText(page.properties['DiscordユーザーID']);
+            const pageTitle = getNotionPropertyText(page.properties['名前']);
+            
+            if (discordId === 'N/A' || !discordId) {
+                results.push({
+                    userId: discordId,
+                    pageTitle: pageTitle,
+                    success: false,
+                    error: 'DiscordユーザーIDが設定されていません'
+                });
+                continue;
+            }
+
+            try {
+                // Discordユーザーを取得
+                const discordUser = await client.users.fetch(discordId);
+                
+                // DiscordアイコンURLを取得（アニメーションアバター対応）
+                const avatarUrl = discordUser.displayAvatarURL({ dynamic: true, size: 256 });
+                
+                // Notionページのアイコンを更新
+                await notion.pages.update({
+                    page_id: page.id,
+                    icon: {
+                        type: 'external',
+                        external: {
+                            url: avatarUrl
+                        }
+                    }
+                });
+
+                results.push({
+                    userId: discordId,
+                    pageTitle: pageTitle,
+                    discordUsername: discordUser.username,
+                    success: true,
+                    avatarUrl: avatarUrl
+                });
+
+            } catch (discordError) {
+                console.error(`Discordユーザー取得エラー (${discordId}):`, discordError);
+                results.push({
+                    userId: discordId,
+                    pageTitle: pageTitle,
+                    success: false,
+                    error: `Discordユーザーが見つかりません: ${discordError.message}`
+                });
+            }
+        }
+
+        return results;
+    } catch (error) {
+        console.error('Discordアイコン一括設定エラー:', error);
+        return { success: false, error: `エラーが発生しました: ${error.message}` };
+    }
+}
+
+// 指定ユーザーのDiscordアイコンをNotionに設定
+async function setDiscordIconToNotion(client, notion, config, discordId) {
+    try {
+        // Notionデータベースからユーザーのページを取得
+        const response = await notion.databases.query({
+            database_id: config.NOTION_DATABASE_ID,
+            filter: {
+                property: 'DiscordユーザーID',
+                rich_text: {
+                    equals: discordId
+                }
+            }
+        });
+
+        if (response.results.length === 0) {
+            return { success: false, error: 'Notionデータベースにユーザーが見つかりません' };
+        }
+
+        const page = response.results[0];
+        const pageTitle = getNotionPropertyText(page.properties['名前']);
+
+        // Discordユーザーを取得
+        const discordUser = await client.users.fetch(discordId);
+        
+        // DiscordアイコンURLを取得
+        const avatarUrl = discordUser.displayAvatarURL({ dynamic: true, size: 256 });
+        
+        // Notionページのアイコンを更新
+        await notion.pages.update({
+            page_id: page.id,
+            icon: {
+                type: 'external',
+                external: {
+                    url: avatarUrl
+                }
+            }
+        });
+
+        return { 
+            success: true, 
+            pageTitle: pageTitle,
+            discordUsername: discordUser.username,
+            avatarUrl: avatarUrl 
+        };
+    } catch (error) {
+        console.error('Discordアイコン設定エラー:', error);
+        return { success: false, error: `エラーが発生しました: ${error.message}` };
+    }
+}
+
+// Notionプロパティからテキストを取得する関数（notionHelpersから移植）
+function getNotionPropertyText(property) {
+    if (!property) return 'N/A';
+    switch (property.type) {
+        case 'rich_text':
+            return property.rich_text[0]?.plain_text || 'N/A';
+        case 'select':
+            return property.select?.name || 'N/A';
+        case 'status':
+            return property.status?.name || 'N/A';
+        case 'multi_select':
+            return property.multi_select.map(item => item.name).join(', ') || 'N/A';
+        case 'title':
+            return property.title[0]?.plain_text || 'N/A';
+        case 'formula':
+            return property.formula.string || property.formula.number?.toString() || 'N/A';
+        default:
+            return 'N/A';
+    }
+}
+
 // 【最重要修正】toHalfWidthをエクスポートリストに追加
 module.exports = { 
     postStickyMessage, 
@@ -501,5 +734,10 @@ module.exports = {
     setKoteicon,
     getKoteicon,
     removeKoteicon,
-    generateKotehanTag
+    generateKotehanTag,
+    setKoteiconFromNotion,
+    setAllNotionIcons,
+    getNotionPropertyText,
+    setDiscordIconsToNotion,
+    setDiscordIconToNotion
 };
