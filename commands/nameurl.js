@@ -7,7 +7,7 @@ module.exports = {
         .setDescription('指定された名前リストからNotionデータベースのアイコンURLを取得してCSV形式で返します（管理者限定）')
         .addStringOption(option =>
             option.setName('リスト')
-                .setDescription('名前リスト（改行区切り）')
+                .setDescription('名前リスト（空白区切り）')
                 .setRequired(true)
         ),
     async execute(interaction, redis, notion) {
@@ -23,7 +23,7 @@ module.exports = {
 
         try {
             const nameList = interaction.options.getString('リスト');
-            const names = nameList.split('\n').map(name => name.trim()).filter(name => name.length > 0);
+            const names = nameList.split(/\s+/).map(name => name.trim()).filter(name => name.length > 0);
             
             const results = [];
             

@@ -58,7 +58,7 @@ const commands = [
         { name: 'ユーザー', type: 6, description: 'アイコンを同期したいユーザー（個別同期時のみ）', required: false }
     ]},
     { name: 'nameurl', description: '指定された名前リストからNotionデータベースのアイコンURLを取得してCSV形式で返します（管理者限定）', options: [
-        { name: 'リスト', type: 3, description: '名前リスト（改行区切り）', required: true }
+        { name: 'リスト', type: 3, description: '名前リスト（空白区切り）', required: true }
     ]},
 ].map(command => command);
 
