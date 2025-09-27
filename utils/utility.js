@@ -601,6 +601,11 @@ async function setDiscordIconsToNotion(client, notion, config) {
             }
 
             try {
+                // アイコンURLプロパティが存在するかチェック
+                if (!page.properties['アイコンURL']) {
+                    console.warn(`[NotionIcon] 警告: ${pageTitle} - アイコンURLプロパティが存在しません`);
+                }
+
                 // Discordユーザーを取得
                 const discordUser = await client.users.fetch(discordId);
                 
@@ -608,20 +613,41 @@ async function setDiscordIconsToNotion(client, notion, config) {
                 const avatarUrl = discordUser.displayAvatarURL({ dynamic: true, size: 256 });
                 
                 // NotionページのアイコンとアイコンURLプロパティを更新
-                await notion.pages.update({
-                    page_id: page.id,
-                    icon: {
-                        type: 'external',
-                        external: {
-                            url: avatarUrl
+                try {
+                    await notion.pages.update({
+                        page_id: page.id,
+                        icon: {
+                            type: 'external',
+                            external: {
+                                url: avatarUrl
+                            }
+                        },
+                        properties: {
+                            'アイコンURL': {
+                                url: avatarUrl
+                            }
                         }
-                    },
-                    properties: {
-                        'アイコンURL': {
-                            url: avatarUrl
-                        }
+                    });
+                    console.log(`[NotionIcon] 成功: ${pageTitle} - アイコンとURLを更新`);
+                } catch (updateError) {
+                    console.error(`[NotionIcon] 更新エラー: ${pageTitle}`, updateError);
+                    // アイコンのみ更新を試行
+                    try {
+                        await notion.pages.update({
+                            page_id: page.id,
+                            icon: {
+                                type: 'external',
+                                external: {
+                                    url: avatarUrl
+                                }
+                            }
+                        });
+                        console.log(`[NotionIcon] 部分成功: ${pageTitle} - アイコンのみ更新`);
+                    } catch (iconError) {
+                        console.error(`[NotionIcon] アイコン更新も失敗: ${pageTitle}`, iconError);
+                        throw iconError;
                     }
-                });
+                }
 
                 results.push({
                     userId: discordId,
@@ -670,6 +696,11 @@ async function setDiscordIconToNotion(client, notion, config, discordId) {
         const page = response.results[0];
         const pageTitle = getNotionPropertyText(page.properties['名前']);
 
+        // アイコンURLプロパティが存在するかチェック
+        if (!page.properties['アイコンURL']) {
+            console.warn(`[NotionIcon] 警告: ${pageTitle} - アイコンURLプロパティが存在しません`);
+        }
+
         // Discordユーザーを取得
         const discordUser = await client.users.fetch(discordId);
         
@@ -677,20 +708,41 @@ async function setDiscordIconToNotion(client, notion, config, discordId) {
         const avatarUrl = discordUser.displayAvatarURL({ dynamic: true, size: 256 });
         
         // NotionページのアイコンとアイコンURLプロパティを更新
-        await notion.pages.update({
-            page_id: page.id,
-            icon: {
-                type: 'external',
-                external: {
-                    url: avatarUrl
+        try {
+            await notion.pages.update({
+                page_id: page.id,
+                icon: {
+                    type: 'external',
+                    external: {
+                        url: avatarUrl
+                    }
+                },
+                properties: {
+                    'アイコンURL': {
+                        url: avatarUrl
+                    }
                 }
-            },
-            properties: {
-                'アイコンURL': {
-                    url: avatarUrl
-                }
+            });
+            console.log(`[NotionIcon] 個別成功: ${pageTitle} - アイコンとURLを更新`);
+        } catch (updateError) {
+            console.error(`[NotionIcon] 個別更新エラー: ${pageTitle}`, updateError);
+            // アイコンのみ更新を試行
+            try {
+                await notion.pages.update({
+                    page_id: page.id,
+                    icon: {
+                        type: 'external',
+                        external: {
+                            url: avatarUrl
+                        }
+                    }
+                });
+                console.log(`[NotionIcon] 個別部分成功: ${pageTitle} - アイコンのみ更新`);
+            } catch (iconError) {
+                console.error(`[NotionIcon] 個別アイコン更新も失敗: ${pageTitle}`, iconError);
+                throw iconError;
             }
-        });
+        }
 
         return { 
             success: true, 
