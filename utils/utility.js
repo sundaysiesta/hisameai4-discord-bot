@@ -607,12 +607,17 @@ async function setDiscordIconsToNotion(client, notion, config) {
                 // DiscordアイコンURLを取得（アニメーションアバター対応）
                 const avatarUrl = discordUser.displayAvatarURL({ dynamic: true, size: 256 });
                 
-                // Notionページのアイコンを更新
+                // NotionページのアイコンとアイコンURLプロパティを更新
                 await notion.pages.update({
                     page_id: page.id,
                     icon: {
                         type: 'external',
                         external: {
+                            url: avatarUrl
+                        }
+                    },
+                    properties: {
+                        'アイコンURL': {
                             url: avatarUrl
                         }
                     }
@@ -671,12 +676,17 @@ async function setDiscordIconToNotion(client, notion, config, discordId) {
         // DiscordアイコンURLを取得
         const avatarUrl = discordUser.displayAvatarURL({ dynamic: true, size: 256 });
         
-        // Notionページのアイコンを更新
+        // NotionページのアイコンとアイコンURLプロパティを更新
         await notion.pages.update({
             page_id: page.id,
             icon: {
                 type: 'external',
                 external: {
+                    url: avatarUrl
+                }
+            },
+            properties: {
+                'アイコンURL': {
                     url: avatarUrl
                 }
             }
