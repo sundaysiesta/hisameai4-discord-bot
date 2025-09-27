@@ -79,6 +79,32 @@ module.exports = {
                     const targetMsg = await interaction.channel.messages.fetch(interaction.message.id).catch(() => null);
                     const ownerId = proxyDeleteMap[interaction.message.id];
                     if (interaction.user.id === ownerId) {
+                        // 削除前に画像をログチャンネルに送信
+                        if (targetMsg && targetMsg.attachments.size > 0) {
+                            try {
+                                const logChannel = interaction.client.channels.cache.get('1381140728528375869');
+                                if (logChannel) {
+                                    const logEmbed = new EmbedBuilder()
+                                        .setTitle('🗑️ 代行投稿削除ログ')
+                                        .setDescription(`**削除者:** ${interaction.user.username} (${interaction.user.id})\n**元の投稿者:** <@${ownerId}>\n**削除時刻:** <t:${Math.floor(Date.now() / 1000)}:F>`)
+                                        .setColor(0xff0000)
+                                        .setTimestamp();
+                                    
+                                    const logFiles = targetMsg.attachments.map(attachment => ({
+                                        attachment: attachment.url,
+                                        name: attachment.name
+                                    }));
+                                    
+                                    await logChannel.send({
+                                        embeds: [logEmbed],
+                                        files: logFiles
+                                    });
+                                }
+                            } catch (logError) {
+                                console.error('ログ送信エラー:', logError);
+                            }
+                        }
+                        
                         if (targetMsg) await targetMsg.delete().catch(() => {});
                         await interaction.reply({ content: 'メッセージを削除しました。', ephemeral: true });
                         delete proxyDeleteMap[interaction.message.id];
