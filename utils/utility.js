@@ -586,9 +586,14 @@ async function setDiscordIconsToNotion(client, notion, config) {
             page_size: 100
         });
 
-        for (const page of response.results) {
+        console.log(`[NotionIcon] 一括同期開始: ${response.results.length}件のページを処理します`);
+
+        for (let i = 0; i < response.results.length; i++) {
+            const page = response.results[i];
             const discordId = getNotionPropertyText(page.properties['DiscordユーザーID']);
             const pageTitle = getNotionPropertyText(page.properties['名前']);
+            
+            console.log(`[NotionIcon] 処理中: ${i + 1}/${response.results.length} - ${pageTitle}`);
             
             if (discordId === 'N/A' || !discordId) {
                 results.push({
@@ -645,7 +650,13 @@ async function setDiscordIconsToNotion(client, notion, config) {
                         console.log(`[NotionIcon] 部分成功: ${pageTitle} - アイコンのみ更新`);
                     } catch (iconError) {
                         console.error(`[NotionIcon] アイコン更新も失敗: ${pageTitle}`, iconError);
-                        throw iconError;
+                        results.push({
+                            userId: discordId,
+                            pageTitle: pageTitle,
+                            success: false,
+                            error: `Notion更新失敗: ${iconError.message}`
+                        });
+                        continue;
                     }
                 }
 
@@ -657,6 +668,11 @@ async function setDiscordIconsToNotion(client, notion, config) {
                     avatarUrl: avatarUrl
                 });
 
+                // レート制限対策: 各更新の間に短い待機時間を追加
+                if (i < response.results.length - 1) {
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                }
+
             } catch (discordError) {
                 console.error(`Discordユーザー取得エラー (${discordId}):`, discordError);
                 results.push({
@@ -667,6 +683,8 @@ async function setDiscordIconsToNotion(client, notion, config) {
                 });
             }
         }
+
+        console.log(`[NotionIcon] 一括同期完了: 成功 ${results.filter(r => r.success).length}件, 失敗 ${results.filter(r => !r.success).length}件`);
 
         return results;
     } catch (error) {
