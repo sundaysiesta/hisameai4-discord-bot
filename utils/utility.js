@@ -580,20 +580,33 @@ async function setDiscordIconsToNotion(client, notion, config) {
     const results = [];
     
     try {
-        // 全ページを取得
-        const response = await notion.databases.query({
-            database_id: config.NOTION_DATABASE_ID,
-            page_size: 100
-        });
+        // 全ページを取得（ページネーション対応）
+        let allPages = [];
+        let hasMore = true;
+        let startCursor = undefined;
+        
+        while (hasMore) {
+            const response = await notion.databases.query({
+                database_id: config.NOTION_DATABASE_ID,
+                page_size: 100,
+                start_cursor: startCursor
+            });
+            
+            allPages = allPages.concat(response.results);
+            hasMore = response.has_more;
+            startCursor = response.next_cursor;
+            
+            console.log(`[NotionIcon] ページ取得中: ${allPages.length}件まで取得済み`);
+        }
 
-        console.log(`[NotionIcon] 一括同期開始: ${response.results.length}件のページを処理します`);
+        console.log(`[NotionIcon] 一括同期開始: ${allPages.length}件のページを処理します`);
 
-        for (let i = 0; i < response.results.length; i++) {
-            const page = response.results[i];
+        for (let i = 0; i < allPages.length; i++) {
+            const page = allPages[i];
             const discordId = getNotionPropertyText(page.properties['DiscordユーザーID']);
             const pageTitle = getNotionPropertyText(page.properties['名前']);
             
-            console.log(`[NotionIcon] 処理中: ${i + 1}/${response.results.length} - ${pageTitle}`);
+            console.log(`[NotionIcon] 処理中: ${i + 1}/${allPages.length} - ${pageTitle}`);
             
             if (discordId === 'N/A' || !discordId) {
                 results.push({
@@ -669,7 +682,7 @@ async function setDiscordIconsToNotion(client, notion, config) {
                 });
 
                 // レート制限対策: 各更新の間に短い待機時間を追加
-                if (i < response.results.length - 1) {
+                if (i < allPages.length - 1) {
                     await new Promise(resolve => setTimeout(resolve, 100));
                 }
 
