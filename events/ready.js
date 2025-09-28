@@ -233,6 +233,21 @@ async function createWeeklyRankingEmbeds(client, redis) {
 // 部活チャンネルのソートのみを実行する関数（ランキング表示なし）
 async function sortClubChannelsOnly(guild, redis) {
     try {
+        // メモリ内のデータをRedisに反映してからソート（/sortコマンドと同じ処理）
+        if (global.dailyMessageBuffer) {
+            for (const [channelId, count] of Object.entries(global.dailyMessageBuffer)) {
+                if (count > 0) {
+                    try {
+                        await redis.incrby(`weekly_message_count:${channelId}`, count);
+                        global.dailyMessageBuffer[channelId] = 0; // 反映後はリセット
+                    } catch (error) {
+                        console.error(`Redis反映エラー for channel ${channelId}:`, error);
+                    }
+                }
+            }
+        }
+        
+        // 部活チャンネルのソート実行
         await sortClubChannels(redis, guild);
         console.log('部活チャンネルのソートを実行しました');
     } catch (error) {
@@ -348,6 +363,21 @@ module.exports = {
         };
         cron.schedule('0 0 * * *', flushClubMessageCounts, { scheduled: true, timezone: 'Asia/Tokyo' });
 
+        // --- 自動ソート（土曜日23:45） ---
+        const autoSortChannels = async () => {
+            try {
+                const guild = client.guilds.cache.first();
+                if (!guild) return;
+                
+                console.log('土曜23:45の自動ソートを実行します');
+                await sortClubChannelsOnly(guild, redis);
+                console.log('自動ソートが完了しました');
+            } catch (error) {
+                console.error('自動ソートエラー:', error);
+            }
+        };
+        cron.schedule('45 23 * * 6', autoSortChannels, { scheduled: true, timezone: 'Asia/Tokyo' });
+
         // --- 週次リセット（日曜日午前0時） ---
         const resetWeeklyCounts = async () => {
             try {
@@ -386,9 +416,6 @@ module.exports = {
                 }
                 
                 console.log('週間メッセージカウントをリセットしました。');
-                
-                // 週次リセット後に自動ソートを実行
-                await sortClubChannelsOnly(guild, redis);
                 
                 // 週間ランキングの更新（部活作成パネルの更新）
                 const panelChannel = await client.channels.fetch(config.CLUB_PANEL_CHANNEL_ID).catch(() => null);
