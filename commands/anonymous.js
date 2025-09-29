@@ -28,13 +28,27 @@ module.exports = {
                 .setRequired(false)
         ),
     async execute(interaction) {
+        // インタラクションの有効性を確認
+        if (interaction.replied || interaction.deferred) {
+            console.log('インタラクションは既に応答済みです');
+            return;
+        }
+
+        // 即座にdeferReplyを実行してタイムアウトを防ぐ
+        try {
+            await interaction.deferReply({ ephemeral: true });
+        } catch (deferError) {
+            console.error('deferReplyエラー:', deferError);
+            return; // deferReplyに失敗した場合は処理を終了
+        }
+
         // クールダウン管理
         if (!global.anonymousCooldown) global.anonymousCooldown = {};
         const now = Date.now();
         const last = global.anonymousCooldown[interaction.user.id] || 0;
         if (now - last < 30 * 1000) {
             const wait = Math.ceil((30 * 1000 - (now - last)) / 1000);
-            return interaction.reply({ content: `クールダウン中です。あと${wait}秒お待ちください。`, ephemeral: true });
+            return interaction.editReply({ content: `クールダウン中です。あと${wait}秒お待ちください。` });
         }
         global.anonymousCooldown[interaction.user.id] = now;
 
@@ -44,21 +58,21 @@ module.exports = {
         const nameOpt = interaction.options.getString('名前');
 
         if (content.includes('\n') || content.length > 144) {
-            return interaction.reply({ content: '内容は改行禁止・144文字以内です。', ephemeral: true });
+            return interaction.editReply({ content: '内容は改行禁止・144文字以内です。' });
         }
 
         // ファイルサイズチェック
         if (file) {
             const fileCheck = await processFileSafely(file, config);
             if (!fileCheck.success) {
-                return interaction.reply({ content: `添付ファイルエラー: ${fileCheck.error}`, ephemeral: true });
+                return interaction.editReply({ content: `添付ファイルエラー: ${fileCheck.error}` });
             }
         }
 
         if (icon) {
             const iconCheck = await processFileSafely(icon, config);
             if (!iconCheck.success) {
-                return interaction.reply({ content: `アイコンファイルエラー: ${iconCheck.error}`, ephemeral: true });
+                return interaction.editReply({ content: `アイコンファイルエラー: ${iconCheck.error}` });
             }
         }
 
@@ -77,9 +91,8 @@ module.exports = {
             const inputName = nameOpt.trim();
             // #を含む名前は偽装防止のため無効化
             if (inputName.includes('#')) {
-                return interaction.reply({ 
-                    content: '名前に「#」は使用できません。コテハン機能をご利用ください。', 
-                    ephemeral: true 
+                return interaction.editReply({ 
+                    content: '名前に「#」は使用できません。コテハン機能をご利用ください。'
                 });
             }
             // /anonymousで名前が指定された場合は上書き
@@ -129,13 +142,6 @@ module.exports = {
         }
 
         // 投稿
-        try {
-            await interaction.deferReply({ ephemeral: true });
-        } catch (deferError) {
-            console.error('deferReplyエラー:', deferError);
-            return; // deferReplyに失敗した場合は処理を終了
-        }
-
         try {
             // 通常の匿名投稿
             const sentMessage = await webhook.send({

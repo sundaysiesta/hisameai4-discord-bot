@@ -20,6 +20,12 @@ module.exports = {
                 } catch (commandError) {
                     console.error(`コマンド ${interaction.commandName} の実行中にエラー:`, commandError);
                     
+                    // Discord API エラーコード10062（Unknown interaction）の特別処理
+                    if (commandError.code === 10062) {
+                        console.log(`インタラクション ${interaction.id} は既に期限切れまたは処理済みです`);
+                        return; // エラーレスポンスを送信しない
+                    }
+                    
                     // コマンド実行エラーの場合、適切に応答
                     if (!interaction.replied && !interaction.deferred) {
                         try {
@@ -244,6 +250,12 @@ module.exports = {
             }
         } catch (error) {
             console.error('インタラクション処理中に予期せぬエラーが発生しました:', error);
+            
+            // Discord API エラーコード10062（Unknown interaction）の特別処理
+            if (error.code === 10062) {
+                console.log(`インタラクション ${interaction.id} は既に期限切れまたは処理済みです`);
+                return; // エラーレスポンスを送信しない
+            }
             
             // インタラクションが既に応答済みかどうかを確認
             if (interaction.replied || interaction.deferred) {
