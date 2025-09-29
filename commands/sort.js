@@ -2,97 +2,13 @@ const { SlashCommandBuilder, PermissionsBitField, EmbedBuilder, ChannelType, Mes
 const { sortClubChannels, getActivityIcon } = require('../utils/utility.js');
 const config = require('../config.js');
 
-// 現在の週間ランキング埋め込みを作成する関数
+// 現在の週間ランキング埋め込みを作成する関数（共通計算関数を使用）
 async function createCurrentRankingEmbeds(guild, redis) {
     try {
-        let allClubChannels = [];
-        
-        // 全部活カテゴリーから部活チャンネルを取得（人気部活カテゴリも含む）
-        const allCategories = [...config.CLUB_CATEGORIES, config.POPULAR_CLUB_CATEGORY_ID];
-        for (const categoryId of allCategories) {
-            const category = await guild.channels.fetch(categoryId).catch(() => null);
-            if (category && category.type === ChannelType.GuildCategory) {
-                const clubChannels = category.children.cache.filter(ch => 
-                    !config.EXCLUDED_CHANNELS.includes(ch.id) && 
-                    ch.type === ChannelType.GuildText
-                );
-                allClubChannels.push(...clubChannels.values());
-            }
-        }
-        
-        if (allClubChannels.length === 0) return [];
-        
-        // アクティブ度（部員数 × メッセージ数）でランキングを作成
-        let ranking = [];
-        for (const channel of allClubChannels) {
-            // 部員数（アクティブユーザー数）の計算（今週の開始＝JSTの日曜0時以降のみ）
-            const getStartOfWeekUtcMs = () => {
-                const now = new Date();
-                const jstNowMs = now.getTime() + 9 * 60 * 60 * 1000;
-                const jstNow = new Date(jstNowMs);
-                const day = jstNow.getUTCDay();
-                const diffDays = day;
-                const jstStartMs = Date.UTC(jstNow.getUTCFullYear(), jstNow.getUTCMonth(), jstNow.getUTCDate()) - diffDays * 24 * 60 * 60 * 1000;
-                return jstStartMs - 9 * 60 * 60 * 1000;
-            };
-            const sinceUtcMs = getStartOfWeekUtcMs();
-
-            const messageCounts = new Map();
-            let weeklyMessageCount = 0; // リアルタイムでメッセージ数をカウント
-            let beforeId = undefined;
-            let fetchedTotal = 0;
-            const maxFetch = 500;
-            while (fetchedTotal < maxFetch) {
-                const batch = await channel.messages.fetch({ limit: Math.min(100, maxFetch - fetchedTotal), before: beforeId }).catch(() => null);
-                if (!batch || batch.size === 0) break;
-                for (const msg of batch.values()) {
-                    if (msg.createdTimestamp < sinceUtcMs) { batch.clear(); break; }
-                    if (!msg.author.bot) {
-                        const count = messageCounts.get(msg.author.id) || 0;
-                        messageCounts.set(msg.author.id, count + 1);
-                        weeklyMessageCount++; // メッセージ数をカウント
-                    }
-                }
-                fetchedTotal += batch.size;
-                const last = batch.last();
-                if (!last || last.createdTimestamp < sinceUtcMs) break;
-                beforeId = last.id;
-            }
-
-            // 1回以上メッセージを送っているユーザーをカウント（=その週の部員定義）
-            const activeMembers = Array.from(messageCounts.entries())
-                .filter(([_, count]) => count >= 1)
-                .map(([userId]) => userId);
-
-            const activeMemberCount = activeMembers.length;
-            const activityScore = activeMemberCount * weeklyMessageCount;
-            
-            // 前回のスコアを取得
-            const previousScore = await redis.get(`previous_score:${channel.id}`) || 0;
-            const previousScoreNum = Number(previousScore);
-            
-            // ポイントの増減を計算
-            const pointChange = activityScore - previousScoreNum;
-            
-            // 今回のスコアを保存（次回用）
-            await redis.setex(`previous_score:${channel.id}`, 7 * 24 * 60 * 60, activityScore.toString());
-            
-            ranking.push({ 
-                id: channel.id, 
-                name: channel.name,
-                messageCount: weeklyMessageCount,
-                activeMemberCount: activeMemberCount,
-                activityScore: activityScore,
-                pointChange: pointChange,
-                position: channel.position
-            });
-        }
-        
-        // アクティブ度（部員数 × メッセージ数）でソート（同数の場合はチャンネル位置で安定化）
-        ranking.sort((a, b) => {
-            if (b.activityScore !== a.activityScore) return b.activityScore - a.activityScore;
-            return a.position - b.position;
-        });
+        // 共通の計算関数を使用（events/ready.jsからインポート）
+        const { calculateWeeklyRanking } = require('../events/ready.js');
+        const ranking = await calculateWeeklyRanking(guild, redis);
+        if (ranking.length === 0) return [];
         
         // 全件をページ分割（1ページ最大20クラブ）
         const pageSize = 20;

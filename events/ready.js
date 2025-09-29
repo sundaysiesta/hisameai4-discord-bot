@@ -91,12 +91,9 @@ function cleanupGlobalVariables() {
     console.log('グローバル変数のクリーンアップを実行しました');
 }
 
-// 全部活の週間ランキング埋め込み（複数ページ対応）を作成する関数
-async function createWeeklyRankingEmbeds(client, redis) {
+// 共通の週間ランキング計算関数（統一ロジック）
+async function calculateWeeklyRanking(guild, redis) {
     try {
-        const guild = client.guilds.cache.first();
-        if (!guild) return [];
-
         let allClubChannels = [];
         
         // 全部活カテゴリーから部活チャンネルを取得（人気部活カテゴリも含む）
@@ -189,6 +186,23 @@ async function createWeeklyRankingEmbeds(client, redis) {
             if (b.activityScore !== a.activityScore) return b.activityScore - a.activityScore;
             return a.position - b.position;
         });
+        
+        return ranking;
+    } catch (error) {
+        console.error('週間ランキング計算エラー:', error);
+        return [];
+    }
+}
+
+// 全部活の週間ランキング埋め込み（複数ページ対応）を作成する関数
+async function createWeeklyRankingEmbeds(client, redis) {
+    try {
+        const guild = client.guilds.cache.first();
+        if (!guild) return [];
+
+        // 共通の計算関数を使用
+        const ranking = await calculateWeeklyRanking(guild, redis);
+        if (ranking.length === 0) return [];
         // 全件をページ分割（1ページ最大20クラブ）
         const pageSize = 20;
         const numPages = Math.ceil(ranking.length / pageSize) || 1;
@@ -259,7 +273,9 @@ async function sortClubChannelsOnly(guild, redis) {
 if (!global.dailyMessageBuffer) global.dailyMessageBuffer = {};
 const dailyMessageBuffer = global.dailyMessageBuffer;
 
+// 共通の計算関数をexport
 module.exports = {
+    calculateWeeklyRanking,
 	name: Events.ClientReady,
 	once: true,
 	async execute(client, redis, notion) {
@@ -363,15 +379,45 @@ module.exports = {
         };
         cron.schedule('0 0 * * *', flushClubMessageCounts, { scheduled: true, timezone: 'Asia/Tokyo' });
 
-        // --- 自動ソート（土曜日23:45） ---
+        // --- 自動ソート + ランキング更新（土曜日23:45） ---
         const autoSortChannels = async () => {
             try {
                 const guild = client.guilds.cache.first();
                 if (!guild) return;
                 
-                console.log('土曜23:45の自動ソートを実行します');
+                console.log('土曜23:45の自動ソート + ランキング更新を実行します');
+                
+                // チャンネルソート実行
                 await sortClubChannelsOnly(guild, redis);
-                console.log('自動ソートが完了しました');
+                
+                // 週間ランキングの更新（部活作成パネルの更新）
+                const panelChannel = await client.channels.fetch(config.CLUB_PANEL_CHANNEL_ID).catch(() => null);
+                if (panelChannel) {
+                    const rankingEmbeds = await createWeeklyRankingEmbeds(client, redis);
+                    
+                    const clubPanelEmbed = new EmbedBuilder()
+                        .setColor(0x5865F2)
+                        .setTitle('🎫 部活作成パネル')
+                        .setDescription('**新規でもすぐ参加できる遊び場**\n\n気軽に部活を作ってみませんか？\n\n**流れ：**\n1. ボタンを押してフォームを開く\n2. 部活名・絵文字・活動内容を入力\n3. チャンネルが自動作成され、部長権限が付与される')
+                        .addFields(
+                            { name: '💡 気軽に始めよう', value: '• まずは小規模でも作ってみてOK\n• 途中で放置しても大丈夫\n• 気が向いたときに活動すればOK', inline: false },
+                            { name: '📝 入力項目', value: '部活名・絵文字・活動内容', inline: true },
+                            { name: '⏰ 制限', value: '7日に1回', inline: true },
+                            { name: '📍 場所', value: '人気・新着部活', inline: true },
+                            { name: '🎨 絵文字例', value: '⚽ 🎵 🎨 🎮 📚 🎮', inline: false }
+                        )
+                        .setTimestamp()
+                        .setFooter({ text: 'HisameAI Mark.4' });
+
+                    const messagePayload = {
+                        embeds: rankingEmbeds && rankingEmbeds.length > 0 ? [...rankingEmbeds, clubPanelEmbed] : [clubPanelEmbed],
+                        components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(config.CREATE_CLUB_BUTTON_ID).setLabel('部活を作成する').setStyle(ButtonStyle.Primary).setEmoji('🎫'))]
+                    };
+                    
+                    await postStickyMessage(client, panelChannel, config.CREATE_CLUB_BUTTON_ID, messagePayload);
+                }
+                
+                console.log('自動ソート + ランキング更新が完了しました');
             } catch (error) {
                 console.error('自動ソートエラー:', error);
             }
@@ -416,35 +462,6 @@ module.exports = {
                 }
                 
                 console.log('週間メッセージカウントをリセットしました。');
-                
-                // 週間ランキングの更新（部活作成パネルの更新）
-                const panelChannel = await client.channels.fetch(config.CLUB_PANEL_CHANNEL_ID).catch(() => null);
-                if (panelChannel) {
-                    const rankingEmbeds = await createWeeklyRankingEmbeds(client, redis);
-                    
-                    const clubPanelEmbed = new EmbedBuilder()
-                        .setColor(0x5865F2)
-                        .setTitle('🎫 部活作成パネル')
-                        .setDescription('**新規でもすぐ参加できる遊び場**\n\n気軽に部活を作ってみませんか？\n\n**流れ：**\n1. ボタンを押してフォームを開く\n2. 部活名・絵文字・活動内容を入力\n3. チャンネルが自動作成され、部長権限が付与される')
-                        .addFields(
-                            { name: '💡 気軽に始めよう', value: '• まずは小規模でも作ってみてOK\n• 途中で放置しても大丈夫\n• 気が向いたときに活動すればOK', inline: false },
-                            { name: '📝 入力項目', value: '部活名・絵文字・活動内容', inline: true },
-                            { name: '⏰ 制限', value: '7日に1回', inline: true },
-                            { name: '📍 場所', value: '人気・新着部活', inline: true },
-                            { name: '🎨 絵文字例', value: '⚽ 🎵 🎨 🎮 📚 🎮', inline: false }
-                        )
-                        .setTimestamp()
-                        .setFooter({ text: 'HisameAI Mark.4' });
-
-                    const messagePayload = {
-                        embeds: rankingEmbeds && rankingEmbeds.length > 0 ? [...rankingEmbeds, clubPanelEmbed] : [clubPanelEmbed],
-                        components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(config.CREATE_CLUB_BUTTON_ID).setLabel('部活を作成する').setStyle(ButtonStyle.Primary).setEmoji('🎫'))]
-                    };
-                    
-                    await postStickyMessage(client, panelChannel, config.CREATE_CLUB_BUTTON_ID, messagePayload);
-                }
-                
-                console.log('週間ランキングと部活作成パネルを更新しました');
             } catch (error) {
                 console.error('週次リセットエラー:', error);
             }
