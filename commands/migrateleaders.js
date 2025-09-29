@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, PermissionsBitField, ChannelType } = require('discord.js');
+const { SlashCommandBuilder, PermissionsBitField, ChannelType, MessageFlags } = require('discord.js');
 const config = require('../config.js');
 
 module.exports = {
@@ -7,9 +7,9 @@ module.exports = {
         .setDescription('Notionの「部長」情報に基づきチャンネル権限・Redisを同期します。(管理者限定)'),
     async execute(interaction, redis, notion) {
         if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
-            return interaction.reply({ content: 'このコマンドを使用する権限がありません。', ephemeral: true });
+            return interaction.reply({ content: 'このコマンドを使用する権限がありません。', flags: [MessageFlags.Ephemeral] });
         }
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
 
         try {
             const guild = interaction.guild;

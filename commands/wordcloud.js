@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, AttachmentBuilder, ChannelType } = require('discord.js');
+const { SlashCommandBuilder, AttachmentBuilder, ChannelType, MessageFlags } = require('discord.js');
 const { createCanvas } = require('canvas');
 const cloud = require('d3-cloud');
 const TinySegmenter = require('tiny-segmenter');
@@ -26,14 +26,14 @@ module.exports = {
         .setName('wordcloud')
         .setDescription('このチャンネルの最近のメッセージからワードクラウド画像を生成します。'),
     async execute(interaction) {
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
         await interaction.editReply({ content: 'ワードクラウドを生成中です...（最大2分程度かかります）' });
 
         try {
             await interaction.guild.members.fetch();
 
             if (interaction.channel.parentId === WORDCLOUD_EXCLUDED_CATEGORY_ID || config.EXCLUDED_CHANNELS.includes(interaction.channel.id)) {
-                return interaction.followUp({ content: 'このチャンネルではワードクラウドを生成できません。', ephemeral: true });
+                return interaction.followUp({ content: 'このチャンネルではワードクラウドを生成できません。', flags: [MessageFlags.Ephemeral] });
             }
 
             let allText = '';
@@ -66,7 +66,7 @@ module.exports = {
             }
 
             if (allText.trim() === '') {
-                return interaction.followUp({ content: '分析できるメッセージが見つかりませんでした。', ephemeral: true });
+                return interaction.followUp({ content: '分析できるメッセージが見つかりませんでした。', flags: [MessageFlags.Ephemeral] });
             }
 
             let wordCounts = {};
@@ -88,7 +88,7 @@ module.exports = {
                 .slice(0, 200);
 
             if (words.length === 0) {
-                return interaction.followUp({ content: 'ワードクラウドを生成するのに十分な単語が見つかりませんでした。', ephemeral: true });
+                return interaction.followUp({ content: 'ワードクラウドを生成するのに十分な単語が見つかりませんでした。', flags: [MessageFlags.Ephemeral] });
             }
             
             const maxFontSize = 100;
@@ -131,7 +131,7 @@ module.exports = {
 
         } catch (error) {
             console.error('Wordcloud generation failed:', error);
-            await interaction.followUp({ content: 'ワードクラウドの生成中にエラーが発生しました。', ephemeral: true });
+            await interaction.followUp({ content: 'ワードクラウドの生成中にエラーが発生しました。', flags: [MessageFlags.Ephemeral] });
         }
     },
 };

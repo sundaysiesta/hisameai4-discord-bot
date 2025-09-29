@@ -66,7 +66,16 @@ const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_BOT_TOKEN)
 (async () => {
     try {
         console.log('スラッシュコマンドの登録を開始します...');
-        await rest.put(Routes.applicationCommands(process.env.DISCORD_APPLICATION_ID), { body: commands });
+        
+        // アプリケーションIDの取得
+        const applicationId = process.env.DISCORD_APPLICATION_ID;
+        if (!applicationId) {
+            throw new Error('DISCORD_APPLICATION_ID環境変数が設定されていません。');
+        }
+        
+        await rest.put(Routes.applicationCommands(applicationId), { body: commands });
         console.log('スラッシュコマンドの登録が正常に完了しました。');
-    } catch (error) { console.error(error); }
+    } catch (error) { 
+        console.error('スラッシュコマンドの登録に失敗しました:', error);
+    }
 })();

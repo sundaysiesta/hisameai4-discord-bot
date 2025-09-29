@@ -29,7 +29,7 @@ module.exports = {
                     // コマンド実行エラーの場合、適切に応答
                     if (!interaction.replied && !interaction.deferred) {
                         try {
-                            await interaction.reply({ content: 'コマンドの実行中にエラーが発生しました。', ephemeral: true });
+                            await interaction.reply({ content: 'コマンドの実行中にエラーが発生しました。', flags: [MessageFlags.Ephemeral] });
                         } catch (replyError) {
                             console.error('コマンドエラー時のreply失敗:', replyError);
                         }
@@ -112,10 +112,10 @@ module.exports = {
                         }
                         
                         if (targetMsg) await targetMsg.delete().catch(() => {});
-                        await interaction.reply({ content: 'メッセージを削除しました。', ephemeral: true });
+                        await interaction.reply({ content: 'メッセージを削除しました。', flags: [MessageFlags.Ephemeral] });
                         delete proxyDeleteMap[interaction.message.id];
                     } else {
-                        await interaction.reply({ content: 'このメッセージを削除できるのは投稿者のみです。', ephemeral: true });
+                        await interaction.reply({ content: 'このメッセージを削除できるのは投稿者のみです。', flags: [MessageFlags.Ephemeral] });
                     }
                     return;
                 }

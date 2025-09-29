@@ -1,4 +1,4 @@
-const { SlashCommandBuilder } = require('discord.js');
+const { SlashCommandBuilder, MessageFlags } = require('discord.js');
 const config = require('../config.js');
 
 module.exports = {
@@ -15,11 +15,11 @@ module.exports = {
         if (!interaction.member.permissions.has('Administrator')) {
             return interaction.reply({ 
                 content: 'このコマンドは管理者のみ使用できます。', 
-                ephemeral: true 
+                flags: [MessageFlags.Ephemeral] 
             });
         }
 
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
 
         try {
             const nameList = interaction.options.getString('リスト');

@@ -93,7 +93,14 @@ async function deployCommands() {
     
     try {
         console.log('スラッシュコマンドの登録を開始します...');
-        await rest.put(Routes.applicationCommands(process.env.DISCORD_APPLICATION_ID), { body: commands });
+        // client.application.idを使用してアプリケーションIDを取得
+        const applicationId = client.application?.id || process.env.DISCORD_APPLICATION_ID;
+        
+        if (!applicationId) {
+            throw new Error('アプリケーションIDが取得できません。DISCORD_APPLICATION_ID環境変数を設定するか、Botが正しくログインしていることを確認してください。');
+        }
+        
+        await rest.put(Routes.applicationCommands(applicationId), { body: commands });
         console.log('スラッシュコマンドの登録が正常に完了しました。');
     } catch (error) {
         console.error('スラッシュコマンドの登録に失敗しました:', error);

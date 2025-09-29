@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, PermissionsBitField } = require('discord.js');
+const { SlashCommandBuilder, PermissionsBitField, MessageFlags } = require('discord.js');
 const config = require('../config.js');
 const { notion, getNotionRelationTitles } = require('../utils/notionHelpers.js');
 const { getGenerationRoleName, setDiscordIconToNotion } = require('../utils/utility.js');
@@ -9,7 +9,7 @@ module.exports = {
         .setDescription('DiscordアカウントとNotionの名前を紐付けます。(管理者限定)')
         .addUserOption(option => 
             option.setName('user')
-                .setDescription('紐付けたいDiscordユーザー')
+                .setDescription('紐付けたいDiscordユーザー名')
                 .setRequired(true))
         .addStringOption(option => 
             option.setName('name')
@@ -17,9 +17,9 @@ module.exports = {
                 .setRequired(true)),
     async execute(interaction, redis, notion) {
         if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
-            return interaction.reply({ content: 'このコマンドを使用する権限がありません。', ephemeral: true });
+            return interaction.reply({ content: 'このコマンドを使用する権限がありません。', flags: [MessageFlags.Ephemeral] });
         }
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
 
         const targetUser = interaction.options.getUser('user');
         const characterName = interaction.options.getString('name');

@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, MessageFlags } = require('discord.js');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -8,10 +8,10 @@ module.exports = {
         // Botのアプリケーション情報を取得して、所有者IDを確認
         await interaction.client.application.fetch();
         if (interaction.user.id !== interaction.client.application.owner.id) {
-            return interaction.reply({ content: 'このコマンドを実行できるのはBotの所有者のみです。', ephemeral: true });
+            return interaction.reply({ content: 'このコマンドを実行できるのはBotの所有者のみです。', flags: [MessageFlags.Ephemeral] });
         }
 
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
 
         const guilds = interaction.client.guilds.cache;
         const description = guilds.map(guild => `**${guild.name}**\nID: \`${guild.id}\``).join('\n\n');

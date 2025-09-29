@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, AttachmentBuilder, EmbedBuilder } = require('discord.js');
+const { SlashCommandBuilder, AttachmentBuilder, EmbedBuilder, MessageFlags } = require('discord.js');
 const crypto = require('crypto');
 const config = require('../config.js');
 const { processFileSafely, getKotehan, getKoteicon } = require('../utils/utility.js');
@@ -36,7 +36,7 @@ module.exports = {
 
         // 即座にdeferReplyを実行してタイムアウトを防ぐ
         try {
-            await interaction.deferReply({ ephemeral: true });
+            await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
         } catch (deferError) {
             console.error('deferReplyエラー:', deferError);
             return; // deferReplyに失敗した場合は処理を終了
@@ -157,7 +157,7 @@ module.exports = {
             const replyMessage = '匿名で投稿しました。';
             
             try {
-                await interaction.editReply({ content: replyMessage, ephemeral: true });
+                await interaction.editReply({ content: replyMessage });
             } catch (editError) {
                 console.error('editReplyエラー:', editError);
             }
@@ -173,7 +173,7 @@ module.exports = {
             }
             
             try {
-                await interaction.editReply({ content: errorMessage, ephemeral: true });
+                await interaction.editReply({ content: errorMessage });
             } catch (editError) {
                 console.error('editReplyエラー（エラー処理中）:', editError);
             }

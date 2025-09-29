@@ -1,4 +1,4 @@
-const { SlashCommandBuilder } = require('discord.js');
+const { SlashCommandBuilder, MessageFlags } = require('discord.js');
 const { setKoteicon, getKoteicon, removeKoteicon, processFileSafely } = require('../utils/utility.js');
 const config = require('../config.js');
 
@@ -28,13 +28,13 @@ module.exports = {
 
         if (action === 'set') {
             if (!icon) {
-                return interaction.reply({ content: 'アイコンを選択してください。', ephemeral: true });
+                return interaction.reply({ content: 'アイコンを選択してください。', flags: [MessageFlags.Ephemeral] });
             }
 
             // ファイルサイズチェック
             const iconCheck = await processFileSafely(icon, config);
             if (!iconCheck.success) {
-                return interaction.reply({ content: `アイコンファイルエラー: ${iconCheck.error}`, ephemeral: true });
+                return interaction.reply({ content: `アイコンファイルエラー: ${iconCheck.error}`, flags: [MessageFlags.Ephemeral] });
             }
 
             // 固定アイコンを設定
@@ -45,7 +45,7 @@ module.exports = {
             
             return interaction.reply({ 
                 content: `固定アイコンを設定しました！\n\nこれで匿名投稿時にこのアイコンが自動的に使用されます。\n/anonymousコマンドで別のアイコンを指定すれば上書きできます。`, 
-                ephemeral: true 
+                flags: [MessageFlags.Ephemeral] 
             });
         }
 
@@ -55,14 +55,14 @@ module.exports = {
             if (!koteicon) {
                 return interaction.reply({ 
                     content: '固定アイコンは設定されていません。\n`/koteicon`で固定アイコンを設定できます。', 
-                    ephemeral: true 
+                    flags: [MessageFlags.Ephemeral] 
                 });
             }
 
             return interaction.reply({ 
                 content: '現在の固定アイコン:', 
                 files: [koteicon.attachment],
-                ephemeral: true 
+                flags: [MessageFlags.Ephemeral] 
             });
         }
 
@@ -72,12 +72,12 @@ module.exports = {
             if (removed) {
                 return interaction.reply({ 
                     content: '固定アイコンを削除しました。\n匿名投稿時はデフォルトのアイコンが使用されます。', 
-                    ephemeral: true 
+                    flags: [MessageFlags.Ephemeral] 
                 });
             } else {
                 return interaction.reply({ 
                     content: '固定アイコンは設定されていません。', 
-                    ephemeral: true 
+                    flags: [MessageFlags.Ephemeral] 
                 });
             }
         }

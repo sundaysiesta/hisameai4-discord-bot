@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, PermissionsBitField } = require('discord.js');
+const { SlashCommandBuilder, PermissionsBitField, MessageFlags } = require('discord.js');
 const config = require('../config.js');
 const { notion } = require('../utils/notionHelpers.js');
 
@@ -16,9 +16,9 @@ module.exports = {
                 .setRequired(true)),
     async execute(interaction, redis) {
         if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
-            return interaction.reply({ content: 'このコマンドを使用する権限がありません。', ephemeral: true });
+            return interaction.reply({ content: 'このコマンドを使用する権限がありません。', flags: [MessageFlags.Ephemeral] });
         }
-        await interaction.deferReply({ephemeral: true});
+        await interaction.deferReply({flags: [MessageFlags.Ephemeral]});
         const channel = interaction.options.getChannel('部活');
         const characterName = interaction.options.getString('部長');
         

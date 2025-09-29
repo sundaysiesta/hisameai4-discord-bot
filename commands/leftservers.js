@@ -1,4 +1,4 @@
-const { SlashCommandBuilder } = require('discord.js');
+const { SlashCommandBuilder, MessageFlags } = require('discord.js');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -11,10 +11,10 @@ module.exports = {
     async execute(interaction) {
         await interaction.client.application.fetch();
         if (interaction.user.id !== interaction.client.application.owner.id) {
-            return interaction.reply({ content: 'このコマンドを実行できるのはBotの所有者のみです。', ephemeral: true });
+            return interaction.reply({ content: 'このコマンドを実行できるのはBotの所有者のみです。', flags: [MessageFlags.Ephemeral] });
         }
         
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
 
         const serverId = interaction.options.getString('server_id');
         const guild = interaction.client.guilds.cache.get(serverId);

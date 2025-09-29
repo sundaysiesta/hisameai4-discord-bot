@@ -1,4 +1,4 @@
-const { SlashCommandBuilder } = require('discord.js');
+const { SlashCommandBuilder, MessageFlags } = require('discord.js');
 const config = require('../config.js');
 
 module.exports = {
@@ -10,7 +10,7 @@ module.exports = {
                 .setDescription('設定したい説明文 (リセットする場合は "none" と入力)')
                 .setRequired(true)),
     async execute(interaction, redis, notion) {
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
         
         const targetUser = interaction.user;
         const description = interaction.options.getString('description');

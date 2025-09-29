@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, MessageFlags } = require('discord.js');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -62,9 +62,9 @@ module.exports = {
                 )
                 .setFooter({ text: 'これらのコマンドは管理者のみが使用できます。' });
 
-            await interaction.reply({ embeds: [userCommands, adminCommands], ephemeral: true });
+            await interaction.reply({ embeds: [userCommands, adminCommands], flags: [MessageFlags.Ephemeral] });
         } else {
-            await interaction.reply({ embeds: [userCommands], ephemeral: true });
+            await interaction.reply({ embeds: [userCommands], flags: [MessageFlags.Ephemeral] });
         }
     },
 }; 

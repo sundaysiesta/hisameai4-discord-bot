@@ -1,4 +1,4 @@
-const { SlashCommandBuilder } = require('discord.js');
+const { SlashCommandBuilder, MessageFlags } = require('discord.js');
 const { setKotehan, getKotehan, removeKotehan } = require('../utils/utility.js');
 
 module.exports = {
@@ -28,11 +28,11 @@ module.exports = {
 
         if (action === 'set') {
             if (!name || name.trim().length === 0) {
-                return interaction.reply({ content: '名前を入力してください。', ephemeral: true });
+                return interaction.reply({ content: '名前を入力してください。', flags: [MessageFlags.Ephemeral] });
             }
 
             if (name.trim().length > 20) {
-                return interaction.reply({ content: '名前は20文字以内で入力してください。', ephemeral: true });
+                return interaction.reply({ content: '名前は20文字以内で入力してください。', flags: [MessageFlags.Ephemeral] });
             }
 
             const tag = setKotehan(userId, name);
@@ -40,7 +40,7 @@ module.exports = {
             
             return interaction.reply({ 
                 content: `コテハンを設定しました！\n表示名: **${displayName}**\n\nこれで匿名投稿時に「${displayName}」として表示されます。\n/anonymousコマンドで別の名前を指定すれば上書きできます。`, 
-                ephemeral: true 
+                flags: [MessageFlags.Ephemeral] 
             });
         }
 
@@ -50,14 +50,14 @@ module.exports = {
             if (!kotehan) {
                 return interaction.reply({ 
                     content: 'コテハンは設定されていません。\n`/kotehan`でコテハンを設定できます。', 
-                    ephemeral: true 
+                    flags: [MessageFlags.Ephemeral] 
                 });
             }
 
             const displayName = `${kotehan.name}#${kotehan.tag}`;
             return interaction.reply({ 
                 content: `現在のコテハン: **${displayName}**`, 
-                ephemeral: true 
+                flags: [MessageFlags.Ephemeral] 
             });
         }
 
@@ -67,12 +67,12 @@ module.exports = {
             if (removed) {
                 return interaction.reply({ 
                     content: 'コテハンを削除しました。\n匿名投稿時は通常の「名無しのロメダ民」として表示されます。', 
-                    ephemeral: true 
+                    flags: [MessageFlags.Ephemeral] 
                 });
             } else {
                 return interaction.reply({ 
                     content: 'コテハンは設定されていません。', 
-                    ephemeral: true 
+                    flags: [MessageFlags.Ephemeral] 
                 });
             }
         }

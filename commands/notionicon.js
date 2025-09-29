@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, MessageFlags } = require('discord.js');
 const { setDiscordIconsToNotion, setDiscordIconToNotion } = require('../utils/utility.js');
 const config = require('../config.js');
 
@@ -26,7 +26,7 @@ module.exports = {
         if (!interaction.member.permissions.has('Administrator')) {
             return interaction.reply({ 
                 content: 'このコマンドは管理者のみ使用できます。', 
-                ephemeral: true 
+                flags: [MessageFlags.Ephemeral] 
             });
         }
 
@@ -34,7 +34,7 @@ module.exports = {
         const targetUser = interaction.options.getUser('ユーザー');
 
         if (action === 'sync') {
-            await interaction.deferReply({ ephemeral: true });
+            await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
 
             try {
                 const results = await setDiscordIconsToNotion(interaction.client, notion, config);
@@ -83,11 +83,11 @@ module.exports = {
             if (!targetUser) {
                 return interaction.reply({ 
                     content: '個別同期を実行するにはユーザーを指定してください。', 
-                    ephemeral: true 
+                    flags: [MessageFlags.Ephemeral] 
                 });
             }
             
-            await interaction.deferReply({ ephemeral: true });
+            await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
 
             try {
                 const result = await setDiscordIconToNotion(interaction.client, notion, config, targetUser.id);
@@ -110,7 +110,7 @@ module.exports = {
         }
 
         if (action === 'status') {
-            await interaction.deferReply({ ephemeral: true });
+            await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
 
             try {
                 const response = await notion.databases.query({

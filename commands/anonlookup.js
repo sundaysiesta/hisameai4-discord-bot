@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, PermissionsBitField } = require('discord.js');
+const { SlashCommandBuilder, PermissionsBitField, MessageFlags } = require('discord.js');
 const crypto = require('crypto');
 
 module.exports = {
@@ -17,20 +17,20 @@ module.exports = {
         ),
     async execute(interaction) {
         if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
-            return interaction.reply({ content: 'このコマンドを使用する権限がありません。', ephemeral: true });
+            return interaction.reply({ content: 'このコマンドを使用する権限がありません。', flags: [MessageFlags.Ephemeral] });
         }
 
         const inputHash = interaction.options.getString('匿名id').trim();
         const date = interaction.options.getString('日付').trim();
 
         if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-            return interaction.reply({ content: '日付は YYYY-MM-DD の形式で入力してください。', ephemeral: true });
+            return interaction.reply({ content: '日付は YYYY-MM-DD の形式で入力してください。', flags: [MessageFlags.Ephemeral] });
         }
         if (!/^[a-f0-9]{8}$/i.test(inputHash)) {
-            return interaction.reply({ content: '匿名IDは16進数8文字で入力してください。', ephemeral: true });
+            return interaction.reply({ content: '匿名IDは16進数8文字で入力してください。', flags: [MessageFlags.Ephemeral] });
         }
 
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
 
         try {
             const salt = process.env.ANONYMOUS_SALT || '';

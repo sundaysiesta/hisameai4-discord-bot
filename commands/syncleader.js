@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, PermissionsBitField } = require('discord.js');
+const { SlashCommandBuilder, PermissionsBitField, MessageFlags } = require('discord.js');
 const config = require('../config.js');
 const { getAllKeys } = require('../utils/utility.js');
 
@@ -8,9 +8,9 @@ module.exports = {
         .setDescription('全ユーザーの部長ロールIDをNotion人物DBに同期します（管理者限定）'),
     async execute(interaction, redis, notion) {
         if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
-            return interaction.reply({ content: 'このコマンドを使用する権限がありません。', ephemeral: true });
+            return interaction.reply({ content: 'このコマンドを使用する権限がありません。', flags: [MessageFlags.Ephemeral] });
         }
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
         try {
             // 1. 全部活チャンネルIDから部長ロールIDを収集
             const clubKeys = await getAllKeys(redis, 'leader_roles:*');
