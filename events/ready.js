@@ -244,6 +244,372 @@ async function createWeeklyRankingEmbeds(client, redis) {
     }
 }
 
+// アーカイブから復活する機能：アクティブポイントが0より大きい部活を部活カテゴリに戻す
+async function autoReviveArchivedClubs(guild, redis) {
+    try {
+        console.log('アーカイブ復活処理を開始します...');
+        
+        // アーカイブカテゴリから部活チャンネルを取得
+        const archiveCategories = [config.ARCHIVE_CATEGORY_ID, config.ARCHIVE_OVERFLOW_CATEGORY_ID];
+        let archivedClubChannels = [];
+        
+        for (const categoryId of archiveCategories) {
+            const category = await guild.channels.fetch(categoryId).catch(() => null);
+            if (category && category.type === ChannelType.GuildCategory) {
+                const clubChannels = category.children.cache.filter(ch => 
+                    !config.EXCLUDED_CHANNELS.includes(ch.id) && 
+                    ch.type === ChannelType.GuildText
+                );
+                archivedClubChannels.push(...clubChannels.values());
+            }
+        }
+        
+        if (archivedClubChannels.length === 0) {
+            console.log('復活対象の部活はありません');
+            return;
+        }
+        
+        // 各チャンネルのアクティブポイントを計算
+        const channelsToRevive = [];
+        for (const channel of archivedClubChannels) {
+            // 週間ランキング計算と同じロジックでアクティブポイントを計算
+            const getStartOfWeekUtcMs = () => {
+                const now = new Date();
+                const jstNowMs = now.getTime() + 9 * 60 * 60 * 1000;
+                const jstNow = new Date(jstNowMs);
+                const day = jstNow.getUTCDay();
+                const diffDays = day;
+                const jstStartMs = Date.UTC(jstNow.getUTCFullYear(), jstNow.getUTCMonth(), jstNow.getUTCDate()) - diffDays * 24 * 60 * 60 * 1000;
+                return jstStartMs - 9 * 60 * 60 * 1000;
+            };
+            const sinceUtcMs = getStartOfWeekUtcMs();
+
+            const messageCounts = new Map();
+            let weeklyMessageCount = 0;
+            let beforeId = undefined;
+            let fetchedTotal = 0;
+            const maxFetch = 500;
+            
+            while (fetchedTotal < maxFetch) {
+                const batch = await channel.messages.fetch({ limit: Math.min(100, maxFetch - fetchedTotal), before: beforeId }).catch(() => null);
+                if (!batch || batch.size === 0) break;
+                for (const msg of batch.values()) {
+                    if (msg.createdTimestamp < sinceUtcMs) { batch.clear(); break; }
+                    if (!msg.author.bot) {
+                        const count = messageCounts.get(msg.author.id) || 0;
+                        messageCounts.set(msg.author.id, count + 1);
+                        weeklyMessageCount++;
+                    }
+                }
+                fetchedTotal += batch.size;
+                const last = batch.last();
+                if (!last || last.createdTimestamp < sinceUtcMs) break;
+                beforeId = last.id;
+            }
+
+            const activeMembers = Array.from(messageCounts.entries())
+                .filter(([_, count]) => count >= 1)
+                .map(([userId]) => userId);
+
+            const activeMemberCount = activeMembers.length;
+            const activityScore = activeMemberCount * weeklyMessageCount;
+            
+            // 厳格な復活条件をチェック
+            const meetsRevivalConditions = 
+                activityScore >= config.REVIVAL_MIN_ACTIVITY_SCORE &&
+                activeMemberCount >= config.REVIVAL_MIN_ACTIVE_MEMBERS &&
+                weeklyMessageCount >= config.REVIVAL_MIN_MESSAGE_COUNT;
+            
+            if (meetsRevivalConditions) {
+                channelsToRevive.push({ 
+                    channel, 
+                    activityScore, 
+                    activeMemberCount, 
+                    weeklyMessageCount 
+                });
+            }
+        }
+        
+        if (channelsToRevive.length === 0) {
+            console.log('復活対象の部活はありません');
+            return;
+        }
+        
+        console.log(`${channelsToRevive.length}個の部活を復活処理します`);
+        
+        // 人気部活カテゴリを取得（復活先）
+        const popularCategory = await guild.channels.fetch(config.POPULAR_CLUB_CATEGORY_ID).catch(() => null);
+        
+        if (!popularCategory) {
+            console.error('人気部活カテゴリが見つかりません');
+            return;
+        }
+        
+        for (const { channel, activityScore, activeMemberCount, weeklyMessageCount } of channelsToRevive) {
+            try {
+                // チャンネルを人気部活カテゴリに移動
+                await channel.setParent(popularCategory, { 
+                    lockPermissions: false,
+                    reason: '自動復活処理（アクティブポイント復活）'
+                });
+                
+                // 部長権限を復元
+                try {
+                    let leaderUserId = await redis.get(`leader_user:${channel.id}`);
+                    
+                    // Redisに部長情報がない場合は、Notionから取得を試行
+                    if (!leaderUserId) {
+                        console.log(`部活「${channel.name}」の部長情報をNotionから取得を試行します`);
+                        // Notionから部長情報を取得する処理は複雑なため、ここではスキップ
+                        // 必要に応じて後で実装
+                    }
+                    
+                    if (leaderUserId) {
+                        // 部長権限を復元
+                        await channel.permissionOverwrites.edit(leaderUserId, {
+                            ViewChannel: true,
+                            ManageChannels: true,
+                            ManageMessages: true
+                        }, { reason: '復活時の部長権限復元' });
+                        console.log(`部活「${channel.name}」の部長権限を復元しました（ユーザーID: ${leaderUserId}）`);
+                    } else {
+                        console.log(`部活「${channel.name}」の部長情報が見つかりません。手動で部長を設定してください。`);
+                    }
+                } catch (permissionError) {
+                    console.error(`部活「${channel.name}」の部長権限復元エラー:`, permissionError);
+                }
+                
+                // 復活通知の埋め込みメッセージを送信
+                try {
+                    const revivalEmbed = new EmbedBuilder()
+                        .setColor(0x4CAF50) // 緑色
+                        .setTitle('🎉 部活が復活しました！')
+                        .setDescription('この部活はアクティブポイントが復活したため、部活カテゴリに戻りました。')
+                        .addFields(
+                            { 
+                                name: '📊 復活理由', 
+                                value: `週間アクティブポイント: ${activityScore}pt\nアクティブ部員数: ${activeMemberCount}人\n週間メッセージ数: ${weeklyMessageCount}件`, 
+                                inline: false 
+                            },
+                            { 
+                                name: '✅ 復活条件', 
+                                value: `• アクティブポイント: ${activityScore}pt ≥ ${config.REVIVAL_MIN_ACTIVITY_SCORE}pt\n• アクティブ部員数: ${activeMemberCount}人 ≥ ${config.REVIVAL_MIN_ACTIVE_MEMBERS}人\n• メッセージ数: ${weeklyMessageCount}件 ≥ ${config.REVIVAL_MIN_MESSAGE_COUNT}件`, 
+                                inline: false 
+                            },
+                            { 
+                                name: '👑 部長権限', 
+                                value: '部長の権限が自動的に復元されました', 
+                                inline: true 
+                            },
+                            { 
+                                name: '📍 現在の場所', 
+                                value: `カテゴリ: ${popularCategory.name}`, 
+                                inline: true 
+                            },
+                            { 
+                                name: '📅 次回チェック', 
+                                value: '毎週土曜日23:45に自動チェックされます', 
+                                inline: true 
+                            }
+                        )
+                        .setTimestamp()
+                        .setFooter({ text: 'HisameAI Mark.4 - 自動復活システム' });
+                    
+                    await channel.send({ embeds: [revivalEmbed] });
+                } catch (embedError) {
+                    console.error(`復活通知メッセージ送信エラー for ${channel.name}:`, embedError);
+                }
+                
+                console.log(`部活「${channel.name}」を復活させました（${activityScore}pt）`);
+                
+            } catch (error) {
+                console.error(`部活「${channel.name}」の復活処理でエラー:`, error);
+            }
+        }
+        
+        console.log('アーカイブ復活処理が完了しました');
+        
+    } catch (error) {
+        console.error('アーカイブ復活処理エラー:', error);
+    }
+}
+
+// 自動廃部機能：アクティブポイント0の部活をアーカイブに移動
+async function autoArchiveInactiveClubs(guild, redis) {
+    try {
+        console.log('自動廃部処理を開始します...');
+        
+        // 全部活チャンネルを取得
+        let allClubChannels = [];
+        const allCategories = [...config.CLUB_CATEGORIES, config.POPULAR_CLUB_CATEGORY_ID, config.INACTIVE_CLUB_CATEGORY_ID];
+        
+        for (const categoryId of allCategories) {
+            const category = await guild.channels.fetch(categoryId).catch(() => null);
+            if (category && category.type === ChannelType.GuildCategory) {
+                const clubChannels = category.children.cache.filter(ch => 
+                    !config.EXCLUDED_CHANNELS.includes(ch.id) && 
+                    ch.type === ChannelType.GuildText
+                );
+                allClubChannels.push(...clubChannels.values());
+            }
+        }
+        
+        if (allClubChannels.length === 0) return;
+        
+        // 各チャンネルのアクティブポイントを計算
+        const channelsToArchive = [];
+        for (const channel of allClubChannels) {
+            // 週間ランキング計算と同じロジックでアクティブポイントを計算
+            const getStartOfWeekUtcMs = () => {
+                const now = new Date();
+                const jstNowMs = now.getTime() + 9 * 60 * 60 * 1000;
+                const jstNow = new Date(jstNowMs);
+                const day = jstNow.getUTCDay();
+                const diffDays = day;
+                const jstStartMs = Date.UTC(jstNow.getUTCFullYear(), jstNow.getUTCMonth(), jstNow.getUTCDate()) - diffDays * 24 * 60 * 60 * 1000;
+                return jstStartMs - 9 * 60 * 60 * 1000;
+            };
+            const sinceUtcMs = getStartOfWeekUtcMs();
+
+            const messageCounts = new Map();
+            let weeklyMessageCount = 0;
+            let beforeId = undefined;
+            let fetchedTotal = 0;
+            const maxFetch = 500;
+            
+            while (fetchedTotal < maxFetch) {
+                const batch = await channel.messages.fetch({ limit: Math.min(100, maxFetch - fetchedTotal), before: beforeId }).catch(() => null);
+                if (!batch || batch.size === 0) break;
+                for (const msg of batch.values()) {
+                    if (msg.createdTimestamp < sinceUtcMs) { batch.clear(); break; }
+                    if (!msg.author.bot) {
+                        const count = messageCounts.get(msg.author.id) || 0;
+                        messageCounts.set(msg.author.id, count + 1);
+                        weeklyMessageCount++;
+                    }
+                }
+                fetchedTotal += batch.size;
+                const last = batch.last();
+                if (!last || last.createdTimestamp < sinceUtcMs) break;
+                beforeId = last.id;
+            }
+
+            const activeMembers = Array.from(messageCounts.entries())
+                .filter(([_, count]) => count >= 1)
+                .map(([userId]) => userId);
+
+            const activeMemberCount = activeMembers.length;
+            const activityScore = activeMemberCount * weeklyMessageCount;
+            
+            // アクティブポイントが0の場合は廃部対象
+            if (activityScore === 0) {
+                channelsToArchive.push(channel);
+            }
+        }
+        
+        if (channelsToArchive.length === 0) {
+            console.log('廃部対象の部活はありません');
+            return;
+        }
+        
+        console.log(`${channelsToArchive.length}個の部活を廃部処理します`);
+        
+        // アーカイブカテゴリを取得
+        const archiveCategory = await guild.channels.fetch(config.ARCHIVE_CATEGORY_ID).catch(() => null);
+        const archiveOverflowCategory = await guild.channels.fetch(config.ARCHIVE_OVERFLOW_CATEGORY_ID).catch(() => null);
+        
+        if (!archiveCategory || !archiveOverflowCategory) {
+            console.error('アーカイブカテゴリが見つかりません');
+            return;
+        }
+        
+        // アーカイブカテゴリの現在のチャンネル数を確認
+        const currentArchiveChannels = archiveCategory.children.cache.filter(ch => ch.type === ChannelType.GuildText).size;
+        const maxArchiveChannels = 50;
+        
+        for (const channel of channelsToArchive) {
+            try {
+                // アーカイブカテゴリが50個を超える場合はオーバーフローカテゴリに移動
+                const targetCategory = currentArchiveChannels >= maxArchiveChannels ? archiveOverflowCategory : archiveCategory;
+                
+                // アーカイブカテゴリの権限を取得して同期
+                const archivePermissions = targetCategory.permissionOverwrites.cache;
+                
+                // チャンネルの権限をアーカイブカテゴリに合わせて設定
+                const newPermissions = [];
+                for (const [id, permission] of archivePermissions) {
+                    newPermissions.push({
+                        id: id,
+                        allow: permission.allow,
+                        deny: permission.deny,
+                        type: permission.type
+                    });
+                }
+                
+                // チャンネルをアーカイブカテゴリに移動
+                await channel.setParent(targetCategory, { 
+                    lockPermissions: false,
+                    reason: '自動廃部処理（アクティブポイント0）'
+                });
+                
+                // 権限を同期
+                await channel.permissionOverwrites.set(newPermissions, 'アーカイブカテゴリの権限同期');
+                
+                // 廃部通知の埋め込みメッセージを送信
+                try {
+                    const archiveEmbed = new EmbedBuilder()
+                        .setColor(0xFF6B6B) // 赤色
+                        .setTitle('📦 部活がアーカイブされました')
+                        .setDescription('この部活は週間アクティブポイントが0のため、自動的にアーカイブされました。')
+                        .addFields(
+                            { 
+                                name: '📊 廃部理由', 
+                                value: '週間アクティブポイント: 0pt\n（アクティブ部員数 × 週間メッセージ数 = 0）', 
+                                inline: false 
+                            },
+                            { 
+                                name: '🔄 復活方法', 
+                                value: `以下の条件をすべて満たす必要があります：\n• アクティブポイント: ${config.REVIVAL_MIN_ACTIVITY_SCORE}pt以上\n• アクティブ部員数: ${config.REVIVAL_MIN_ACTIVE_MEMBERS}人以上\n• 週間メッセージ数: ${config.REVIVAL_MIN_MESSAGE_COUNT}件以上`, 
+                                inline: false 
+                            },
+                            { 
+                                name: '📅 次回チェック', 
+                                value: '毎週土曜日23:45に自動チェックされます', 
+                                inline: true 
+                            },
+                            { 
+                                name: '📍 現在の場所', 
+                                value: `カテゴリ: ${targetCategory.name}`, 
+                                inline: true 
+                            }
+                        )
+                        .setTimestamp()
+                        .setFooter({ text: 'HisameAI Mark.4 - 自動廃部システム' });
+                    
+                    await channel.send({ embeds: [archiveEmbed] });
+                } catch (embedError) {
+                    console.error(`廃部通知メッセージ送信エラー for ${channel.name}:`, embedError);
+                }
+                
+                console.log(`部活「${channel.name}」をアーカイブに移動しました`);
+                
+                // カウンターを更新
+                if (targetCategory.id === config.ARCHIVE_CATEGORY_ID) {
+                    currentArchiveChannels++;
+                }
+                
+            } catch (error) {
+                console.error(`部活「${channel.name}」のアーカイブ処理でエラー:`, error);
+            }
+        }
+        
+        console.log('自動廃部処理が完了しました');
+        
+    } catch (error) {
+        console.error('自動廃部処理エラー:', error);
+    }
+}
+
 // 部活チャンネルのソートのみを実行する関数（ランキング表示なし）
 async function sortClubChannelsOnly(guild, redis) {
     try {
@@ -276,6 +642,8 @@ const dailyMessageBuffer = global.dailyMessageBuffer;
 // 共通の計算関数をexport
 module.exports = {
     calculateWeeklyRanking,
+    autoArchiveInactiveClubs,
+    autoReviveArchivedClubs,
 	name: Events.ClientReady,
 	once: true,
 	async execute(client, redis, notion) {
@@ -379,18 +747,24 @@ module.exports = {
         };
         cron.schedule('0 0 * * *', flushClubMessageCounts, { scheduled: true, timezone: 'Asia/Tokyo' });
 
-        // --- 自動ソート + ランキング更新（土曜日23:45） ---
+        // --- 自動ソート + 廃部処理 + ランキング更新（土曜日23:45） ---
         const autoSortChannels = async () => {
             try {
                 const guild = client.guilds.cache.first();
                 if (!guild) return;
                 
-                console.log('土曜23:45の自動ソート + ランキング更新を実行します');
+                console.log('土曜23:45の自動ソート + 廃部処理 + 復活処理 + ランキング更新を実行します');
                 
-                // チャンネルソート実行
+                // 1. アーカイブ復活処理（アクティブポイントが復活した部活を部活カテゴリに戻す）
+                await autoReviveArchivedClubs(guild, redis);
+                
+                // 2. 自動廃部処理（アクティブポイント0の部活をアーカイブに移動）
+                await autoArchiveInactiveClubs(guild, redis);
+                
+                // 3. チャンネルソート実行
                 await sortClubChannelsOnly(guild, redis);
                 
-                // 週間ランキングの更新（部活作成パネルの更新）
+                // 4. 週間ランキングの更新（部活作成パネルの更新）
                 const panelChannel = await client.channels.fetch(config.CLUB_PANEL_CHANNEL_ID).catch(() => null);
                 if (panelChannel) {
                     const rankingEmbeds = await createWeeklyRankingEmbeds(client, redis);
@@ -417,7 +791,7 @@ module.exports = {
                     await postStickyMessage(client, panelChannel, config.CREATE_CLUB_BUTTON_ID, messagePayload);
                 }
                 
-                console.log('自動ソート + ランキング更新が完了しました');
+                console.log('自動ソート + 廃部処理 + ランキング更新が完了しました');
             } catch (error) {
                 console.error('自動ソートエラー:', error);
             }

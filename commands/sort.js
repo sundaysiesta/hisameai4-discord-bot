@@ -76,6 +76,13 @@ module.exports = {
                 }
             }
             
+            // アーカイブ復活処理（アクティブポイントが復活した部活を部活カテゴリに戻す）
+            const { autoReviveArchivedClubs, autoArchiveInactiveClubs } = require('../events/ready.js');
+            await autoReviveArchivedClubs(interaction.guild, redis);
+            
+            // 自動廃部処理（アクティブポイント0の部活をアーカイブに移動）
+            await autoArchiveInactiveClubs(interaction.guild, redis);
+            
             // 部活チャンネルのソート実行
             await sortClubChannels(redis, interaction.guild);
             
