@@ -15,7 +15,7 @@ module.exports = {
         await interaction.guild.members.fetch();
         
         const channel = interaction.options.getChannel('channel');
-        if (!channel.parent || channel.parent.id !== config.CLUB_CATEGORY_ID) {
+        if (!channel.parent || !config.CLUB_CATEGORIES.includes(channel.parent.id)) {
             return interaction.editReply({ content: "指定されたチャンネルは部活チャンネルではありません。" });
         }
 
