@@ -24,8 +24,14 @@ module.exports = {
         const action = interaction.options.getString('action');
         const channel = interaction.channel;
         
-        // 部活チャンネルかどうかチェック
-        if (!channel.parent || !config.CLUB_CATEGORIES.includes(channel.parent.id)) {
+        // 部活チャンネルかどうかチェック（人気部活カテゴリも含む）
+        const isClubChannel = (
+            channel.parent && (
+                config.CLUB_CATEGORIES.includes(channel.parent.id) ||
+                channel.parent.id === config.POPULAR_CLUB_CATEGORY_ID
+            )
+        );
+        if (!isClubChannel) {
             return interaction.editReply({ content: "このコマンドは部活チャンネルでのみ使用できます。" });
         }
         

@@ -15,7 +15,14 @@ module.exports = {
         await interaction.guild.members.fetch();
         
         const channel = interaction.options.getChannel('channel');
-        if (!channel.parent || !config.CLUB_CATEGORIES.includes(channel.parent.id)) {
+        // 人気部活カテゴリも部活扱いにする
+        const isClubChannel = (
+            channel.parent && (
+                config.CLUB_CATEGORIES.includes(channel.parent.id) ||
+                channel.parent.id === config.POPULAR_CLUB_CATEGORY_ID
+            )
+        );
+        if (!isClubChannel) {
             return interaction.editReply({ content: "指定されたチャンネルは部活チャンネルではありません。" });
         }
 

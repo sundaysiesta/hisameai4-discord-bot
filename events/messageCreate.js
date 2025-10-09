@@ -176,7 +176,8 @@ module.exports = {
         // --- 部活チャンネルのメッセージ数カウント（メモリ内のみ、日次でRedisに反映） ---
         // 全ての部活カテゴリをチェック
         const isClubChannel = (
-            config.CLUB_CATEGORIES.includes(message.channel.parentId) &&
+            (config.CLUB_CATEGORIES.includes(message.channel.parentId) ||
+             message.channel.parentId === config.POPULAR_CLUB_CATEGORY_ID) &&
             !config.EXCLUDED_CHANNELS.includes(message.channel.id)
         );
         
