@@ -184,6 +184,12 @@ module.exports = {
         if (isClubChannel) {
             // メモリ内カウント（日次バッチでRedisに反映）
             dailyMessageBuffer[message.channel.id] = (dailyMessageBuffer[message.channel.id] || 0) + 1;
+            
+            // 日次アクティブユーザー数もカウント
+            const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD形式
+            const dailyActiveKey = `daily_active_users:${message.channel.id}:${today}`;
+            await redis.sadd(dailyActiveKey, message.author.id);
+            await redis.expire(dailyActiveKey, 8 * 24 * 60 * 60); // 8日後に削除（週間集計用）
         }
     },
 };

@@ -4,6 +4,54 @@ const config = require('../config');
 let sharp;
 try { sharp = require('sharp'); } catch (_) { sharp = null; }
 
+// 共通の週間アクティブ度計算関数（日次データベースから計算）
+async function calculateWeeklyActivity(channel, redis) {
+    // 週の開始（JSTの日曜0時）を計算
+    const getStartOfWeekUtcMs = () => {
+        const now = new Date();
+        const jstNowMs = now.getTime() + 9 * 60 * 60 * 1000; // JST補正
+        const jstNow = new Date(jstNowMs);
+        const day = jstNow.getUTCDay(); // 0=Sun
+        const diffDays = day; // 今が日曜なら0日戻す
+        const jstStartMs = Date.UTC(jstNow.getUTCFullYear(), jstNow.getUTCMonth(), jstNow.getUTCDate()) - diffDays * 24 * 60 * 60 * 1000;
+        return jstStartMs - 9 * 60 * 60 * 1000; // UTCに戻す
+    };
+    const sinceUtcMs = getStartOfWeekUtcMs();
+
+    // 週の開始日を取得
+    const weekStartDate = new Date(sinceUtcMs);
+    const weekStartDateStr = weekStartDate.toISOString().split('T')[0]; // YYYY-MM-DD形式
+    
+    // 週間の日付リストを生成（日曜日から土曜日まで）
+    const weekDates = [];
+    for (let i = 0; i < 7; i++) {
+        const date = new Date(weekStartDate);
+        date.setUTCDate(date.getUTCDate() + i);
+        weekDates.push(date.toISOString().split('T')[0]);
+    }
+
+    // 週間メッセージ数をRedisから取得
+    const weeklyMessageCount = await redis.get(`weekly_message_count:${channel.id}`) || 0;
+    
+    // 週間アクティブユーザー数を日次データから計算
+    const weeklyActiveUsers = new Set();
+    for (const date of weekDates) {
+        const dailyActiveKey = `daily_active_users:${channel.id}:${date}`;
+        const dailyUsers = await redis.smembers(dailyActiveKey);
+        dailyUsers.forEach(userId => weeklyActiveUsers.add(userId));
+    }
+
+    const activeMemberCount = weeklyActiveUsers.size;
+    const activityScore = activeMemberCount * Number(weeklyMessageCount);
+
+    return {
+        activeMemberCount,
+        weeklyMessageCount: Number(weeklyMessageCount),
+        activityScore,
+        activeMembers: Array.from(weeklyActiveUsers)
+    };
+}
+
 const levelUpLocks = new Set();
 
 async function postStickyMessage(client, channel, stickyCustomId, createMessagePayload) {
@@ -61,53 +109,14 @@ async function sortClubChannels(redis, guild) {
     // アクティブ度（部員数 × メッセージ数）でランキングを作成
     let ranking = [];
     for (const channel of allClubChannels) {
-        // 部員数（アクティブユーザー数）の計算（今週の開始＝JSTの日曜0時以降のみ、最大500件遡り）
-        const getStartOfWeekUtcMs = () => {
-            const now = new Date();
-            const jstNowMs = now.getTime() + 9 * 60 * 60 * 1000; // JST補正
-            const jstNow = new Date(jstNowMs);
-            const day = jstNow.getUTCDay();
-            const diffDays = day; // 日曜0
-            const jstStartMs = Date.UTC(jstNow.getUTCFullYear(), jstNow.getUTCMonth(), jstNow.getUTCDate()) - diffDays * 24 * 60 * 60 * 1000;
-            return jstStartMs - 9 * 60 * 60 * 1000; // UTCに戻す
-        };
-        const sinceUtcMs = getStartOfWeekUtcMs();
-
-        const messageCounts = new Map();
-        let weeklyMessageCount = 0; // リアルタイムでメッセージ数をカウント
-        let beforeId = undefined;
-        let fetchedTotal = 0;
-        const maxFetch = 500;
-        while (fetchedTotal < maxFetch) {
-            const batch = await channel.messages.fetch({ limit: Math.min(100, maxFetch - fetchedTotal), before: beforeId }).catch(() => null);
-            if (!batch || batch.size === 0) break;
-            for (const msg of batch.values()) {
-                if (msg.createdTimestamp < sinceUtcMs) { batch.clear(); break; }
-                if (!msg.author.bot) {
-                    const count = messageCounts.get(msg.author.id) || 0;
-                    messageCounts.set(msg.author.id, count + 1);
-                    weeklyMessageCount++; // メッセージ数をカウント
-                }
-            }
-            fetchedTotal += batch.size;
-            const last = batch.last();
-            if (!last || last.createdTimestamp < sinceUtcMs) break;
-            beforeId = last.id;
-        }
-
-        // 1回以上メッセージを送っているユーザーをカウント
-        const activeMembers = Array.from(messageCounts.entries())
-            .filter(([_, count]) => count >= 1)
-            .map(([userId]) => userId);
-
-        const activeMemberCount = activeMembers.length;
-        const activityScore = activeMemberCount * weeklyMessageCount;
+        // 共通の週間アクティブ度計算関数を使用
+        const activity = await calculateWeeklyActivity(channel, redis);
         
         ranking.push({ 
             id: channel.id, 
-            count: activityScore, // アクティブ度を使用（下位互換のためプロパティ名は維持）
-            messageCount: weeklyMessageCount,
-            activeMemberCount: activeMemberCount,
+            count: activity.activityScore, // アクティブ度を使用
+            messageCount: activity.weeklyMessageCount,
+            activeMemberCount: activity.activeMemberCount,
             position: channel.position,
             categoryId: channel.parentId 
         });
@@ -162,23 +171,41 @@ async function sortClubChannels(redis, guild) {
         if (channel.parentId !== targetCategoryId) {
             const targetCategory = await guild.channels.fetch(targetCategoryId).catch(() => null);
             if (targetCategory) {
-                // 現在の権限設定を保存
-                const currentOverwrites = channel.permissionOverwrites.cache.clone();
+                // 現在の権限設定を詳細に保存
+                const currentOverwrites = [];
+                for (const [id, overwrite] of channel.permissionOverwrites.cache) {
+                    currentOverwrites.push({
+                        id: id,
+                        allow: overwrite.allow,
+                        deny: overwrite.deny,
+                        type: overwrite.type
+                    });
+                }
                 
-                await channel.setParent(targetCategoryId).catch(e => 
+                // lockPermissions: falseで権限を保持して移動
+                await channel.setParent(targetCategoryId, { 
+                    lockPermissions: false,
+                    reason: '部活チャンネルソート'
+                }).catch(e => 
                     console.error(`setParent Error for ${channel.name}: ${e.message}`)
                 );
                 
-                // 権限設定を復元
+                // 権限設定を確実に復元
                 try {
-                    for (const [id, overwrite] of currentOverwrites) {
-                        await channel.permissionOverwrites.edit(id, {
+                    // まず既存の権限をクリア
+                    await channel.permissionOverwrites.set([]).catch(() => {});
+                    
+                    // 保存した権限を復元
+                    for (const overwrite of currentOverwrites) {
+                        await channel.permissionOverwrites.edit(overwrite.id, {
                             allow: overwrite.allow,
                             deny: overwrite.deny
-                        }).catch(e => 
-                            console.error(`Permission restore error for ${channel.name} (${id}): ${e.message}`)
+                        }, { reason: 'ソート時の権限復元' }).catch(e => 
+                            console.error(`Permission restore error for ${channel.name} (${overwrite.id}): ${e.message}`)
                         );
                     }
+                    
+                    console.log(`権限復元完了: ${channel.name} (${currentOverwrites.length}件の権限)`);
                 } catch (e) {
                     console.error(`Permission restore failed for ${channel.name}: ${e.message}`);
                 }
@@ -821,6 +848,7 @@ module.exports = {
     processFileSafely, 
     prepareFileForSend, 
     getActivityIcon,
+    calculateWeeklyActivity,
     setKotehan,
     getKotehan,
     removeKotehan,

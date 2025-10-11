@@ -1,4 +1,5 @@
 const { SlashCommandBuilder, EmbedBuilder, ChannelType } = require('discord.js');
+const { calculateWeeklyActivity } = require('../utils/utility.js');
 const config = require('../config.js');
 
 module.exports = {
@@ -43,49 +44,20 @@ module.exports = {
             const clubChannels = category.children.cache.filter(ch => !config.EXCLUDED_CHANNELS.includes(ch.id) && ch.type === ChannelType.GuildText);
             let ranking = [];
             for (const ch of clubChannels.values()) {
-                const messageCount = await redis.get(`weekly_message_count:${ch.id}`) || 0;
-                
-                // 部員数（アクティブユーザー数）の計算
-                const messages = await ch.messages.fetch({ limit: 100 });
-                const messageCounts = new Map();
-                messages.forEach(msg => {
-                    if (!msg.author.bot) {
-                        const count = messageCounts.get(msg.author.id) || 0;
-                        messageCounts.set(msg.author.id, count + 1);
-                    }
-                });
-
-                // 5回以上メッセージを送っているユーザーのみをカウント
-                const activeMembers = Array.from(messageCounts.entries())
-                    .filter(([_, count]) => count >= 5)
-                    .map(([userId]) => userId);
-
-                const activeMemberCount = activeMembers.length;
-                const activityScore = activeMemberCount * Number(messageCount);
+                // 共通の週間アクティブ度計算関数を使用
+                const activity = await calculateWeeklyActivity(ch, redis);
                 
                 ranking.push({ 
                     id: ch.id, 
-                    count: activityScore, // アクティブ度を使用
+                    count: activity.activityScore, // アクティブ度を使用
                     position: ch.position 
                 });
             }
             ranking.sort((a, b) => (b.count !== a.count) ? b.count - a.count : a.position - b.position);
             const rank = ranking.findIndex(r => r.id === channel.id) + 1;
 
-            // 部員数（アクティブユーザー数）の計算
-            const messages = await channel.messages.fetch({ limit: 100 });
-            const messageCounts = new Map();
-            messages.forEach(msg => {
-                if (!msg.author.bot) {
-                    const count = messageCounts.get(msg.author.id) || 0;
-                    messageCounts.set(msg.author.id, count + 1);
-                }
-            });
-
-            // 5回以上メッセージを送っているユーザーのみをカウント
-            const activeMembers = Array.from(messageCounts.entries())
-                .filter(([_, count]) => count >= 5)
-                .map(([userId]) => userId);
+            // 共通の週間アクティブ度計算関数を使用
+            const activity = await calculateWeeklyActivity(channel, redis);
 
             const embed = new EmbedBuilder()
                 .setTitle(`${channel.name} の情報`)
@@ -93,7 +65,9 @@ module.exports = {
                 .addFields(
                     { name: '👑 部長', value: leaderMention, inline: true },
                     { name: '📊 週間順位', value: `${rank}位`, inline: true },
-                    { name: '👥 アクティブ部員数', value: `${activeMembers.length}人`, inline: true },
+                    { name: '👥 アクティブ部員数', value: `${activity.activeMemberCount}人`, inline: true },
+                    { name: '📝 週間メッセージ数', value: `${activity.weeklyMessageCount}件`, inline: true },
+                    { name: '🔥 アクティブ度', value: `${activity.activityScore}pt`, inline: true },
                     { name: '📝 部活説明', value: description }
                 )
                 .setTimestamp();
