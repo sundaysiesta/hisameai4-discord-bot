@@ -192,10 +192,7 @@ async function sortClubChannels(redis, guild) {
                 
                 // 権限設定を確実に復元
                 try {
-                    // まず既存の権限をクリア
-                    await channel.permissionOverwrites.set([]).catch(() => {});
-                    
-                    // 保存した権限を復元
+                    // 保存した権限を復元（クリアせずに直接復元）
                     for (const overwrite of currentOverwrites) {
                         await channel.permissionOverwrites.edit(overwrite.id, {
                             allow: overwrite.allow,

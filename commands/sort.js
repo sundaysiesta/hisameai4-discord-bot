@@ -84,7 +84,9 @@ module.exports = {
             await autoArchiveInactiveClubs(interaction.guild, redis);
             
             // 部活チャンネルのソート実行
+            console.log('sortコマンド: 部活チャンネルのソートを実行します');
             await sortClubChannels(redis, interaction.guild);
+            console.log('sortコマンド: 部活チャンネルのソートが完了しました');
             
             // 現在の週間ランキングを取得して表示
             const rankingEmbeds = await createCurrentRankingEmbeds(interaction.guild, redis);

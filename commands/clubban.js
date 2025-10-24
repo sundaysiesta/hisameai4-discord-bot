@@ -37,6 +37,8 @@ module.exports = {
         
         // 部長かどうかチェック
         const leaderUserId = await redis.get(`leader_user:${channel.id}`);
+        console.log(`clubban: チャンネル ${channel.name} (${channel.id}) の部長ID: ${leaderUserId}, 実行者ID: ${interaction.user.id}`);
+        
         if (!leaderUserId || leaderUserId !== interaction.user.id) {
             return interaction.editReply({ content: "このコマンドは部長のみが使用できます。" });
         }

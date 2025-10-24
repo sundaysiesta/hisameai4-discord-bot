@@ -633,7 +633,10 @@ module.exports = {
         const autoSortChannels = async () => {
             try {
                 const guild = client.guilds.cache.first();
-                if (!guild) return;
+                if (!guild) {
+                    console.error('自動ソート: ギルドが見つかりません');
+                    return;
+                }
                 
                 console.log('土曜23:45の自動ソート + 廃部処理 + 復活処理 + ランキング更新を実行します');
                 
@@ -678,7 +681,13 @@ module.exports = {
                 console.error('自動ソートエラー:', error);
             }
         };
-        cron.schedule('45 23 * * 6', autoSortChannels, { scheduled: true, timezone: 'Asia/Tokyo' });
+        // 週末自動ソートのスケジュール設定（土曜日23:45 JST）
+        console.log('週末自動ソートスケジュールを設定しました: 土曜日23:45 JST');
+        const cronJob = cron.schedule('45 23 * * 6', autoSortChannels, { scheduled: true, timezone: 'Asia/Tokyo' });
+        
+        // デバッグ用: 手動実行関数をグローバルに公開
+        global.manualAutoSort = autoSortChannels;
+        console.log('手動実行用関数を設定しました: global.manualAutoSort()');
 
         // --- 週次リセット（日曜日午前0時） ---
         const resetWeeklyCounts = async () => {
