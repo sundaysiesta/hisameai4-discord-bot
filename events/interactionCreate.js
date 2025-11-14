@@ -88,7 +88,7 @@ module.exports = {
                         // 削除前に画像をログチャンネルに送信
                         if (targetMsg && targetMsg.attachments.size > 0) {
                             try {
-                                const logChannel = interaction.client.channels.cache.get('1381140728528375869');
+                                const logChannel = interaction.client.channels.cache.get('1431905160875212864');
                                 if (logChannel) {
                                     const logEmbed = new EmbedBuilder()
                                         .setTitle('🗑️ 代行投稿削除ログ')

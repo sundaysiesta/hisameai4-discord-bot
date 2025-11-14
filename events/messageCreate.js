@@ -183,7 +183,13 @@ module.exports = {
         
         if (isClubChannel) {
             // メモリ内カウント（日次バッチでRedisに反映）
-            dailyMessageBuffer[message.channel.id] = (dailyMessageBuffer[message.channel.id] || 0) + 1;
+            const beforeCount = dailyMessageBuffer[message.channel.id] || 0;
+            dailyMessageBuffer[message.channel.id] = beforeCount + 1;
+            
+            // デバッグログ（必要に応じてコメントアウト可能）
+            if (beforeCount === 0 || (beforeCount + 1) % 10 === 0) {
+                console.log(`[メッセージカウント] チャンネル ${message.channel.name} (${message.channel.id}): ${beforeCount + 1}件`);
+            }
             
             // 日次アクティブユーザー数もカウント
             const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD形式

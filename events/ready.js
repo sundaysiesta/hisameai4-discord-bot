@@ -78,15 +78,8 @@ function cleanupGlobalVariables() {
         }
     }
     
-    // 日次メッセージバッファのクリーンアップ（1週間以上古いデータ）
-    if (global.dailyMessageBuffer) {
-        const oneWeek = 7 * 24 * 60 * 60 * 1000;
-        for (const [channelId, lastUpdate] of Object.entries(global.dailyMessageBuffer)) {
-            if (now - lastUpdate > oneWeek) {
-                delete global.dailyMessageBuffer[channelId];
-            }
-        }
-    }
+    // 日次メッセージバッファのクリーンアップ（不要 - 日次バッチで0にリセットされる）
+    // dailyMessageBufferはカウント数（数値）を保存しているため、タイムスタンプベースのクリーンアップは適用しない
     
     console.log('グローバル変数のクリーンアップを実行しました');
 }
@@ -619,13 +612,22 @@ module.exports = {
         
         // --- 部活メッセージ数を1日1回Redisに反映 ---
         const flushClubMessageCounts = async () => {
+            let totalReflected = 0;
             for (const [channelId, count] of Object.entries(dailyMessageBuffer)) {
                 if (count > 0) {
-                    await redis.incrby(`weekly_message_count:${channelId}`, count);
-                    dailyMessageBuffer[channelId] = 0;
+                    try {
+                        const beforeRedis = await redis.get(`weekly_message_count:${channelId}`) || 0;
+                        await redis.incrby(`weekly_message_count:${channelId}`, count);
+                        const afterRedis = await redis.get(`weekly_message_count:${channelId}`) || 0;
+                        console.log(`[日次バッチ] チャンネル ${channelId}: メモリ ${count}件 → Redis ${beforeRedis} → ${afterRedis}`);
+                        dailyMessageBuffer[channelId] = 0;
+                        totalReflected += count;
+                    } catch (error) {
+                        console.error(`[日次バッチ] Redis反映エラー for channel ${channelId}:`, error);
+                    }
                 }
             }
-            console.log('部活メッセージ数を1日分まとめてRedisに反映しました。');
+            console.log(`[日次バッチ] 部活メッセージ数を1日分まとめてRedisに反映しました。合計: ${totalReflected}件`);
         };
         cron.schedule('0 0 * * *', flushClubMessageCounts, { scheduled: true, timezone: 'Asia/Tokyo' });
 
@@ -692,14 +694,30 @@ module.exports = {
         // --- 週次リセット（日曜日午前0時） ---
         const resetWeeklyCounts = async () => {
             try {
+                // 週次リセット前にメモリ内カウントをRedisに反映
+                if (global.dailyMessageBuffer) {
+                    for (const [channelId, count] of Object.entries(global.dailyMessageBuffer)) {
+                        if (count > 0) {
+                            try {
+                                await redis.incrby(`weekly_message_count:${channelId}`, count);
+                                global.dailyMessageBuffer[channelId] = 0; // 反映後はリセット
+                            } catch (error) {
+                                console.error(`週次リセット前のRedis反映エラー for channel ${channelId}:`, error);
+                            }
+                        }
+                    }
+                    console.log('週次リセット前: メモリ内カウントをRedisに反映しました。');
+                }
+                
                 // 全部活チャンネルの週間カウントを0にリセット
                 const guild = client.guilds.cache.first();
                 if (!guild) return;
 
                 let allClubChannels = [];
                 
-                // 全ての部活カテゴリからチャンネルを取得
-                for (const categoryId of config.CLUB_CATEGORIES) {
+                // 全ての部活カテゴリからチャンネルを取得（人気部活カテゴリも含む）
+                const allCategories = [...config.CLUB_CATEGORIES, config.POPULAR_CLUB_CATEGORY_ID];
+                for (const categoryId of allCategories) {
                     const category = await guild.channels.fetch(categoryId).catch(() => null);
                     if (category && category.type === ChannelType.GuildCategory) {
                         const clubChannels = category.children.cache.filter(ch => 

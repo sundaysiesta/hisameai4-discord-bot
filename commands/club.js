@@ -5,7 +5,7 @@ const config = require('../config.js');
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('club')
-        .setDescription('指定した部活の情報を表示します。')
+        .setDescription('指定した部活の情報を表示しますわ。')
         .addChannelOption(option => 
             option.setName('channel')
                 .setDescription('情報を表示する部活チャンネル')

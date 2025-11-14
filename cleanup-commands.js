@@ -17,7 +17,7 @@ async function main() {
         await rest.put(Routes.applicationCommands(appId), { body: [] });
         console.log('グローバルコマンドをクリアしました。');
     } catch (e) {
-        console.error('グローバルコマンドのクリアに失敗:', e);
+        console.error('グローバルコマンドのクリアにアアあああで失敗:', e);
     }
 
     // 2) 全参加ギルドのギルドコマンドを全消去
