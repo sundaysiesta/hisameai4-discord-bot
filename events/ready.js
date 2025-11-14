@@ -685,7 +685,75 @@ module.exports = {
         };
         // 週末自動ソートのスケジュール設定（土曜日23:45 JST）
         console.log('週末自動ソートスケジュールを設定しました: 土曜日23:45 JST');
-        const cronJob = cron.schedule('45 23 * * 6', autoSortChannels, { scheduled: true, timezone: 'Asia/Tokyo' });
+        
+        // タイムゾーン確認用のログ
+        const now = new Date();
+        const jstOffset = 9 * 60 * 60 * 1000; // JSTはUTC+9
+        const jstNow = new Date(now.getTime() + jstOffset);
+        console.log(`[タイムゾーン確認] 現在時刻: UTC=${now.toISOString()}, JST=${jstNow.toISOString().replace('Z', '+09:00')}`);
+        
+        // 次回実行時刻を計算（JSTの次の土曜日23:45）
+        const calculateNextRun = () => {
+            const nowDate = new Date();
+            // JSTに変換（UTC+9時間）
+            const jstDate = new Date(nowDate.getTime() + jstOffset);
+            const jstYear = jstDate.getUTCFullYear();
+            const jstMonth = jstDate.getUTCMonth();
+            const jstDay = jstDate.getUTCDate();
+            const jstHour = jstDate.getUTCHours();
+            const jstMinute = jstDate.getUTCMinutes();
+            const currentDay = jstDate.getUTCDay(); // 0=日曜, 6=土曜
+            
+            // 次の土曜日23:45を計算
+            let daysUntilSaturday;
+            if (currentDay === 6) { // 今日が土曜日
+                if (jstHour < 23 || (jstHour === 23 && jstMinute < 45)) {
+                    // 今日の23:45がまだ来ていない
+                    daysUntilSaturday = 0;
+                } else {
+                    // 今日の23:45は過ぎたので、来週の土曜日
+                    daysUntilSaturday = 7;
+                }
+            } else {
+                // 土曜日ではない
+                daysUntilSaturday = (6 - currentDay + 7) % 7;
+            }
+            
+            // 次の土曜日23:45 JSTを計算
+            const nextSaturdayJST = new Date(Date.UTC(jstYear, jstMonth, jstDay + daysUntilSaturday, 23, 45, 0, 0));
+            // UTCに変換（JST-9時間）
+            const nextSaturdayUTC = new Date(nextSaturdayJST.getTime() - jstOffset);
+            
+            return { jst: nextSaturdayJST, utc: nextSaturdayUTC };
+        };
+        const nextRun = calculateNextRun();
+        console.log(`[次回自動ソート実行予定] JST=${nextRun.jst.toISOString().replace('Z', '+09:00')}, UTC=${nextRun.utc.toISOString()}`);
+        
+        // cronジョブの実行開始ログを追加
+        const autoSortChannelsWithLogging = async () => {
+            const startTime = new Date();
+            const jstStartTime = new Date(startTime.getTime() + jstOffset);
+            console.log(`[自動ソート開始] 実行時刻: JST=${jstStartTime.toISOString().replace('Z', '+09:00')}, UTC=${startTime.toISOString()}`);
+            try {
+                await autoSortChannels();
+                const endTime = new Date();
+                const jstEndTime = new Date(endTime.getTime() + jstOffset);
+                console.log(`[自動ソート完了] 完了時刻: JST=${jstEndTime.toISOString().replace('Z', '+09:00')}, 実行時間: ${endTime - startTime}ms`);
+            } catch (error) {
+                const endTime = new Date();
+                const jstEndTime = new Date(endTime.getTime() + jstOffset);
+                console.error(`[自動ソートエラー] エラー時刻: JST=${jstEndTime.toISOString().replace('Z', '+09:00')}, エラー:`, error);
+            }
+        };
+        
+        const cronJob = cron.schedule('45 23 * * 6', autoSortChannelsWithLogging, { scheduled: true, timezone: 'Asia/Tokyo' });
+        
+        // cronジョブの状態を確認
+        if (cronJob.getStatus() === 'scheduled') {
+            console.log('[cronジョブ状態] スケジュール済み（実行待ち）');
+        } else {
+            console.warn(`[cronジョブ状態] 警告: ステータスが「${cronJob.getStatus()}」です`);
+        }
         
         // デバッグ用: 手動実行関数をグローバルに公開
         global.manualAutoSort = autoSortChannels;
