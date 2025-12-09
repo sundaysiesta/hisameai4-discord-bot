@@ -746,40 +746,75 @@ module.exports = {
             }
         };
         
+        // 自動ソートのcron式: 土曜日23:45 JST = 土曜日14:45 UTC
+        // node-cronのタイムゾーン指定が正しく機能しない場合に備え、UTC基準のcron式も設定
         const cronJob = cron.schedule('45 23 * * 6', autoSortChannelsWithLogging, { scheduled: true, timezone: 'Asia/Tokyo' });
         
+        // バックアップ: UTC基準のcron式（土曜14:45 UTC = 土曜23:45 JST）
+        // タイムゾーン問題を避けるため、UTC基準でも設定（重複実行を防ぐため無効化）
+        // const cronJobUtc = cron.schedule('45 14 * * 6', autoSortChannelsWithLogging, { scheduled: false });
+        
         // cronジョブの状態を確認
-        if (cronJob.getStatus() === 'scheduled') {
-            console.log('[cronジョブ状態] スケジュール済み（実行待ち）');
+        const cronStatus = cronJob.getStatus();
+        if (cronStatus === 'scheduled') {
+            console.log('[自動ソート cronジョブ状態] スケジュール済み（実行待ち）');
         } else {
-            console.warn(`[cronジョブ状態] 警告: ステータスが「${cronJob.getStatus()}」です`);
+            console.warn(`[自動ソート cronジョブ状態] 警告: ステータスが「${cronStatus}」です`);
         }
+        
+        // 手動実行用のコマンドを追加（デバッグ用）
+        // Discordチャンネルから実行できるようにする場合は、スラッシュコマンドを追加することも検討可能
         
         // デバッグ用: 手動実行関数をグローバルに公開
         global.manualAutoSort = autoSortChannels;
         console.log('手動実行用関数を設定しました: global.manualAutoSort()');
 
         // --- 週次リセット（日曜日午前0時） ---
+        const resetWeeklyCountsWithLogging = async () => {
+            const startTime = new Date();
+            const jstOffset = 9 * 60 * 60 * 1000;
+            const jstStartTime = new Date(startTime.getTime() + jstOffset);
+            console.log(`[週次リセット開始] 実行時刻: JST=${jstStartTime.toISOString().replace('Z', '+09:00')}, UTC=${startTime.toISOString()}`);
+            
+            try {
+                await resetWeeklyCounts();
+                const endTime = new Date();
+                const jstEndTime = new Date(endTime.getTime() + jstOffset);
+                console.log(`[週次リセット完了] 完了時刻: JST=${jstEndTime.toISOString().replace('Z', '+09:00')}, 実行時間: ${endTime - startTime}ms`);
+            } catch (error) {
+                const endTime = new Date();
+                const jstEndTime = new Date(endTime.getTime() + jstOffset);
+                console.error(`[週次リセットエラー] エラー時刻: JST=${jstEndTime.toISOString().replace('Z', '+09:00')}, エラー:`, error);
+            }
+        };
+        
         const resetWeeklyCounts = async () => {
             try {
                 // 週次リセット前にメモリ内カウントをRedisに反映
+                let memoryReflected = 0;
                 if (global.dailyMessageBuffer) {
                     for (const [channelId, count] of Object.entries(global.dailyMessageBuffer)) {
                         if (count > 0) {
                             try {
                                 await redis.incrby(`weekly_message_count:${channelId}`, count);
                                 global.dailyMessageBuffer[channelId] = 0; // 反映後はリセット
+                                memoryReflected += count;
                             } catch (error) {
                                 console.error(`週次リセット前のRedis反映エラー for channel ${channelId}:`, error);
                             }
                         }
                     }
-                    console.log('週次リセット前: メモリ内カウントをRedisに反映しました。');
+                    if (memoryReflected > 0) {
+                        console.log(`[週次リセット] メモリ内カウントをRedisに反映しました。合計: ${memoryReflected}件`);
+                    }
                 }
                 
                 // 全部活チャンネルの週間カウントを0にリセット
                 const guild = client.guilds.cache.first();
-                if (!guild) return;
+                if (!guild) {
+                    console.error('[週次リセット] ギルドが見つかりません');
+                    return;
+                }
 
                 let allClubChannels = [];
                 
@@ -796,7 +831,7 @@ module.exports = {
                     }
                 }
                 
-                // 廃部候補カテゴリからも取得して部室棟に戻す
+                // 廃部候補カテゴリからも取得
                 const inactiveCategory = await guild.channels.fetch(config.INACTIVE_CLUB_CATEGORY_ID).catch(() => null);
                 if (inactiveCategory && inactiveCategory.type === ChannelType.GuildCategory) {
                     const inactiveChannels = inactiveCategory.children.cache.filter(ch => 
@@ -805,19 +840,80 @@ module.exports = {
                     );
                     allClubChannels.push(...inactiveChannels.values());
                 }
+                
+                // アーカイブカテゴリからも取得（アーカイブ中の部活も週次リセット対象）
+                const archiveCategories = [config.ARCHIVE_CATEGORY_ID, config.ARCHIVE_OVERFLOW_CATEGORY_ID];
+                for (const categoryId of archiveCategories) {
+                    const category = await guild.channels.fetch(categoryId).catch(() => null);
+                    if (category && category.type === ChannelType.GuildCategory) {
+                        const archiveChannels = category.children.cache.filter(ch => 
+                            !config.EXCLUDED_CHANNELS.includes(ch.id) && 
+                            ch.type === ChannelType.GuildText
+                        );
+                        allClubChannels.push(...archiveChannels.values());
+                    }
+                }
 
                 // 全部活チャンネルの週間カウントと前回スコアを0にリセット
+                let resetCount = 0;
                 for (const channel of allClubChannels) {
-                    await redis.set(`weekly_message_count:${channel.id}`, 0);
-                    await redis.del(`previous_score:${channel.id}`);
+                    try {
+                        const beforeCount = await redis.get(`weekly_message_count:${channel.id}`) || 0;
+                        await redis.set(`weekly_message_count:${channel.id}`, 0);
+                        await redis.del(`previous_score:${channel.id}`);
+                        if (Number(beforeCount) > 0) {
+                            resetCount++;
+                            console.log(`[週次リセット] チャンネル ${channel.name} (${channel.id}): ${beforeCount} → 0`);
+                        }
+                    } catch (error) {
+                        console.error(`[週次リセット] チャンネル ${channel.id} のリセットエラー:`, error);
+                    }
                 }
                 
-                console.log('週間メッセージカウントをリセットしました。');
+                console.log(`[週次リセット] 週間メッセージカウントをリセットしました。対象チャンネル数: ${allClubChannels.length}件, リセット実行: ${resetCount}件`);
             } catch (error) {
-                console.error('週次リセットエラー:', error);
+                console.error('[週次リセット] エラー:', error);
+                throw error;
             }
         };
-        cron.schedule('0 0 * * 0', resetWeeklyCounts, { scheduled: true, timezone: 'Asia/Tokyo' });
+        
+        // 週次リセットの次回実行時刻を計算
+        const calculateNextReset = () => {
+            const nowDate = new Date();
+            const jstOffset = 9 * 60 * 60 * 1000;
+            const jstDate = new Date(nowDate.getTime() + jstOffset);
+            const jstYear = jstDate.getUTCFullYear();
+            const jstMonth = jstDate.getUTCMonth();
+            const jstDay = jstDate.getUTCDate();
+            const currentDay = jstDate.getUTCDay(); // 0=日曜, 6=土曜
+            
+            // 次の日曜日0:00を計算
+            let daysUntilSunday;
+            if (currentDay === 0) {
+                // 今日が日曜日
+                daysUntilSunday = 7; // 来週の日曜日
+            } else {
+                // 日曜日まで残り日数
+                daysUntilSunday = (7 - currentDay) % 7 || 7;
+            }
+            
+            // 次の日曜日0:00 JSTを計算
+            const nextSundayJST = new Date(Date.UTC(jstYear, jstMonth, jstDay + daysUntilSunday, 0, 0, 0, 0));
+            const nextSundayUTC = new Date(nextSundayJST.getTime() - jstOffset);
+            
+            return { jst: nextSundayJST, utc: nextSundayUTC };
+        };
+        const nextReset = calculateNextReset();
+        console.log(`[次回週次リセット予定] JST=${nextReset.jst.toISOString().replace('Z', '+09:00')}, UTC=${nextReset.utc.toISOString()}`);
+        
+        const resetCronJob = cron.schedule('0 0 * * 0', resetWeeklyCountsWithLogging, { scheduled: true, timezone: 'Asia/Tokyo' });
+        
+        // cronジョブの状態を確認
+        if (resetCronJob.getStatus() === 'scheduled') {
+            console.log('[週次リセット cronジョブ状態] スケジュール済み（実行待ち）');
+        } else {
+            console.warn(`[週次リセット cronジョブ状態] 警告: ステータスが「${resetCronJob.getStatus()}」です`);
+        }
 
 	},
 };
