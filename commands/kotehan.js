@@ -39,7 +39,7 @@ module.exports = {
             const displayName = `${name.trim()}#${tag}`;
             
             return interaction.reply({ 
-                content: `コテハンを設定しました！\n表示名: **${displayName}**\n\nこれで匿名投稿時に「${displayName}」として表示されます。\n/anonymousコマンドで別の名前を指定すれば上書きできます。`, 
+                content: `コテハンを設定しました！\n表示名: **${displayName}**\n\nこれで匿名投稿時に「${displayName}」として表示されます。`, 
                 flags: [MessageFlags.Ephemeral] 
             });
         }

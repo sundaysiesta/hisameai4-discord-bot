@@ -22,16 +22,6 @@ const commands = [
         }],
     },
 
-    { name: 'anonymous', description: '匿名でメッセージを投稿します。', options: [
-        { name: '内容', type: 3, description: '投稿内容（改行禁止・144文字以内）', required: true },
-        { name: '添付ファイル', type: 11, description: '画像や動画などの添付ファイル', required: false },
-        { name: 'アイコン', type: 11, description: '表示用アイコン画像', required: false },
-        { name: '名前', type: 3, description: '表示名（未入力の場合は「名無しのロメダ民」）', required: false }
-    ] },
-    { name: 'anonlookup', description: '匿名IDと日付から送信者を特定します。(管理者限定)', options: [
-        { name: '匿名id', type: 3, description: '匿名ID（8文字）', required: true },
-        { name: '日付', type: 3, description: '投稿日付（YYYY-MM-DD）', required: true }
-    ] },
     { name: 'migrateleaders', description: '旧部長ロール方式から個別権限方式へ移行します。(管理者限定)' },
     { name: 'kotehan', description: '匿名投稿用のコテハン（固定ハンドルネーム）を設定します', options: [
         { name: 'action', type: 3, description: '実行する操作', required: true, choices: [

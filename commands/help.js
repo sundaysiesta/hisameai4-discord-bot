@@ -23,7 +23,6 @@ module.exports = {
                     '`/setrankbg` - ランクカードの背景を設定'
                 },
                 { name: '🔒 匿名投稿関連', value: 
-                    '`/anonymous` - 匿名でメッセージを投稿\n' +
                     '`/kotehan` - コテハン（固定ハンドルネーム）を設定\n' +
                     '`/koteicon` - 固定アイコンを設定'
                 },
@@ -47,8 +46,7 @@ module.exports = {
                         '`/status` - ボットの状態を表示\n' +
                         '`/sort` - 部活チャンネルを並び替え'
                     },
-                    { name: '🔒 匿名・アイコン管理', value: 
-                        '`/anonlookup` - 匿名IDから送信者を特定\n' +
+                    { name: '🔒 アイコン管理', value: 
                         '`/notionicon` - DiscordアイコンをNotionに同期'
                     },
                     { name: '🛠️ システムコマンド', value: 

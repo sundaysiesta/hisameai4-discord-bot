@@ -44,7 +44,7 @@ module.exports = {
             });
             
             return interaction.reply({ 
-                content: `固定アイコンを設定しました！\n\nこれで匿名投稿時にこのアイコンが自動的に使用されます。\n/anonymousコマンドで別のアイコンを指定すれば上書きできます。`, 
+                content: `固定アイコンを設定しました！\n\nこれで匿名投稿時にこのアイコンが自動的に使用されます。`, 
                 flags: [MessageFlags.Ephemeral] 
             });
         }
