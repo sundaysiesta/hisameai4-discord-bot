@@ -15,7 +15,11 @@ module.exports = {
                 .setDescription('Notionデータベース上の正確な名前（タイトル）')
                 .setRequired(true)),
     async execute(interaction, redis) {
-        if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+        const ALLOWED_ROLE_ID = '1449784235102703667';
+        const isAdmin = interaction.member.permissions.has(PermissionsBitField.Flags.Administrator);
+        const hasAllowedRole = interaction.member.roles.cache.has(ALLOWED_ROLE_ID);
+        
+        if (!isAdmin && !hasAllowedRole) {
             return interaction.reply({ content: 'このコマンドを使用する権限がありません。', flags: [MessageFlags.Ephemeral] });
         }
         await interaction.deferReply({flags: [MessageFlags.Ephemeral]});
