@@ -56,7 +56,8 @@ module.exports = {
             await channel.permissionOverwrites.edit(targetUser.id, { 
                 ViewChannel: true,
                 ManageChannels: true, 
-                ManageMessages: true 
+                ManageMessages: true,
+                ManageRoles: true
             });
             
             // Redisに部長情報を保存（新方式: 個人ID）

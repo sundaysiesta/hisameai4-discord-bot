@@ -283,7 +283,8 @@ async function autoReviveArchivedClubs(guild, redis) {
                         await channel.permissionOverwrites.edit(leaderUserId, {
                             ViewChannel: true,
                             ManageChannels: true,
-                            ManageMessages: true
+                            ManageMessages: true,
+                            ManageRoles: true
                         }, { reason: '復活時の部長権限復元' });
                         console.log(`部活「${channel.name}」の部長権限を復元しました（ユーザーID: ${leaderUserId}）`);
                     } else {

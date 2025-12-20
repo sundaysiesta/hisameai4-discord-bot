@@ -177,7 +177,7 @@ module.exports = {
                             parent: targetCategoryId,
                             topic: `部長: <@${creator.id}>\n活動内容: ${clubActivity}`,
                             permissionOverwrites: [
-                                { id: creator.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.ManageChannels, PermissionsBitField.Flags.ManageMessages] },
+                                { id: creator.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.ManageChannels, PermissionsBitField.Flags.ManageMessages, PermissionsBitField.Flags.ManageRoles] },
                                 { id: interaction.client.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] }
                             ],
                         });
