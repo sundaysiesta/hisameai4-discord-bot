@@ -55,7 +55,6 @@ module.exports = {
             // チャンネル権限を設定
             await channel.permissionOverwrites.edit(targetUser.id, { 
                 ViewChannel: true,
-                ManageChannels: true, 
                 ManageMessages: true,
                 ManageRoles: true
             });

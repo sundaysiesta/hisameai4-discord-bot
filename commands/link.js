@@ -94,7 +94,6 @@ module.exports = {
                     if (ch) {
                         await ch.permissionOverwrites.edit(targetUser.id, {
                             ViewChannel: true,
-                            ManageChannels: true,
                             ManageMessages: true,
                             ManageRoles: true
                         }).catch(e => console.error(`権限付与失敗 ${chId}:`, e));
