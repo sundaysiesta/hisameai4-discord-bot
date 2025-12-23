@@ -588,11 +588,13 @@ module.exports = {
                     .setTitle('🎫 部活作成パネル')
                     .setDescription('**新規でもすぐ参加できる遊び場**\n\n気軽に部活を作ってみませんか？\n\n**流れ：**\n1. ボタンを押してフォームを開く\n2. 部活名・絵文字・活動内容を入力\n3. チャンネルが自動作成され、部長権限が付与される')
                     .addFields(
+                        { name: '💰 必要ロメコイン', value: `<:romecoin2:1452874868415791236> ${config.ROMECOIN_REQUIRED_FOR_CLUB_CREATION.toLocaleString()}`, inline: true },
+                        { name: '⏰ 作成制限', value: '7日に1回', inline: true },
+                        { name: '📍 作成場所', value: '人気・新着部活', inline: true },
                         { name: '💡 気軽に始めよう', value: '• まずは小規模でも作ってみてOK\n• 途中で放置しても大丈夫\n• 気が向いたときに活動すればOK', inline: false },
                         { name: '📝 入力項目', value: '部活名・絵文字・活動内容', inline: true },
-                        { name: '⏰ 制限', value: '7日に1回', inline: true },
-                        { name: '📍 場所', value: '人気・新着部活', inline: true },
-                        { name: '🎨 絵文字例', value: '⚽ 🎵 🎨 🎮 📚 🎮', inline: false }
+                        { name: '🎨 絵文字例', value: '⚽ 🎵 🎨 🎮 📚 🎮', inline: true },
+                        { name: '⚠️ 注意事項', value: `部活作成には${config.ROMECOIN_REQUIRED_FOR_CLUB_CREATION.toLocaleString()}ロメコインが必要です。残高が不足している場合は作成できません。`, inline: false }
                     )
                     .setTimestamp()
                     .setFooter({ text: 'HisameAI Mark.4' });
@@ -661,11 +663,13 @@ module.exports = {
                         .setTitle('🎫 部活作成パネル')
                         .setDescription('**新規でもすぐ参加できる遊び場**\n\n気軽に部活を作ってみませんか？\n\n**流れ：**\n1. ボタンを押してフォームを開く\n2. 部活名・絵文字・活動内容を入力\n3. チャンネルが自動作成され、部長権限が付与される')
                         .addFields(
+                            { name: '💰 必要ロメコイン', value: `<:romecoin2:1452874868415791236> ${config.ROMECOIN_REQUIRED_FOR_CLUB_CREATION.toLocaleString()}`, inline: true },
+                            { name: '⏰ 作成制限', value: '7日に1回', inline: true },
+                            { name: '📍 作成場所', value: '人気・新着部活', inline: true },
                             { name: '💡 気軽に始めよう', value: '• まずは小規模でも作ってみてOK\n• 途中で放置しても大丈夫\n• 気が向いたときに活動すればOK', inline: false },
                             { name: '📝 入力項目', value: '部活名・絵文字・活動内容', inline: true },
-                            { name: '⏰ 制限', value: '7日に1回', inline: true },
-                            { name: '📍 場所', value: '人気・新着部活', inline: true },
-                            { name: '🎨 絵文字例', value: '⚽ 🎵 🎨 🎮 📚 🎮', inline: false }
+                            { name: '🎨 絵文字例', value: '⚽ 🎵 🎨 🎮 📚 🎮', inline: true },
+                            { name: '⚠️ 注意事項', value: `部活作成には<:romecoin2:1452874868415791236> ${config.ROMECOIN_REQUIRED_FOR_CLUB_CREATION.toLocaleString()}が必要です。残高が不足している場合は作成できません。`, inline: false }
                         )
                         .setTimestamp()
                         .setFooter({ text: 'HisameAI Mark.4' });

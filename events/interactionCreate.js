@@ -161,7 +161,7 @@ module.exports = {
                         
                         if (currentBalance < config.ROMECOIN_REQUIRED_FOR_CLUB_CREATION) {
                             return interaction.editReply({ 
-                                content: `部活作成には${config.ROMECOIN_REQUIRED_FOR_CLUB_CREATION.toLocaleString()}ロメコインが必要です。現在の残高: ${currentBalance.toLocaleString()}ロメコイン` 
+                                content: `部活作成には<:romecoin2:1452874868415791236> ${config.ROMECOIN_REQUIRED_FOR_CLUB_CREATION.toLocaleString()}が必要です。現在の残高: <:romecoin2:1452874868415791236> ${currentBalance.toLocaleString()}` 
                             });
                         }
                     } catch (error) {
@@ -268,7 +268,7 @@ module.exports = {
                         // 成功メッセージに残高を表示
                         let successMessage = `部活「${clubName}」を人気部活カテゴリに設立しました！ ${newChannel} を確認してください。`;
                         if (newBalance > 0) {
-                            successMessage += `\n残りのロメコイン: ${newBalance.toLocaleString()}ロメコイン`;
+                            successMessage += `\n残りのロメコイン: <:romecoin2:1452874868415791236> ${newBalance.toLocaleString()}`;
                         }
                         await interaction.editReply({ content: successMessage });
                         // 部活作成完了後にクールダウンを設定（Redis使用）
