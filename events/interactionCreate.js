@@ -143,6 +143,32 @@ module.exports = {
                         return interaction.editReply({ content: '活動内容は10文字以上200文字以下で入力してください。' });
                     }
                     
+                    // ロメコイン残高を確認
+                    try {
+                        const balanceResponse = await fetch(`${config.CROSSROID_API_URL}/api/romecoin/${interaction.user.id}`, {
+                            headers: {
+                                'x-api-token': config.CROSSROID_API_TOKEN
+                            }
+                        });
+                        
+                        if (!balanceResponse.ok) {
+                            console.error(`ロメコイン残高取得エラー: ${balanceResponse.status} ${balanceResponse.statusText}`);
+                            return interaction.editReply({ content: 'ロメコイン残高の確認中にエラーが発生しました。しばらくしてから再度お試しください。' });
+                        }
+                        
+                        const balanceData = await balanceResponse.json();
+                        const currentBalance = balanceData.balance || 0;
+                        
+                        if (currentBalance < config.ROMECOIN_REQUIRED_FOR_CLUB_CREATION) {
+                            return interaction.editReply({ 
+                                content: `部活作成には${config.ROMECOIN_REQUIRED_FOR_CLUB_CREATION.toLocaleString()}ロメコインが必要です。現在の残高: ${currentBalance.toLocaleString()}ロメコイン` 
+                            });
+                        }
+                    } catch (error) {
+                        console.error('ロメコイン残高確認エラー:', error);
+                        return interaction.editReply({ content: 'ロメコイン残高の確認中にエラーが発生しました。しばらくしてから再度お試しください。' });
+                    }
+                    
                     // 絵文字の最初の文字のみを使用（複数絵文字が入力された場合の対応）
                     const firstEmoji = clubEmoji.trim().split(' ')[0] || '🎯';
                     
@@ -206,7 +232,45 @@ module.exports = {
                             if(roleToRemove) await creator.roles.remove(roleToRemove);
                         }
                         
-                        await interaction.editReply({ content: `部活「${clubName}」を人気部活カテゴリに設立しました！ ${newChannel} を確認してください。` });
+                        // ロメコインを減らす
+                        let newBalance = 0;
+                        try {
+                            const deductResponse = await fetch(`${config.CROSSROID_API_URL}/api/romecoin/${interaction.user.id}/deduct`, {
+                                method: 'POST',
+                                headers: {
+                                    'x-api-token': config.CROSSROID_API_TOKEN,
+                                    'Content-Type': 'application/json'
+                                },
+                                body: JSON.stringify({ amount: config.ROMECOIN_REQUIRED_FOR_CLUB_CREATION })
+                            });
+                            
+                            const deductData = await deductResponse.json();
+                            
+                            if (!deductResponse.ok || deductData.error) {
+                                // エラーレスポンスの場合
+                                const errorMessage = deductData.error || `HTTP ${deductResponse.status}`;
+                                console.error(`ロメコイン減算エラー: ${errorMessage}`);
+                                // 部活は作成済みなので、エラーログを残すが処理は続行
+                                console.error('部活作成は成功しましたが、ロメコインの減算に失敗しました。手動で確認してください。');
+                            } else if (deductData.success && deductData.newBalance !== undefined) {
+                                // 成功時のレスポンス: { success: true, userId, deducted, previousBalance, newBalance }
+                                newBalance = deductData.newBalance;
+                            } else {
+                                console.error('ロメコイン減算レスポンス形式エラー:', deductData);
+                                console.error('部活作成は成功しましたが、ロメコインの減算に失敗しました。手動で確認してください。');
+                            }
+                        } catch (error) {
+                            console.error('ロメコイン減算エラー:', error);
+                            // 部活は作成済みなので、エラーログを残すが処理は続行
+                            console.error('部活作成は成功しましたが、ロメコインの減算に失敗しました。手動で確認してください。');
+                        }
+                        
+                        // 成功メッセージに残高を表示
+                        let successMessage = `部活「${clubName}」を人気部活カテゴリに設立しました！ ${newChannel} を確認してください。`;
+                        if (newBalance > 0) {
+                            successMessage += `\n残りのロメコイン: ${newBalance.toLocaleString()}ロメコイン`;
+                        }
+                        await interaction.editReply({ content: successMessage });
                         // 部活作成完了後にクールダウンを設定（Redis使用）
                         const cooldownEnd = Date.now() + config.CLUB_CREATION_COOLDOWN;
                         await redis.setex(cooldownKey, Math.ceil(config.CLUB_CREATION_COOLDOWN / 1000), cooldownEnd.toString());

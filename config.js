@@ -19,6 +19,9 @@ module.exports = {
     MAIN_CHANNEL_ID: '1431905157657923646', // メインチャンネルID
     NOTION_DATABASE_ID: process.env.NOTION_DATABASE_ID,
     NOTION_API_KEY: process.env.NOTION_API_KEY,
+    CROSSROID_API_URL: process.env.CROSSROID_API_URL || 'http://localhost:3000',
+    CROSSROID_API_TOKEN: process.env.CROSSROID_API_TOKEN,
+    ROMECOIN_REQUIRED_FOR_CLUB_CREATION: 10000, // 部活作成に必要なロメコイン
     // 部活ランキング更新設定（週1回、日曜日の午前0時JSTに更新）
     CLUB_RANKING_UPDATE_CRON: '0 0 * * 0',
     // 廃部候補判定設定

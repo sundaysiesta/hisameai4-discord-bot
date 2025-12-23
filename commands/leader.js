@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, PermissionsBitField, MessageFlags } = require('discord.js');
+const { SlashCommandBuilder, PermissionsBitField, MessageFlags, ChannelType } = require('discord.js');
 const config = require('../config.js');
 const { notion } = require('../utils/notionHelpers.js');
 
@@ -25,6 +25,25 @@ module.exports = {
         await interaction.deferReply({flags: [MessageFlags.Ephemeral]});
         const channel = interaction.options.getChannel('部活');
         const characterName = interaction.options.getString('部長');
+        
+        // チャンネルタイプのチェック
+        if (channel.type !== ChannelType.GuildText) {
+            return interaction.editReply({ content: 'このコマンドはテキストチャンネルでのみ使用できます。' });
+        }
+        
+        // 部活チャンネルかどうかチェック（人気部活カテゴリ、廃部候補カテゴリ、アーカイブカテゴリも含む）
+        const isClubChannel = (
+            channel.parent && (
+                config.CLUB_CATEGORIES.includes(channel.parent.id) ||
+                channel.parent.id === config.POPULAR_CLUB_CATEGORY_ID ||
+                channel.parent.id === config.INACTIVE_CLUB_CATEGORY_ID ||
+                channel.parent.id === config.ARCHIVE_CATEGORY_ID ||
+                channel.parent.id === config.ARCHIVE_OVERFLOW_CATEGORY_ID
+            )
+        );
+        if (!isClubChannel) {
+            return interaction.editReply({ content: 'このコマンドは部活チャンネルでのみ使用できます。' });
+        }
         
         try {
             // Notionデータベースからユーザーを検索
