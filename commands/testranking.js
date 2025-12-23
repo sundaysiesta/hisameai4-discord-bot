@@ -25,6 +25,29 @@ module.exports = {
         try {
             const limit = interaction.options.getInteger('limit') || 20;
             
+            // メモリ内のデータをRedisに反映してから計算（sortコマンドと同じ処理）
+            // メモリ内のデータを保存（表示用）
+            const memoryBufferSnapshot = global.dailyMessageBuffer ? { ...global.dailyMessageBuffer } : {};
+            
+            if (global.dailyMessageBuffer) {
+                let reflectedCount = 0;
+                for (const [channelId, count] of Object.entries(global.dailyMessageBuffer)) {
+                    if (count > 0) {
+                        try {
+                            await redis.incrby(`weekly_message_count:${channelId}`, count);
+                            reflectedCount += count;
+                            // sortコマンドと同じく反映後にリセット（日次バッチでの重複を防ぐ）
+                            global.dailyMessageBuffer[channelId] = 0;
+                        } catch (error) {
+                            console.error(`Redis反映エラー for channel ${channelId}:`, error);
+                        }
+                    }
+                }
+                if (reflectedCount > 0) {
+                    console.log(`[テストランキング] メモリ内のデータをRedisに反映しました: ${reflectedCount}件`);
+                }
+            }
+            
             // 全部活チャンネルを取得
             let allClubChannels = [];
             const allCategories = [...config.CLUB_CATEGORIES, config.POPULAR_CLUB_CATEGORY_ID];
@@ -61,6 +84,9 @@ module.exports = {
                 const activityIcon = getActivityIcon(activity.activityScore);
                 const newName = `${baseName}${activityIcon}${activity.activityScore}`;
                 
+                // メモリ内のデータも取得（表示用）
+                const memoryCount = memoryBufferSnapshot[channel.id] || 0;
+                
                 ranking.push({
                     id: channel.id,
                     name: channel.name,
@@ -73,7 +99,8 @@ module.exports = {
                     position: channel.position,
                     categoryId: channel.parentId,
                     categoryName: channel.parent?.name || '不明',
-                    activeMembers: activity.activeMembers
+                    activeMembers: activity.activeMembers,
+                    memoryCount: memoryCount // メモリ内のカウント（反映前）
                 });
             }
             
@@ -135,7 +162,12 @@ module.exports = {
 - 🔥: 10,000pt以上
 - ⚡: 1,000pt以上
 - 🌱: 100pt以上
-- ・: 100pt未満`;
+- ・: 100pt未満
+
+**📝 メモリ内データについて:**
+メッセージ数はメモリ内でカウントされ、毎日0時にRedisに反映されます。
+テストコマンド実行時は、メモリ内のデータもRedisに反映してから計算しています。
+（メモリ内のカウントが表示されている場合は、反映前の状態です）`;
 
             // ランキング詳細
             let rankingText = '';
@@ -165,7 +197,11 @@ module.exports = {
                 rankingText += `${medal} <#${club.id}>\n`;
                 rankingText += `  📊 アクティブ度: ${getActivityIcon(club.activityScore)}${club.activityScore}pt${changeText}\n`;
                 rankingText += `  👥 アクティブ部員数: ${club.activeMemberCount}人\n`;
-                rankingText += `  💬 週間メッセージ数: ${club.messageCount}件\n`;
+                rankingText += `  💬 週間メッセージ数: ${club.messageCount}件`;
+                if (club.memoryCount > 0) {
+                    rankingText += ` (メモリ内: +${club.memoryCount}件)`;
+                }
+                rankingText += `\n`;
                 rankingText += `  🧮 計算式: ${club.activeMemberCount} × ${club.messageCount} = ${club.activityScore}pt\n`;
                 if (categoryChange) rankingText += categoryChange;
                 if (positionChange) rankingText += positionChange;
