@@ -75,6 +75,11 @@ module.exports = {
                         const controller = new AbortController();
                         const timeoutId = setTimeout(() => controller.abort(), 5000); // 5秒タイムアウト
                         
+                        if (!config.CROSSROID_API_TOKEN) {
+                            console.error('CROSSROID_API_TOKENが設定されていません');
+                            return interaction.editReply({ content: 'ロメコインシステムの設定が不完全です。管理者にお問い合わせください。' });
+                        }
+                        
                         const balanceResponse = await fetch(`${config.CROSSROID_API_URL}/api/romecoin/${interaction.user.id}`, {
                             headers: {
                                 'x-api-token': config.CROSSROID_API_TOKEN
@@ -85,7 +90,14 @@ module.exports = {
                         clearTimeout(timeoutId);
                         
                         if (!balanceResponse.ok) {
+                            let errorBody = '';
+                            try {
+                                errorBody = await balanceResponse.text();
+                            } catch (e) {
+                                // レスポンスボディの取得に失敗した場合は無視
+                            }
                             console.error(`ロメコイン残高取得エラー: ${balanceResponse.status} ${balanceResponse.statusText}`);
+                            console.error(`エラーレスポンス: ${errorBody}`);
                             return interaction.editReply({ content: 'ロメコイン残高の確認中にエラーが発生しました。しばらくしてから再度お試しください。' });
                         }
                         
@@ -190,6 +202,11 @@ module.exports = {
                         const controller = new AbortController();
                         const timeoutId = setTimeout(() => controller.abort(), 5000); // 5秒タイムアウト
                         
+                        if (!config.CROSSROID_API_TOKEN) {
+                            console.error('CROSSROID_API_TOKENが設定されていません');
+                            return interaction.editReply({ content: 'ロメコインシステムの設定が不完全です。管理者にお問い合わせください。' });
+                        }
+                        
                         const balanceResponse = await fetch(`${config.CROSSROID_API_URL}/api/romecoin/${interaction.user.id}`, {
                             headers: {
                                 'x-api-token': config.CROSSROID_API_TOKEN
@@ -200,7 +217,14 @@ module.exports = {
                         clearTimeout(timeoutId);
                         
                         if (!balanceResponse.ok) {
+                            let errorBody = '';
+                            try {
+                                errorBody = await balanceResponse.text();
+                            } catch (e) {
+                                // レスポンスボディの取得に失敗した場合は無視
+                            }
                             console.error(`ロメコイン残高取得エラー: ${balanceResponse.status} ${balanceResponse.statusText}`);
+                            console.error(`エラーレスポンス: ${errorBody}`);
                             return interaction.editReply({ content: 'ロメコイン残高の確認中にエラーが発生しました。しばらくしてから再度お試しください。' });
                         }
                         
