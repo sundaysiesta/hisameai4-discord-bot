@@ -72,11 +72,17 @@ module.exports = {
                     
                     // ロメコイン残高を確認
                     try {
+                        const controller = new AbortController();
+                        const timeoutId = setTimeout(() => controller.abort(), 5000); // 5秒タイムアウト
+                        
                         const balanceResponse = await fetch(`${config.CROSSROID_API_URL}/api/romecoin/${interaction.user.id}`, {
                             headers: {
                                 'x-api-token': config.CROSSROID_API_TOKEN
-                            }
+                            },
+                            signal: controller.signal
                         });
+                        
+                        clearTimeout(timeoutId);
                         
                         if (!balanceResponse.ok) {
                             console.error(`ロメコイン残高取得エラー: ${balanceResponse.status} ${balanceResponse.statusText}`);
@@ -93,6 +99,12 @@ module.exports = {
                         }
                     } catch (error) {
                         console.error('ロメコイン残高確認エラー:', error);
+                        if (error.name === 'AbortError') {
+                            return interaction.editReply({ content: 'ロメコイン残高の確認がタイムアウトしました。しばらくしてから再度お試しください。' });
+                        } else if (error.code === 'ECONNREFUSED' || error.cause?.code === 'ECONNREFUSED') {
+                            console.error(`CROSSROID APIへの接続に失敗しました。URL: ${config.CROSSROID_API_URL}`);
+                            return interaction.editReply({ content: 'ロメコインシステムに接続できませんでした。管理者にお問い合わせください。' });
+                        }
                         return interaction.editReply({ content: 'ロメコイン残高の確認中にエラーが発生しました。しばらくしてから再度お試しください。' });
                     }
                     
@@ -175,11 +187,17 @@ module.exports = {
                     
                     // ロメコイン残高を確認
                     try {
+                        const controller = new AbortController();
+                        const timeoutId = setTimeout(() => controller.abort(), 5000); // 5秒タイムアウト
+                        
                         const balanceResponse = await fetch(`${config.CROSSROID_API_URL}/api/romecoin/${interaction.user.id}`, {
                             headers: {
                                 'x-api-token': config.CROSSROID_API_TOKEN
-                            }
+                            },
+                            signal: controller.signal
                         });
+                        
+                        clearTimeout(timeoutId);
                         
                         if (!balanceResponse.ok) {
                             console.error(`ロメコイン残高取得エラー: ${balanceResponse.status} ${balanceResponse.statusText}`);
@@ -196,6 +214,12 @@ module.exports = {
                         }
                     } catch (error) {
                         console.error('ロメコイン残高確認エラー:', error);
+                        if (error.name === 'AbortError') {
+                            return interaction.editReply({ content: 'ロメコイン残高の確認がタイムアウトしました。しばらくしてから再度お試しください。' });
+                        } else if (error.code === 'ECONNREFUSED' || error.cause?.code === 'ECONNREFUSED') {
+                            console.error(`CROSSROID APIへの接続に失敗しました。URL: ${config.CROSSROID_API_URL}`);
+                            return interaction.editReply({ content: 'ロメコインシステムに接続できませんでした。管理者にお問い合わせください。' });
+                        }
                         return interaction.editReply({ content: 'ロメコイン残高の確認中にエラーが発生しました。しばらくしてから再度お試しください。' });
                     }
                     
@@ -265,15 +289,20 @@ module.exports = {
                         // ロメコインを減らす
                         let newBalance = 0;
                         try {
+                            const controller = new AbortController();
+                            const timeoutId = setTimeout(() => controller.abort(), 5000); // 5秒タイムアウト
+                            
                             const deductResponse = await fetch(`${config.CROSSROID_API_URL}/api/romecoin/${interaction.user.id}/deduct`, {
                                 method: 'POST',
                                 headers: {
                                     'x-api-token': config.CROSSROID_API_TOKEN,
                                     'Content-Type': 'application/json'
                                 },
-                                body: JSON.stringify({ amount: config.ROMECOIN_REQUIRED_FOR_CLUB_CREATION })
+                                body: JSON.stringify({ amount: config.ROMECOIN_REQUIRED_FOR_CLUB_CREATION }),
+                                signal: controller.signal
                             });
                             
+                            clearTimeout(timeoutId);
                             const deductData = await deductResponse.json();
                             
                             if (!deductResponse.ok || deductData.error) {
@@ -291,6 +320,11 @@ module.exports = {
                             }
                         } catch (error) {
                             console.error('ロメコイン減算エラー:', error);
+                            if (error.name === 'AbortError') {
+                                console.error('ロメコイン減算がタイムアウトしました。');
+                            } else if (error.code === 'ECONNREFUSED' || error.cause?.code === 'ECONNREFUSED') {
+                                console.error(`CROSSROID APIへの接続に失敗しました。URL: ${config.CROSSROID_API_URL}`);
+                            }
                             // 部活は作成済みなので、エラーログを残すが処理は続行
                             console.error('部活作成は成功しましたが、ロメコインの減算に失敗しました。手動で確認してください。');
                         }
