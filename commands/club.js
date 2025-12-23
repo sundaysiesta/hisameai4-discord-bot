@@ -54,7 +54,8 @@ module.exports = {
                 });
             }
             ranking.sort((a, b) => (b.count !== a.count) ? b.count - a.count : a.position - b.position);
-            const rank = ranking.findIndex(r => r.id === channel.id) + 1;
+            const rankIndex = ranking.findIndex(r => r.id === channel.id);
+            const rank = rankIndex !== -1 ? rankIndex + 1 : '不明';
 
             // 共通の週間アクティブ度計算関数を使用
             const activity = await calculateWeeklyActivity(channel, redis);

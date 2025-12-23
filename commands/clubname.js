@@ -16,8 +16,14 @@ module.exports = {
         const newName = interaction.options.getString('newname');
         const channel = interaction.channel;
         
-        // 部活チャンネルかどうかチェック
-        if (!channel.parent || !config.CLUB_CATEGORIES.includes(channel.parent.id)) {
+        // 部活チャンネルかどうかチェック（人気部活カテゴリも含む）
+        const isClubChannel = (
+            channel.parent && (
+                config.CLUB_CATEGORIES.includes(channel.parent.id) ||
+                channel.parent.id === config.POPULAR_CLUB_CATEGORY_ID
+            )
+        );
+        if (!isClubChannel) {
             return interaction.editReply({ content: "このコマンドは部活チャンネルでのみ使用できます。" });
         }
         
@@ -30,15 +36,15 @@ module.exports = {
         try {
             const currentName = channel.name;
             
-            // 現在の名前を解析（絵文字｜名前・アクティブ数🔥の形式）
-            const nameMatch = currentName.match(/^(.+?)\|(.+?)([・🔥].*)?$/);
+            // 現在の名前を解析（絵文字｜名前・アクティブ数🔥⚡🌱・の形式）
+            const nameMatch = currentName.match(/^(.+?)\|(.+?)([・🔥⚡🌱]\d+)?$/);
             if (!nameMatch) {
                 return interaction.editReply({ content: "部活名の形式が正しくありません。絵文字｜名前の形式である必要があります。" });
             }
             
             const emoji = nameMatch[1]; // 絵文字部分
             const currentClubName = nameMatch[2]; // 現在の部活名
-            const activityPart = nameMatch[3] || ''; // ・や🔥の部分
+            const activityPart = nameMatch[3] || ''; // ・や🔥⚡🌱の部分
             
             // 新しい名前を構築
             const newChannelName = `${emoji}｜${newName}${activityPart}`;

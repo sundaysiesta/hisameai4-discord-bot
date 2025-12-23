@@ -40,14 +40,14 @@ async function getLatestCommitInfo() {
 function cleanupGlobalVariables() {
     const now = Date.now();
     
-    // 匿名投稿クールダウンのクリーンアップ
-    if (global.anonymousCooldown) {
-        for (const [userId, timestamp] of Object.entries(global.anonymousCooldown)) {
-            if (now - timestamp > config.ANONYMOUS_COOLDOWN_EXPIRY) {
-                delete global.anonymousCooldown[userId];
-            }
-        }
-    }
+    // 匿名投稿クールダウンのクリーンアップ（現在未使用のためコメントアウト）
+    // if (global.anonymousCooldown) {
+    //     for (const [userId, timestamp] of Object.entries(global.anonymousCooldown)) {
+    //         if (now - timestamp > config.ANONYMOUS_COOLDOWN_EXPIRY) {
+    //             delete global.anonymousCooldown[userId];
+    //         }
+    //     }
+    // }
     
     // 代理投稿削除マップのクリーンアップ
     if (global.proxyDeleteMap) {

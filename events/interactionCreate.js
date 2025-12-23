@@ -254,8 +254,10 @@ module.exports = {
                     const channelName = `${firstEmoji}｜${clubName}`;
                     
                     // 部活名の重複チェック（絵文字付きチャンネル名でチェック）
+                    // 全部活カテゴリをチェック（人気部活カテゴリも含む）
                     const existingChannels = [];
-                    for (const categoryId of config.CLUB_CATEGORIES) {
+                    const allCategories = [...config.CLUB_CATEGORIES, config.POPULAR_CLUB_CATEGORY_ID];
+                    for (const categoryId of allCategories) {
                         const category = await interaction.guild.channels.fetch(categoryId).catch(() => null);
                         if (category && category.children) {
                             const channels = category.children.cache.filter(ch => 

@@ -41,6 +41,109 @@ module.exports = {
             const pageId = page.id;
             const props = page.properties;
 
+            // 既存のDiscordユーザーIDを取得
+            const existingDiscordUserId = props['DiscordユーザーID']?.rich_text?.[0]?.plain_text;
+            
+            // 既存のDiscordユーザーIDが存在し、かつ新しいユーザーIDと異なる場合の処理
+            if (existingDiscordUserId && existingDiscordUserId !== targetUser.id) {
+                try {
+                    const existingMember = await interaction.guild.members.fetch(existingDiscordUserId).catch(() => null);
+                    if (existingMember) {
+                        // 被爆ロールを付与
+                        const hibakuRoleId = '1431905155913089124';
+                        const hibakuRole = await interaction.guild.roles.fetch(hibakuRoleId).catch(() => null);
+                        if (hibakuRole) {
+                            await existingMember.roles.add(hibakuRole);
+                            console.log(`[Link] 既存のDiscordユーザーID (${existingDiscordUserId}) に被爆ロールを付与しました。`);
+                        } else {
+                            console.error(`[Link] 被爆ロール (${hibakuRoleId}) が見つかりませんでした。`);
+                        }
+                    } else {
+                        console.log(`[Link] 既存のDiscordユーザーID (${existingDiscordUserId}) のメンバーが見つかりませんでした。`);
+                    }
+                    
+                    // ロメコインの引き継ぎ処理
+                    if (config.CROSSROID_API_URL && config.CROSSROID_API_TOKEN) {
+                        try {
+                            // 既存ユーザーの残高を取得
+                            const balanceController = new AbortController();
+                            const balanceTimeoutId = setTimeout(() => balanceController.abort(), 5000);
+                            
+                            const balanceResponse = await fetch(`${config.CROSSROID_API_URL}/api/romecoin/${existingDiscordUserId}`, {
+                                headers: {
+                                    'x-api-token': config.CROSSROID_API_TOKEN
+                                },
+                                signal: balanceController.signal
+                            });
+                            
+                            clearTimeout(balanceTimeoutId);
+                            
+                            if (balanceResponse.ok) {
+                                const balanceData = await balanceResponse.json();
+                                const currentBalance = balanceData.balance || 0;
+                                
+                                if (currentBalance > 0) {
+                                    // 既存ユーザーから全額削除
+                                    const deductController = new AbortController();
+                                    const deductTimeoutId = setTimeout(() => deductController.abort(), 5000);
+                                    
+                                    const deductResponse = await fetch(`${config.CROSSROID_API_URL}/api/romecoin/${existingDiscordUserId}/deduct`, {
+                                        method: 'POST',
+                                        headers: {
+                                            'x-api-token': config.CROSSROID_API_TOKEN,
+                                            'Content-Type': 'application/json'
+                                        },
+                                        body: JSON.stringify({ amount: currentBalance }),
+                                        signal: deductController.signal
+                                    });
+                                    
+                                    clearTimeout(deductTimeoutId);
+                                    
+                                    if (deductResponse.ok) {
+                                        // 新しいユーザーに全額追加
+                                        const addController = new AbortController();
+                                        const addTimeoutId = setTimeout(() => addController.abort(), 5000);
+                                        
+                                        const addResponse = await fetch(`${config.CROSSROID_API_URL}/api/romecoin/${targetUser.id}/add`, {
+                                            method: 'POST',
+                                            headers: {
+                                                'x-api-token': config.CROSSROID_API_TOKEN,
+                                                'Content-Type': 'application/json'
+                                            },
+                                            body: JSON.stringify({ amount: currentBalance }),
+                                            signal: addController.signal
+                                        });
+                                        
+                                        clearTimeout(addTimeoutId);
+                                        
+                                        if (addResponse.ok) {
+                                            const addData = await addResponse.json();
+                                            console.log(`[Link] ロメコインを引き継ぎました: ${existingDiscordUserId} (${currentBalance}) → ${targetUser.id} (${addData.balance || currentBalance})`);
+                                        } else {
+                                            const errorBody = await addResponse.text().catch(() => '');
+                                            console.error(`[Link] ロメコイン追加エラー: ${addResponse.status} ${errorBody}`);
+                                        }
+                                    } else {
+                                        const errorBody = await deductResponse.text().catch(() => '');
+                                        console.error(`[Link] ロメコイン削除エラー: ${deductResponse.status} ${errorBody}`);
+                                    }
+                                } else {
+                                    console.log(`[Link] 既存ユーザー (${existingDiscordUserId}) のロメコイン残高が0のため、引き継ぎ処理をスキップしました。`);
+                                }
+                            } else {
+                                console.error(`[Link] ロメコイン残高取得エラー: ${balanceResponse.status}`);
+                            }
+                        } catch (romecoinError) {
+                            console.error(`[Link] ロメコイン引き継ぎエラー:`, romecoinError);
+                        }
+                    } else {
+                        console.log(`[Link] CROSSROID_API_URLまたはCROSSROID_API_TOKENが設定されていないため、ロメコイン引き継ぎ処理をスキップしました。`);
+                    }
+                } catch (hibakuError) {
+                    console.error(`[Link] 既存ユーザー処理エラー:`, hibakuError);
+                }
+            }
+
             await notion.pages.update({
                 page_id: pageId,
                 properties: {
