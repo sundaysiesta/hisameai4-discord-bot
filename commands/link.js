@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, PermissionsBitField, MessageFlags } = require('discord.js');
+const { SlashCommandBuilder, PermissionsBitField, MessageFlags, ChannelType } = require('discord.js');
 const config = require('../config.js');
 const { notion, getNotionRelationTitles } = require('../utils/notionHelpers.js');
 const { getGenerationRoleName, setDiscordIconToNotion } = require('../utils/utility.js');
@@ -84,19 +84,62 @@ module.exports = {
                 }
             }
 
-            // 新方式: Notionの『部長』に記録されたチャンネルIDへ個人権限を付与
+            // 新方式: Notionの『部長』に記録されたチャンネルIDに対して部長設定と権限付与
+            let leaderChannelsSet = [];
             try {
                 const managerChannelsRaw = props['部長'];
                 const channelsText = (managerChannelsRaw && managerChannelsRaw.rich_text && managerChannelsRaw.rich_text[0]?.plain_text) ? managerChannelsRaw.rich_text[0].plain_text : '';
                 const channelIds = channelsText.split(',').map(s => s.trim()).filter(Boolean);
+                
                 for (const chId of channelIds) {
-                    const ch = await interaction.guild.channels.fetch(chId).catch(() => null);
-                    if (ch) {
+                    try {
+                        const ch = await interaction.guild.channels.fetch(chId).catch(() => null);
+                        if (!ch || ch.type !== ChannelType.GuildText) {
+                            console.log(`[Link] チャンネル ${chId} が見つからないか、テキストチャンネルではありません。`);
+                            continue;
+                        }
+                        
+                        // 部活チャンネルかどうかチェック
+                        const isClubChannel = (
+                            ch.parent && (
+                                config.CLUB_CATEGORIES.includes(ch.parent.id) ||
+                                ch.parent.id === config.POPULAR_CLUB_CATEGORY_ID ||
+                                ch.parent.id === config.INACTIVE_CLUB_CATEGORY_ID ||
+                                ch.parent.id === config.ARCHIVE_CATEGORY_ID ||
+                                ch.parent.id === config.ARCHIVE_OVERFLOW_CATEGORY_ID
+                            )
+                        );
+                        
+                        if (!isClubChannel) {
+                            console.log(`[Link] チャンネル ${ch.name} (${chId}) は部活チャンネルではありません。`);
+                            continue;
+                        }
+                        
+                        // 既存の部長の権限を削除（Redisから取得）
+                        const currentLeaderId = await redis.get(`leader_user:${chId}`);
+                        if (currentLeaderId && currentLeaderId !== targetUser.id) {
+                            try {
+                                await ch.permissionOverwrites.delete(currentLeaderId);
+                                console.log(`[Link] 既存の部長（ID: ${currentLeaderId}）の権限を削除しました。チャンネル: ${ch.name}`);
+                            } catch (error) {
+                                console.error(`[Link] 既存の部長の権限削除エラー:`, error);
+                            }
+                        }
+                        
+                        // Redisに部長情報を保存
+                        await redis.set(`leader_user:${chId}`, targetUser.id);
+                        
+                        // チャンネル権限を設定
                         await ch.permissionOverwrites.edit(targetUser.id, {
                             ViewChannel: true,
                             ManageMessages: true,
                             ManageRoles: true
-                        }).catch(e => console.error(`権限付与失敗 ${chId}:`, e));
+                        });
+                        
+                        leaderChannelsSet.push(ch.name);
+                        console.log(`[Link] チャンネル ${ch.name} (${chId}) の部長を ${targetUser.username} に設定し、権限を付与しました。`);
+                    } catch (channelError) {
+                        console.error(`[Link] チャンネル ${chId} の処理エラー:`, channelError);
                     }
                 }
             } catch (e) {
@@ -118,6 +161,9 @@ module.exports = {
             let replyMessage = `成功！ ${targetUser.username} を「${characterName}」に紐付けました。`;
             if (addedRoles.length > 0) {
                 replyMessage += `\n付与されたロール: ${addedRoles.join(', ')}`;
+            }
+            if (leaderChannelsSet.length > 0) {
+                replyMessage += `\n部長に設定されたチャンネル: ${leaderChannelsSet.join(', ')}`;
             }
             replyMessage += `\nDiscordアイコンをNotionに同期しました。`;
 

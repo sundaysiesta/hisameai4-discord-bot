@@ -33,6 +33,7 @@ const commands = [
         { name: '日付', type: 3, description: '投稿日付（YYYY-MM-DD）', required: true }
     ] },
     { name: 'migrateleaders', description: '旧部長ロール方式から個別権限方式へ移行します。(管理者限定)' },
+    { name: 'testmaintenance', description: '維持費徴収と賞金支払いの処理をテストします（ドライラン）。(管理者限定)' },
     { name: 'kotehan', description: '匿名投稿用のコテハン（固定ハンドルネーム）を設定します', options: [
         { name: 'action', type: 3, description: '実行する操作', required: true, choices: [
             { name: '設定', value: 'set' },
