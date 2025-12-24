@@ -58,6 +58,21 @@ module.exports = {
                         } else {
                             console.error(`[Link] 被爆ロール (${hibakuRoleId}) が見つかりませんでした。`);
                         }
+                        
+                        // 世代ロールを剥奪（ローマ数字のロール名を持つロールを検索）
+                        const romanNumeralPattern = /^[IVXLCDM]+$/; // ローマ数字のパターン
+                        const generationRoles = existingMember.roles.cache.filter(role => 
+                            romanNumeralPattern.test(role.name) && role.name !== '@everyone'
+                        );
+                        
+                        for (const role of generationRoles.values()) {
+                            try {
+                                await existingMember.roles.remove(role);
+                                console.log(`[Link] 既存ユーザー (${existingDiscordUserId}) から世代ロール「${role.name}」を剥奪しました。`);
+                            } catch (removeError) {
+                                console.error(`[Link] 世代ロール「${role.name}」の剥奪エラー:`, removeError);
+                            }
+                        }
                     } else {
                         console.log(`[Link] 既存のDiscordユーザーID (${existingDiscordUserId}) のメンバーが見つかりませんでした。`);
                     }
