@@ -77,82 +77,112 @@ module.exports = {
                         console.log(`[Link] 既存のDiscordユーザーID (${existingDiscordUserId}) のメンバーが見つかりませんでした。`);
                     }
                     
-                    // ロメコインの引き継ぎ処理
+                    // データ移行処理（ロメコイン含む全データ）
                     if (config.CROSSROID_API_URL && config.CROSSROID_API_TOKEN) {
                         try {
-                            // 既存ユーザーの残高を取得
-                            const balanceController = new AbortController();
-                            const balanceTimeoutId = setTimeout(() => balanceController.abort(), 5000);
+                            const migrateController = new AbortController();
+                            const migrateTimeoutId = setTimeout(() => migrateController.abort(), 10000); // 移行処理は時間がかかる可能性があるため10秒
                             
-                            const balanceResponse = await fetch(`${config.CROSSROID_API_URL}/api/romecoin/${existingDiscordUserId}`, {
+                            // 移行APIを呼び出し（既存ユーザーIDから新しいユーザーIDへ全データ移行）
+                            const migrateResponse = await fetch(`${config.CROSSROID_API_URL}/api/migrate/${existingDiscordUserId}`, {
+                                method: 'POST',
                                 headers: {
-                                    'x-api-token': config.CROSSROID_API_TOKEN
+                                    'x-api-token': config.CROSSROID_API_TOKEN,
+                                    'Content-Type': 'application/json'
                                 },
-                                signal: balanceController.signal
+                                body: JSON.stringify({ newUserId: targetUser.id }),
+                                signal: migrateController.signal
                             });
                             
-                            clearTimeout(balanceTimeoutId);
+                            clearTimeout(migrateTimeoutId);
                             
-                            if (balanceResponse.ok) {
-                                const balanceData = await balanceResponse.json();
-                                const currentBalance = balanceData.balance || 0;
+                            if (migrateResponse.ok) {
+                                const migrateData = await migrateResponse.json().catch(() => ({}));
+                                console.log(`[Link] データ移行が完了しました: ${existingDiscordUserId} → ${targetUser.id}`, migrateData);
+                            } else {
+                                const errorBody = await migrateResponse.text().catch(() => '');
+                                console.error(`[Link] データ移行エラー: ${migrateResponse.status} ${errorBody}`);
                                 
-                                if (currentBalance > 0) {
-                                    // 既存ユーザーから全額削除
-                                    const deductController = new AbortController();
-                                    const deductTimeoutId = setTimeout(() => deductController.abort(), 5000);
+                                // 移行APIが失敗した場合、従来のロメコイン引き継ぎ処理をフォールバックとして実行
+                                console.log(`[Link] 移行API失敗のため、ロメコイン引き継ぎ処理をフォールバックとして実行します。`);
+                                try {
+                                    // 既存ユーザーの残高を取得
+                                    const balanceController = new AbortController();
+                                    const balanceTimeoutId = setTimeout(() => balanceController.abort(), 5000);
                                     
-                                    const deductResponse = await fetch(`${config.CROSSROID_API_URL}/api/romecoin/${existingDiscordUserId}/deduct`, {
-                                        method: 'POST',
+                                    const balanceResponse = await fetch(`${config.CROSSROID_API_URL}/api/romecoin/${existingDiscordUserId}`, {
                                         headers: {
-                                            'x-api-token': config.CROSSROID_API_TOKEN,
-                                            'Content-Type': 'application/json'
+                                            'x-api-token': config.CROSSROID_API_TOKEN
                                         },
-                                        body: JSON.stringify({ amount: currentBalance }),
-                                        signal: deductController.signal
+                                        signal: balanceController.signal
                                     });
                                     
-                                    clearTimeout(deductTimeoutId);
+                                    clearTimeout(balanceTimeoutId);
                                     
-                                    if (deductResponse.ok) {
-                                        // 新しいユーザーに全額追加
-                                        const addController = new AbortController();
-                                        const addTimeoutId = setTimeout(() => addController.abort(), 5000);
+                                    if (balanceResponse.ok) {
+                                        const balanceData = await balanceResponse.json();
+                                        const currentBalance = balanceData.balance || 0;
                                         
-                                        const addResponse = await fetch(`${config.CROSSROID_API_URL}/api/romecoin/${targetUser.id}/add`, {
-                                            method: 'POST',
-                                            headers: {
-                                                'x-api-token': config.CROSSROID_API_TOKEN,
-                                                'Content-Type': 'application/json'
-                                            },
-                                            body: JSON.stringify({ amount: currentBalance }),
-                                            signal: addController.signal
-                                        });
-                                        
-                                        clearTimeout(addTimeoutId);
-                                        
-                                        if (addResponse.ok) {
-                                            const addData = await addResponse.json();
-                                            console.log(`[Link] ロメコインを引き継ぎました: ${existingDiscordUserId} (${currentBalance}) → ${targetUser.id} (${addData.balance || currentBalance})`);
+                                        if (currentBalance > 0) {
+                                            // 既存ユーザーから全額削除
+                                            const deductController = new AbortController();
+                                            const deductTimeoutId = setTimeout(() => deductController.abort(), 5000);
+                                            
+                                            const deductResponse = await fetch(`${config.CROSSROID_API_URL}/api/romecoin/${existingDiscordUserId}/deduct`, {
+                                                method: 'POST',
+                                                headers: {
+                                                    'x-api-token': config.CROSSROID_API_TOKEN,
+                                                    'Content-Type': 'application/json'
+                                                },
+                                                body: JSON.stringify({ amount: currentBalance }),
+                                                signal: deductController.signal
+                                            });
+                                            
+                                            clearTimeout(deductTimeoutId);
+                                            
+                                            if (deductResponse.ok) {
+                                                // 新しいユーザーに全額追加
+                                                const addController = new AbortController();
+                                                const addTimeoutId = setTimeout(() => addController.abort(), 5000);
+                                                
+                                                const addResponse = await fetch(`${config.CROSSROID_API_URL}/api/romecoin/${targetUser.id}/add`, {
+                                                    method: 'POST',
+                                                    headers: {
+                                                        'x-api-token': config.CROSSROID_API_TOKEN,
+                                                        'Content-Type': 'application/json'
+                                                    },
+                                                    body: JSON.stringify({ amount: currentBalance }),
+                                                    signal: addController.signal
+                                                });
+                                                
+                                                clearTimeout(addTimeoutId);
+                                                
+                                                if (addResponse.ok) {
+                                                    const addData = await addResponse.json();
+                                                    console.log(`[Link] ロメコインを引き継ぎました（フォールバック）: ${existingDiscordUserId} (${currentBalance}) → ${targetUser.id} (${addData.balance || currentBalance})`);
+                                                } else {
+                                                    const errorBody = await addResponse.text().catch(() => '');
+                                                    console.error(`[Link] ロメコイン追加エラー（フォールバック）: ${addResponse.status} ${errorBody}`);
+                                                }
+                                            } else {
+                                                const errorBody = await deductResponse.text().catch(() => '');
+                                                console.error(`[Link] ロメコイン削除エラー（フォールバック）: ${deductResponse.status} ${errorBody}`);
+                                            }
                                         } else {
-                                            const errorBody = await addResponse.text().catch(() => '');
-                                            console.error(`[Link] ロメコイン追加エラー: ${addResponse.status} ${errorBody}`);
+                                            console.log(`[Link] 既存ユーザー (${existingDiscordUserId}) のロメコイン残高が0のため、引き継ぎ処理をスキップしました。`);
                                         }
                                     } else {
-                                        const errorBody = await deductResponse.text().catch(() => '');
-                                        console.error(`[Link] ロメコイン削除エラー: ${deductResponse.status} ${errorBody}`);
+                                        console.error(`[Link] ロメコイン残高取得エラー（フォールバック）: ${balanceResponse.status}`);
                                     }
-                                } else {
-                                    console.log(`[Link] 既存ユーザー (${existingDiscordUserId}) のロメコイン残高が0のため、引き継ぎ処理をスキップしました。`);
+                                } catch (fallbackError) {
+                                    console.error(`[Link] フォールバック処理エラー:`, fallbackError);
                                 }
-                            } else {
-                                console.error(`[Link] ロメコイン残高取得エラー: ${balanceResponse.status}`);
                             }
-                        } catch (romecoinError) {
-                            console.error(`[Link] ロメコイン引き継ぎエラー:`, romecoinError);
+                        } catch (migrateError) {
+                            console.error(`[Link] データ移行エラー:`, migrateError);
                         }
                     } else {
-                        console.log(`[Link] CROSSROID_API_URLまたはCROSSROID_API_TOKENが設定されていないため、ロメコイン引き継ぎ処理をスキップしました。`);
+                        console.log(`[Link] CROSSROID_API_URLまたはCROSSROID_API_TOKENが設定されていないため、データ移行処理をスキップしました。`);
                     }
                 } catch (hibakuError) {
                     console.error(`[Link] 既存ユーザー処理エラー:`, hibakuError);
