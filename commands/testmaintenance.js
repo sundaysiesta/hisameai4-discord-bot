@@ -31,6 +31,26 @@ module.exports = {
         try {
             const guild = interaction.guild;
             
+            // メモリ内のデータをRedisに反映してから計算（sortコマンドと同じ処理）
+            if (global.dailyMessageBuffer) {
+                let reflectedCount = 0;
+                for (const [channelId, count] of Object.entries(global.dailyMessageBuffer)) {
+                    if (count > 0) {
+                        try {
+                            await redis.incrby(`weekly_message_count:${channelId}`, count);
+                            reflectedCount += count;
+                            // sortコマンドと同じく反映後にリセット（日次バッチでの重複を防ぐ）
+                            global.dailyMessageBuffer[channelId] = 0;
+                        } catch (error) {
+                            console.error(`Redis反映エラー for channel ${channelId}:`, error);
+                        }
+                    }
+                }
+                if (reflectedCount > 0) {
+                    console.log(`[テスト維持費] メモリ内のデータをRedisに反映しました: ${reflectedCount}件`);
+                }
+            }
+            
             // ランキング計算
             let ranking;
             if (calculateWeeklyRanking) {

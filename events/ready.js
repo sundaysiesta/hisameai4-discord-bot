@@ -742,6 +742,18 @@ module.exports = {
         console.log(`Logged in as ${client.user.tag}!`);
         client.redis = redis;
         
+        // 部活投資システム用APIサーバーを起動
+        try {
+            const ClubInvestmentAPI = require('../api/server.js');
+            // fly.ioではPORT環境変数が自動設定されるため、それを優先
+            const apiPort = process.env.PORT || process.env.CLUB_INVESTMENT_API_PORT || 3000;
+            const apiServer = new ClubInvestmentAPI(client, redis);
+            apiServer.start(apiPort);
+            client.clubInvestmentAPI = apiServer; // 後で停止できるように保存
+        } catch (apiError) {
+            console.error('[API] 部活投資システムAPIサーバーの起動に失敗しました:', apiError);
+        }
+        
         // コマンドの自動デプロイ
         await deployCommands(client); 
 

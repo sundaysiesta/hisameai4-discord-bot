@@ -77,6 +77,7 @@ client.on('error', (error) => {
 });
 
 // コマンドの自動デプロイは events/ready.js で実行されます
+// 部活投資システム用APIサーバーも events/ready.js で起動されます
 
 // BotをDiscordにログイン
 client.login(process.env.DISCORD_BOT_TOKEN);
