@@ -173,7 +173,7 @@ module.exports = {
 
         // --- テキストXP付与処理はここで削除 ---
 
-        // --- 部活チャンネルのメッセージ数カウント（メモリ内のみ、日次でRedisに反映） ---
+        // --- 部活チャンネルのメッセージ数カウント（メモリ内のみ、30分ごとRedisに反映） ---
         // 全ての部活カテゴリをチェック
         const isClubChannel = (
             (config.CLUB_CATEGORIES.includes(message.channel.parentId) ||
@@ -182,7 +182,7 @@ module.exports = {
         );
         
         if (isClubChannel) {
-            // メモリ内カウント（日次バッチでRedisに反映）
+            // メモリ内カウント（30分ごとバッチでRedisに反映）
             const beforeCount = dailyMessageBuffer[message.channel.id] || 0;
             dailyMessageBuffer[message.channel.id] = beforeCount + 1;
             

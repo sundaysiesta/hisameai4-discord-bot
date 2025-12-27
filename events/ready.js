@@ -78,7 +78,7 @@ function cleanupGlobalVariables() {
         }
     }
     
-    // 日次メッセージバッファのクリーンアップ（不要 - 日次バッチで0にリセットされる）
+    // メッセージバッファのクリーンアップ（不要 - 定期バッチで0にリセットされる）
     // dailyMessageBufferはカウント数（数値）を保存しているため、タイムスタンプベースのクリーンアップは適用しない
     
     console.log('グローバル変数のクリーンアップを実行しました');
@@ -851,7 +851,7 @@ module.exports = {
         } catch (error) { console.error('起動時の初期化処理でエラー:', error); }
 
         
-        // --- 部活メッセージ数を1日1回Redisに反映 ---
+        // --- 部活メッセージ数を30分ごとRedisに反映（毎時0分と30分） ---
         const flushClubMessageCounts = async () => {
             let totalReflected = 0;
             for (const [channelId, count] of Object.entries(dailyMessageBuffer)) {
@@ -860,17 +860,19 @@ module.exports = {
                         const beforeRedis = await redis.get(`weekly_message_count:${channelId}`) || 0;
                         await redis.incrby(`weekly_message_count:${channelId}`, count);
                         const afterRedis = await redis.get(`weekly_message_count:${channelId}`) || 0;
-                        console.log(`[日次バッチ] チャンネル ${channelId}: メモリ ${count}件 → Redis ${beforeRedis} → ${afterRedis}`);
+                        console.log(`[定期バッチ] チャンネル ${channelId}: メモリ ${count}件 → Redis ${beforeRedis} → ${afterRedis}`);
                         dailyMessageBuffer[channelId] = 0;
                         totalReflected += count;
                     } catch (error) {
-                        console.error(`[日次バッチ] Redis反映エラー for channel ${channelId}:`, error);
+                        console.error(`[定期バッチ] Redis反映エラー for channel ${channelId}:`, error);
                     }
                 }
             }
-            console.log(`[日次バッチ] 部活メッセージ数を1日分まとめてRedisに反映しました。合計: ${totalReflected}件`);
+            if (totalReflected > 0) {
+                console.log(`[定期バッチ] 部活メッセージ数をRedisに反映しました。合計: ${totalReflected}件`);
+            }
         };
-        cron.schedule('0 0 * * *', flushClubMessageCounts, { scheduled: true, timezone: 'Asia/Tokyo' });
+        cron.schedule('0,30 * * * *', flushClubMessageCounts, { scheduled: true, timezone: 'Asia/Tokyo' });
 
         // --- 自動ソート + 廃部処理 + ランキング更新（土曜日23:45） ---
         const autoSortChannels = async () => {
@@ -1173,3 +1175,4 @@ module.exports = {
 
 	},
 };
+
