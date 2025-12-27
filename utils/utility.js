@@ -62,7 +62,13 @@ async function postStickyMessage(client, channel, stickyCustomId, createMessageP
         const lastCustomId = lastComponents[0]?.components?.[0]?.customId;
         if (lastMessage?.author?.id === client.user.id && lastCustomId === stickyCustomId) {
             // 既存のスティッキーメッセージを上書き編集（ランキング等の内容更新を反映）
-            await lastMessage.edit(createMessagePayload).catch(() => {});
+            try {
+                await lastMessage.edit(createMessagePayload);
+                console.log(`[postStickyMessage] メッセージを編集しました: channel ${channel.id}`);
+            } catch (editError) {
+                console.error(`[postStickyMessage] メッセージ編集に失敗しました channel ${channel.id}:`, editError);
+                console.error(`[postStickyMessage] エラー詳細:`, editError.stack);
+            }
             return;
         }
         const oldStickyMessages = messages.filter(msg => {
@@ -71,11 +77,15 @@ async function postStickyMessage(client, channel, stickyCustomId, createMessageP
             return msg.author?.id === client.user.id && cid === stickyCustomId;
         });
         for (const msg of oldStickyMessages.values()) {
-            await msg.delete().catch(() => {});
+            await msg.delete().catch((deleteError) => {
+                console.error(`[postStickyMessage] 古いメッセージ削除に失敗しました ${msg.id}:`, deleteError);
+            });
         }
         await channel.send(createMessagePayload);
+        console.log(`[postStickyMessage] 新しいメッセージを送信しました: channel ${channel.id}`);
     } catch (error) {
-        console.error(`Sticky message update failed for channel ${channel.id}:`, error);
+        console.error(`[postStickyMessage] スティッキーメッセージ更新に失敗しました channel ${channel.id}:`, error);
+        console.error(`[postStickyMessage] エラー詳細:`, error.stack);
     }
 }
 async function sortClubChannels(redis, guild) {

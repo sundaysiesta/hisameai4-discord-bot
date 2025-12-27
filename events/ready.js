@@ -851,7 +851,7 @@ module.exports = {
         } catch (error) { console.error('起動時の初期化処理でエラー:', error); }
 
         
-        // --- 部活メッセージ数を30分ごとRedisに反映（毎時0分と30分） ---
+        // --- 部活メッセージ数を30分ごとRedisに反映（毎時0分と30分）---
         const flushClubMessageCounts = async () => {
             let totalReflected = 0;
             for (const [channelId, count] of Object.entries(dailyMessageBuffer)) {
@@ -870,6 +870,61 @@ module.exports = {
             }
             if (totalReflected > 0) {
                 console.log(`[定期バッチ] 部活メッセージ数をRedisに反映しました。合計: ${totalReflected}件`);
+            }
+            
+            // 週間ランキングと部活作成パネルを更新（メモリ反映の有無に関係なく実行）
+            try {
+                console.log('[定期バッチ] 週間ランキングと部活作成パネルの更新を開始します');
+                const guild = client.guilds.cache.first();
+                if (!guild) {
+                    console.error('[定期バッチ] ギルドが見つかりません');
+                    return;
+                }
+                
+                const panelChannel = await client.channels.fetch(config.CLUB_PANEL_CHANNEL_ID).catch(() => null);
+                if (!panelChannel) {
+                    console.error('[定期バッチ] 部活作成パネルチャンネルが見つかりません');
+                    return;
+                }
+                
+                console.log('[定期バッチ] 週間ランキングを計算中...');
+                const rankingEmbeds = await createWeeklyRankingEmbeds(client, redis);
+                console.log(`[定期バッチ] 週間ランキング計算完了: ${rankingEmbeds.length}ページ`);
+                
+                const top5RewardsText = config.CLUB_TOP5_REWARDS.map((reward, index) => {
+                    const netProfit = reward - config.CLUB_WEEKLY_MAINTENANCE_FEE;
+                    return `${index + 1}位: <:romecoin2:1452874868415791236> ${reward.toLocaleString()} (実質+${netProfit.toLocaleString()})`;
+                }).join('\n');
+                
+                const clubPanelEmbed = new EmbedBuilder()
+                    .setColor(0x5865F2)
+                    .setTitle('🎫 部活作成パネル')
+                    .setDescription('**新規でもすぐ参加できる遊び場**\n\n気軽に部活を作ってみませんか？\n\n**流れ：**\n1. ボタンを押してフォームを開く\n2. 部活名・絵文字・活動内容を入力\n3. チャンネルが自動作成され、部長権限が付与される')
+                    .addFields(
+                        { name: '💰 作成費用', value: `<:romecoin2:1452874868415791236> ${config.ROMECOIN_REQUIRED_FOR_CLUB_CREATION.toLocaleString()}`, inline: true },
+                        { name: '💳 週間維持費', value: `<:romecoin2:1452874868415791236> ${config.CLUB_WEEKLY_MAINTENANCE_FEE.toLocaleString()}`, inline: true },
+                        { name: '⏰ 作成制限', value: '7日に1回', inline: true },
+                        { name: '🏆 TOP5賞金（週間）', value: top5RewardsText, inline: false },
+                        { name: '📍 作成場所', value: '人気・新着部活', inline: true },
+                        { name: '💡 気軽に始めよう', value: '• まずは小規模でも作ってみてOK\n• 途中で放置しても大丈夫\n• 気が向いたときに活動すればOK', inline: false },
+                        { name: '📝 入力項目', value: '部活名・絵文字・活動内容', inline: true },
+                        { name: '🎨 絵文字例', value: '⚽ 🎵 🎨 🎮 📚 🎮', inline: true },
+                        { name: '⚠️ 注意事項', value: `部活作成には<:romecoin2:1452874868415791236> ${config.ROMECOIN_REQUIRED_FOR_CLUB_CREATION.toLocaleString()}が必要です。\n週間維持費<:romecoin2:1452874868415791236> ${config.CLUB_WEEKLY_MAINTENANCE_FEE.toLocaleString()}が毎週自動徴収されます。\nランキングTOP5に入ると賞金が支払われます！`, inline: false }
+                    )
+                    .setTimestamp()
+                    .setFooter({ text: 'HisameAI Mark.4' });
+
+                const messagePayload = {
+                    embeds: rankingEmbeds && rankingEmbeds.length > 0 ? [...rankingEmbeds, clubPanelEmbed] : [clubPanelEmbed],
+                    components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(config.CREATE_CLUB_BUTTON_ID).setLabel('部活を作成する').setStyle(ButtonStyle.Primary).setEmoji('🎫'))]
+                };
+                
+                console.log('[定期バッチ] パネルメッセージを更新中...');
+                await postStickyMessage(client, panelChannel, config.CREATE_CLUB_BUTTON_ID, messagePayload);
+                console.log('[定期バッチ] 週間ランキングと部活作成パネルを更新しました');
+            } catch (error) {
+                console.error('[定期バッチ] ランキング更新エラー:', error);
+                console.error('[定期バッチ] エラー詳細:', error.stack);
             }
         };
         cron.schedule('0,30 * * * *', flushClubMessageCounts, { scheduled: true, timezone: 'Asia/Tokyo' });
