@@ -23,7 +23,6 @@ module.exports = {
     CROSSROID_API_URL: (process.env.CROSSROID_API_URL || 'http://localhost:3000').replace(/\/+$/, ''), // 末尾のスラッシュを削除
     CROSSROID_API_TOKEN: process.env.CROSSROID_API_TOKEN,
     ROMECOIN_REQUIRED_FOR_CLUB_CREATION: 10000, // 部活作成に必要なロメコイン
-    CLUB_WEEKLY_MAINTENANCE_FEE: 3000, // 週間維持費
     CLUB_TOP5_REWARDS: [10000, 9000, 8000, 7000, 6000], // TOP5賞金（1位から5位）
     // 部活ランキング更新設定（週1回、日曜日の午前0時JSTに更新）
     CLUB_RANKING_UPDATE_CRON: '0 0 * * 0',

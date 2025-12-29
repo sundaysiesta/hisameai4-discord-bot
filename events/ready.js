@@ -147,13 +147,12 @@ async function calculateWeeklyRanking(guild, redis) {
     }
 }
 
-// 維持費徴収とTOP5賞金支払いの処理
+// TOP5賞金支払いの処理
 async function processClubMaintenanceAndRewards(guild, redis, ranking) {
     try {
-        console.log('[維持費・賞金処理] 処理を開始します...');
+        console.log('[賞金処理] 処理を開始します...');
         
         const clubsToArchive = []; // 廃部対象の部活
-        const maintenanceResults = []; // 維持費徴収結果
         const rewardResults = []; // 賞金支払い結果
         
         // ランキングTOP5を取得
@@ -164,14 +163,14 @@ async function processClubMaintenanceAndRewards(guild, redis, ranking) {
             const club = ranking[i];
             const channel = await guild.channels.fetch(club.id).catch(() => null);
             if (!channel) {
-                console.log(`[維持費・賞金処理] チャンネル ${club.id} が見つかりません`);
+                console.log(`[賞金処理] チャンネル ${club.id} が見つかりません`);
                 continue;
             }
             
             // 部長を取得
             const leaderUserId = await redis.get(`leader_user:${channel.id}`);
             if (!leaderUserId) {
-                console.log(`[維持費・賞金処理] 部活「${channel.name}」の部長が見つかりません。廃部対象とします。`);
+                console.log(`[賞金処理] 部活「${channel.name}」の部長が見つかりません。廃部対象とします。`);
                 clubsToArchive.push({ channel, reason: '部長不在' });
                 continue;
             }
@@ -179,114 +178,45 @@ async function processClubMaintenanceAndRewards(guild, redis, ranking) {
             // 部長がサーバーに存在するか確認
             const leaderMember = await guild.members.fetch(leaderUserId).catch(() => null);
             if (!leaderMember) {
-                console.log(`[維持費・賞金処理] 部活「${channel.name}」の部長（ID: ${leaderUserId}）がサーバーに存在しません。廃部対象とします。`);
+                console.log(`[賞金処理] 部活「${channel.name}」の部長（ID: ${leaderUserId}）がサーバーに存在しません。廃部対象とします。`);
                 clubsToArchive.push({ channel, reason: '部長退会' });
                 continue;
             }
             
-            // ロメコイン残高を確認
-            try {
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 5000);
-                
-                const balanceResponse = await fetch(`${config.CROSSROID_API_URL}/api/romecoin/${leaderUserId}`, {
-                    headers: {
-                        'x-api-token': config.CROSSROID_API_TOKEN
-                    },
-                    signal: controller.signal
-                });
-                
-                clearTimeout(timeoutId);
-                
-                if (!balanceResponse.ok) {
-                    console.error(`[維持費・賞金処理] 部活「${channel.name}」の部長（ID: ${leaderUserId}）の残高取得エラー: ${balanceResponse.status}`);
-                    // エラーの場合はスキップ（廃部にはしない）
-                    continue;
-                }
-                
-                const balanceData = await balanceResponse.json();
-                const currentBalance = balanceData.balance || 0;
-                
-                // 維持費未払いチェック
-                if (currentBalance < config.CLUB_WEEKLY_MAINTENANCE_FEE) {
-                    console.log(`[維持費・賞金処理] 部活「${channel.name}」の部長（ID: ${leaderUserId}）の残高が不足しています（${currentBalance} < ${config.CLUB_WEEKLY_MAINTENANCE_FEE}）。廃部対象とします。`);
-                    clubsToArchive.push({ channel, reason: '維持費未払い', balance: currentBalance });
-                    continue;
-                }
-                
-                // TOP5の場合は賞金を先に支払い、その後維持費を徴収
-                const isTop5 = top5.some(top => top.id === club.id);
-                const rankIndex = top5.findIndex(top => top.id === club.id);
-                
-                if (isTop5 && rankIndex !== -1) {
-                    // TOP5賞金支払い
-                    const rewardAmount = config.CLUB_TOP5_REWARDS[rankIndex];
-                    try {
-                        const rewardController = new AbortController();
-                        const rewardTimeoutId = setTimeout(() => rewardController.abort(), 5000);
-                        
-                        const rewardResponse = await fetch(`${config.CROSSROID_API_URL}/api/romecoin/${leaderUserId}/add`, {
-                            method: 'POST',
-                            headers: {
-                                'x-api-token': config.CROSSROID_API_TOKEN,
-                                'Content-Type': 'application/json'
-                            },
-                            body: JSON.stringify({ amount: rewardAmount }),
-                            signal: rewardController.signal
-                        });
-                        
-                        clearTimeout(rewardTimeoutId);
-                        
-                        if (rewardResponse.ok) {
-                            const rewardData = await rewardResponse.json();
-                            console.log(`[維持費・賞金処理] 部活「${channel.name}」の部長（ID: ${leaderUserId}）に${rankIndex + 1}位賞金<:romecoin2:1452874868415791236> ${rewardAmount.toLocaleString()}を支払いました。`);
-                            rewardResults.push({ channel: channel.name, rank: rankIndex + 1, amount: rewardAmount, newBalance: rewardData.balance || 0 });
-                        } else {
-                            const errorBody = await rewardResponse.text().catch(() => '');
-                            console.error(`[維持費・賞金処理] 賞金支払いエラー: ${rewardResponse.status} ${errorBody}`);
-                        }
-                    } catch (rewardError) {
-                        console.error(`[維持費・賞金処理] 賞金支払いエラー:`, rewardError);
-                    }
-                }
-                
-                // 維持費徴収
+            // TOP5の場合は賞金を支払い
+            const isTop5 = top5.some(top => top.id === club.id);
+            const rankIndex = top5.findIndex(top => top.id === club.id);
+            
+            if (isTop5 && rankIndex !== -1) {
+                // TOP5賞金支払い
+                const rewardAmount = config.CLUB_TOP5_REWARDS[rankIndex];
                 try {
-                    const maintenanceController = new AbortController();
-                    const maintenanceTimeoutId = setTimeout(() => maintenanceController.abort(), 5000);
+                    const rewardController = new AbortController();
+                    const rewardTimeoutId = setTimeout(() => rewardController.abort(), 5000);
                     
-                    const maintenanceResponse = await fetch(`${config.CROSSROID_API_URL}/api/romecoin/${leaderUserId}/deduct`, {
+                    const rewardResponse = await fetch(`${config.CROSSROID_API_URL}/api/romecoin/${leaderUserId}/add`, {
                         method: 'POST',
                         headers: {
                             'x-api-token': config.CROSSROID_API_TOKEN,
                             'Content-Type': 'application/json'
                         },
-                        body: JSON.stringify({ amount: config.CLUB_WEEKLY_MAINTENANCE_FEE }),
-                        signal: maintenanceController.signal
+                        body: JSON.stringify({ amount: rewardAmount }),
+                        signal: rewardController.signal
                     });
                     
-                    clearTimeout(maintenanceTimeoutId);
+                    clearTimeout(rewardTimeoutId);
                     
-                    if (maintenanceResponse.ok) {
-                        const maintenanceData = await maintenanceResponse.json();
-                        console.log(`[維持費・賞金処理] 部活「${channel.name}」の部長（ID: ${leaderUserId}）から維持費<:romecoin2:1452874868415791236> ${config.CLUB_WEEKLY_MAINTENANCE_FEE.toLocaleString()}を徴収しました。`);
-                        maintenanceResults.push({ channel: channel.name, amount: config.CLUB_WEEKLY_MAINTENANCE_FEE, newBalance: maintenanceData.newBalance || 0 });
+                    if (rewardResponse.ok) {
+                        const rewardData = await rewardResponse.json();
+                        console.log(`[賞金処理] 部活「${channel.name}」の部長（ID: ${leaderUserId}）に${rankIndex + 1}位賞金<:romecoin2:1452874868415791236> ${rewardAmount.toLocaleString()}を支払いました。`);
+                        rewardResults.push({ channel: channel.name, rank: rankIndex + 1, amount: rewardAmount, newBalance: rewardData.balance || 0 });
                     } else {
-                        const errorBody = await maintenanceResponse.text().catch(() => '');
-                        console.error(`[維持費・賞金処理] 維持費徴収エラー: ${maintenanceResponse.status} ${errorBody}`);
-                        // 維持費徴収に失敗した場合は廃部対象
-                        clubsToArchive.push({ channel, reason: '維持費徴収失敗' });
+                        const errorBody = await rewardResponse.text().catch(() => '');
+                        console.error(`[賞金処理] 賞金支払いエラー: ${rewardResponse.status} ${errorBody}`);
                     }
-                } catch (maintenanceError) {
-                    console.error(`[維持費・賞金処理] 維持費徴収エラー:`, maintenanceError);
-                    // 維持費徴収に失敗した場合は廃部対象
-                    clubsToArchive.push({ channel, reason: '維持費徴収失敗' });
+                } catch (rewardError) {
+                    console.error(`[賞金処理] 賞金支払いエラー:`, rewardError);
                 }
-                
-            } catch (error) {
-                console.error(`[維持費・賞金処理] 部活「${channel.name}」の処理エラー:`, error);
-                // エラーの場合はスキップ
-                continue;
             }
         }
         
@@ -297,7 +227,7 @@ async function processClubMaintenanceAndRewards(guild, redis, ranking) {
                 const archiveOverflowCategory = await guild.channels.fetch(config.ARCHIVE_OVERFLOW_CATEGORY_ID).catch(() => null);
                 
                 if (!archiveCategory || !archiveOverflowCategory) {
-                    console.error('[維持費・賞金処理] アーカイブカテゴリが見つかりません');
+                    console.error('[賞金処理] アーカイブカテゴリが見つかりません');
                     continue;
                 }
                 
@@ -307,25 +237,24 @@ async function processClubMaintenanceAndRewards(guild, redis, ranking) {
                 
                 await channel.setParent(targetCategory, {
                     lockPermissions: false,
-                    reason: `維持費・賞金処理による廃部: ${reason}`
+                    reason: `賞金処理による廃部: ${reason}`
                 });
                 
-                console.log(`[維持費・賞金処理] 部活「${channel.name}」を廃部にしました。理由: ${reason}`);
+                console.log(`[賞金処理] 部活「${channel.name}」を廃部にしました。理由: ${reason}`);
             } catch (archiveError) {
-                console.error(`[維持費・賞金処理] 廃部処理エラー:`, archiveError);
+                console.error(`[賞金処理] 廃部処理エラー:`, archiveError);
             }
         }
         
-        console.log(`[維持費・賞金処理] 処理完了: 維持費徴収 ${maintenanceResults.length}件, 賞金支払い ${rewardResults.length}件, 廃部 ${clubsToArchive.length}件`);
+        console.log(`[賞金処理] 処理完了: 賞金支払い ${rewardResults.length}件, 廃部 ${clubsToArchive.length}件`);
         
         return {
-            maintenanceResults,
             rewardResults,
             archivedClubs: clubsToArchive.length
         };
     } catch (error) {
-        console.error('[維持費・賞金処理] エラー:', error);
-        return { maintenanceResults: [], rewardResults: [], archivedClubs: 0 };
+        console.error('[賞金処理] エラー:', error);
+        return { rewardResults: [], archivedClubs: 0 };
     }
 }
 
@@ -816,8 +745,7 @@ module.exports = {
                 
                 // 部活作成パネルの埋め込みを作成
                 const top5RewardsText = config.CLUB_TOP5_REWARDS.map((reward, index) => {
-                    const netProfit = reward - config.CLUB_WEEKLY_MAINTENANCE_FEE;
-                    return `${index + 1}位: <:romecoin2:1452874868415791236> ${reward.toLocaleString()} (実質+${netProfit.toLocaleString()})`;
+                    return `${index + 1}位: <:romecoin2:1452874868415791236> ${reward.toLocaleString()}`;
                 }).join('\n');
                 
                 const clubPanelEmbed = new EmbedBuilder()
@@ -826,14 +754,13 @@ module.exports = {
                     .setDescription('**新規でもすぐ参加できる遊び場**\n\n気軽に部活を作ってみませんか？\n\n**流れ：**\n1. ボタンを押してフォームを開く\n2. 部活名・絵文字・活動内容を入力\n3. チャンネルが自動作成され、部長権限が付与される')
                     .addFields(
                         { name: '💰 作成費用', value: `<:romecoin2:1452874868415791236> ${config.ROMECOIN_REQUIRED_FOR_CLUB_CREATION.toLocaleString()}`, inline: true },
-                        { name: '💳 週間維持費', value: `<:romecoin2:1452874868415791236> ${config.CLUB_WEEKLY_MAINTENANCE_FEE.toLocaleString()}`, inline: true },
                         { name: '⏰ 作成制限', value: '7日に1回', inline: true },
                         { name: '🏆 TOP5賞金（週間）', value: top5RewardsText, inline: false },
                         { name: '📍 作成場所', value: '人気・新着部活', inline: true },
                         { name: '💡 気軽に始めよう', value: '• まずは小規模でも作ってみてOK\n• 途中で放置しても大丈夫\n• 気が向いたときに活動すればOK', inline: false },
                         { name: '📝 入力項目', value: '部活名・絵文字・活動内容', inline: true },
                         { name: '🎨 絵文字例', value: '⚽ 🎵 🎨 🎮 📚 🎮', inline: true },
-                        { name: '⚠️ 注意事項', value: `部活作成には<:romecoin2:1452874868415791236> ${config.ROMECOIN_REQUIRED_FOR_CLUB_CREATION.toLocaleString()}が必要です。\n週間維持費<:romecoin2:1452874868415791236> ${config.CLUB_WEEKLY_MAINTENANCE_FEE.toLocaleString()}が毎週自動徴収されます。\nランキングTOP5に入ると賞金が支払われます！`, inline: false }
+                        { name: '⚠️ 注意事項', value: `部活作成には<:romecoin2:1452874868415791236> ${config.ROMECOIN_REQUIRED_FOR_CLUB_CREATION.toLocaleString()}が必要です。\nランキングTOP5に入ると賞金が支払われます！`, inline: false }
                     )
                     .setTimestamp()
                     .setFooter({ text: 'HisameAI Mark.4' });
@@ -892,8 +819,7 @@ module.exports = {
                 console.log(`[定期バッチ] 週間ランキング計算完了: ${rankingEmbeds.length}ページ`);
                 
                 const top5RewardsText = config.CLUB_TOP5_REWARDS.map((reward, index) => {
-                    const netProfit = reward - config.CLUB_WEEKLY_MAINTENANCE_FEE;
-                    return `${index + 1}位: <:romecoin2:1452874868415791236> ${reward.toLocaleString()} (実質+${netProfit.toLocaleString()})`;
+                    return `${index + 1}位: <:romecoin2:1452874868415791236> ${reward.toLocaleString()}`;
                 }).join('\n');
                 
                 const clubPanelEmbed = new EmbedBuilder()
@@ -902,14 +828,13 @@ module.exports = {
                     .setDescription('**新規でもすぐ参加できる遊び場**\n\n気軽に部活を作ってみませんか？\n\n**流れ：**\n1. ボタンを押してフォームを開く\n2. 部活名・絵文字・活動内容を入力\n3. チャンネルが自動作成され、部長権限が付与される')
                     .addFields(
                         { name: '💰 作成費用', value: `<:romecoin2:1452874868415791236> ${config.ROMECOIN_REQUIRED_FOR_CLUB_CREATION.toLocaleString()}`, inline: true },
-                        { name: '💳 週間維持費', value: `<:romecoin2:1452874868415791236> ${config.CLUB_WEEKLY_MAINTENANCE_FEE.toLocaleString()}`, inline: true },
                         { name: '⏰ 作成制限', value: '7日に1回', inline: true },
                         { name: '🏆 TOP5賞金（週間）', value: top5RewardsText, inline: false },
                         { name: '📍 作成場所', value: '人気・新着部活', inline: true },
                         { name: '💡 気軽に始めよう', value: '• まずは小規模でも作ってみてOK\n• 途中で放置しても大丈夫\n• 気が向いたときに活動すればOK', inline: false },
                         { name: '📝 入力項目', value: '部活名・絵文字・活動内容', inline: true },
                         { name: '🎨 絵文字例', value: '⚽ 🎵 🎨 🎮 📚 🎮', inline: true },
-                        { name: '⚠️ 注意事項', value: `部活作成には<:romecoin2:1452874868415791236> ${config.ROMECOIN_REQUIRED_FOR_CLUB_CREATION.toLocaleString()}が必要です。\n週間維持費<:romecoin2:1452874868415791236> ${config.CLUB_WEEKLY_MAINTENANCE_FEE.toLocaleString()}が毎週自動徴収されます。\nランキングTOP5に入ると賞金が支払われます！`, inline: false }
+                        { name: '⚠️ 注意事項', value: `部活作成には<:romecoin2:1452874868415791236> ${config.ROMECOIN_REQUIRED_FOR_CLUB_CREATION.toLocaleString()}が必要です。\nランキングTOP5に入ると賞金が支払われます！`, inline: false }
                     )
                     .setTimestamp()
                     .setFooter({ text: 'HisameAI Mark.4' });
@@ -949,7 +874,7 @@ module.exports = {
                 // 3. 週間ランキングの計算
                 const ranking = await calculateWeeklyRanking(guild, redis);
                 
-                // 4. 維持費徴収とTOP5賞金支払い
+                // 4. TOP5賞金支払い
                 await processClubMaintenanceAndRewards(guild, redis, ranking);
                 
                 // 5. チャンネルソート実行
@@ -961,8 +886,7 @@ module.exports = {
                     const rankingEmbeds = await createWeeklyRankingEmbeds(client, redis);
                     
                     const top5RewardsText = config.CLUB_TOP5_REWARDS.map((reward, index) => {
-                        const netProfit = reward - config.CLUB_WEEKLY_MAINTENANCE_FEE;
-                        return `${index + 1}位: <:romecoin2:1452874868415791236> ${reward.toLocaleString()} (実質+${netProfit.toLocaleString()})`;
+                        return `${index + 1}位: <:romecoin2:1452874868415791236> ${reward.toLocaleString()}`;
                     }).join('\n');
                     
                     const clubPanelEmbed = new EmbedBuilder()
@@ -971,14 +895,13 @@ module.exports = {
                         .setDescription('**新規でもすぐ参加できる遊び場**\n\n気軽に部活を作ってみませんか？\n\n**流れ：**\n1. ボタンを押してフォームを開く\n2. 部活名・絵文字・活動内容を入力\n3. チャンネルが自動作成され、部長権限が付与される')
                         .addFields(
                             { name: '💰 作成費用', value: `<:romecoin2:1452874868415791236> ${config.ROMECOIN_REQUIRED_FOR_CLUB_CREATION.toLocaleString()}`, inline: true },
-                            { name: '💳 週間維持費', value: `<:romecoin2:1452874868415791236> ${config.CLUB_WEEKLY_MAINTENANCE_FEE.toLocaleString()}`, inline: true },
                             { name: '⏰ 作成制限', value: '7日に1回', inline: true },
                             { name: '🏆 TOP5賞金（週間）', value: top5RewardsText, inline: false },
                             { name: '📍 作成場所', value: '人気・新着部活', inline: true },
                             { name: '💡 気軽に始めよう', value: '• まずは小規模でも作ってみてOK\n• 途中で放置しても大丈夫\n• 気が向いたときに活動すればOK', inline: false },
                             { name: '📝 入力項目', value: '部活名・絵文字・活動内容', inline: true },
                             { name: '🎨 絵文字例', value: '⚽ 🎵 🎨 🎮 📚 🎮', inline: true },
-                            { name: '⚠️ 注意事項', value: `部活作成には<:romecoin2:1452874868415791236> ${config.ROMECOIN_REQUIRED_FOR_CLUB_CREATION.toLocaleString()}が必要です。\n週間維持費<:romecoin2:1452874868415791236> ${config.CLUB_WEEKLY_MAINTENANCE_FEE.toLocaleString()}が毎週自動徴収されます。\nランキングTOP5に入ると賞金が支払われます！`, inline: false }
+                            { name: '⚠️ 注意事項', value: `部活作成には<:romecoin2:1452874868415791236> ${config.ROMECOIN_REQUIRED_FOR_CLUB_CREATION.toLocaleString()}が必要です。\nランキングTOP5に入ると賞金が支払われます！`, inline: false }
                         )
                         .setTimestamp()
                         .setFooter({ text: 'HisameAI Mark.4' });

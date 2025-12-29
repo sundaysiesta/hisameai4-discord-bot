@@ -16,7 +16,7 @@ try {
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('testmaintenance')
-        .setDescription('維持費徴収と賞金支払いの処理をテストします（ドライラン）。(管理者限定)'),
+        .setDescription('賞金支払いの処理をテストします（ドライラン）。(管理者限定)'),
     async execute(interaction, redis) {
         const ALLOWED_ROLE_ID = '1449784235102703667';
         const isAdmin = interaction.member.permissions.has(PermissionsBitField.Flags.Administrator);
@@ -47,7 +47,7 @@ module.exports = {
                     }
                 }
                 if (reflectedCount > 0) {
-                    console.log(`[テスト維持費] メモリ内のデータをRedisに反映しました: ${reflectedCount}件`);
+                    console.log(`[テスト賞金] メモリ内のデータをRedisに反映しました: ${reflectedCount}件`);
                 }
             }
             
@@ -104,7 +104,6 @@ module.exports = {
             
             const top5 = ranking.slice(0, 5);
             const clubsToArchive = [];
-            const maintenanceTargets = [];
             const rewardTargets = [];
             const errors = [];
             
@@ -167,15 +166,6 @@ module.exports = {
                         balanceCheck: balanceCheck
                     });
                 }
-                
-                // 維持費徴収対象
-                maintenanceTargets.push({
-                    channel: channel.name,
-                    leader: leaderMember.user.username,
-                    leaderId: leaderUserId,
-                    amount: config.CLUB_WEEKLY_MAINTENANCE_FEE,
-                    balanceCheck: balanceCheck
-                });
             }
             
             // 結果をEmbedで表示
@@ -184,11 +174,11 @@ module.exports = {
             // 概要
             const summaryEmbed = new EmbedBuilder()
                 .setColor(0x5865F2)
-                .setTitle('🧪 維持費・賞金処理テスト結果（ドライラン）')
+                .setTitle('🧪 賞金処理テスト結果（ドライラン）')
                 .setDescription('実際の処理は行いませんでした。以下の結果はシミュレーションです。')
                 .addFields(
-                    { name: '📊 統計', value: `総部活数: ${ranking.length}\n維持費徴収対象: ${maintenanceTargets.length}\n賞金支払い対象: ${rewardTargets.length}\n廃部対象: ${clubsToArchive.length}`, inline: false },
-                    { name: '⚙️ 設定', value: `維持費: <:romecoin2:1452874868415791236> ${config.CLUB_WEEKLY_MAINTENANCE_FEE.toLocaleString()}\nAPI URL: ${config.CROSSROID_API_URL ? '設定済み' : '未設定'}\nAPI Token: ${config.CROSSROID_API_TOKEN ? '設定済み' : '未設定'}`, inline: false }
+                    { name: '📊 統計', value: `総部活数: ${ranking.length}\n賞金支払い対象: ${rewardTargets.length}\n廃部対象: ${clubsToArchive.length}`, inline: false },
+                    { name: '⚙️ 設定', value: `API URL: ${config.CROSSROID_API_URL ? '設定済み' : '未設定'}\nAPI Token: ${config.CROSSROID_API_TOKEN ? '設定済み' : '未設定'}`, inline: false }
                 )
                 .setTimestamp();
             
@@ -211,30 +201,6 @@ module.exports = {
                     .setTimestamp();
                 
                 embeds.push(rewardEmbed);
-            }
-            
-            // 維持費徴収対象（最初の20件のみ表示）
-            if (maintenanceTargets.length > 0) {
-                let maintenanceText = '';
-                const displayTargets = maintenanceTargets.slice(0, 20);
-                for (const target of displayTargets) {
-                    maintenanceText += `**${target.channel}**\n`;
-                    maintenanceText += `  部長: ${target.leader}\n`;
-                    maintenanceText += `  維持費: <:romecoin2:1452874868415791236> ${target.amount.toLocaleString()}\n`;
-                    maintenanceText += `  残高確認: ${target.balanceCheck}\n\n`;
-                }
-                
-                if (maintenanceTargets.length > 20) {
-                    maintenanceText += `\n...他 ${maintenanceTargets.length - 20}件`;
-                }
-                
-                const maintenanceEmbed = new EmbedBuilder()
-                    .setColor(0x00FF00)
-                    .setTitle('💰 維持費徴収対象')
-                    .setDescription(maintenanceText)
-                    .setTimestamp();
-                
-                embeds.push(maintenanceEmbed);
             }
             
             // 廃部対象
