@@ -281,6 +281,54 @@ async function createWeeklyRankingEmbeds(client, redis) {
     }
 }
 
+// 週間ランキングembedとパネルを更新する共通関数
+async function updateRankingPanel(client, redis) {
+    try {
+        const guild = client.guilds.cache.first();
+        if (!guild) {
+            console.error('[ランキング更新] ギルドが見つかりません');
+            return;
+        }
+        
+        const panelChannel = await client.channels.fetch(config.CLUB_PANEL_CHANNEL_ID).catch(() => null);
+        if (!panelChannel) {
+            console.error('[ランキング更新] 部活作成パネルチャンネルが見つかりません');
+            return;
+        }
+        
+        console.log('[ランキング更新] 週間ランキングを計算中...');
+        const rankingEmbeds = await createWeeklyRankingEmbeds(client, redis);
+        console.log(`[ランキング更新] 週間ランキング計算完了: ${rankingEmbeds.length}ページ`);
+        
+        const clubPanelEmbed = new EmbedBuilder()
+            .setColor(0x5865F2)
+            .setTitle('🎫 部活作成パネル')
+            .setDescription('**新規でもすぐ参加できる遊び場**\n\n気軽に部活を作ってみませんか？\n\n**流れ：**\n1. ボタンを押してフォームを開く\n2. 部活名・絵文字・活動内容を入力\n3. チャンネルが自動作成され、部長権限が付与される')
+            .addFields(
+                { name: '💰 作成費用', value: '無料', inline: true },
+                { name: '⏰ 作成制限', value: '7日に1回', inline: true },
+                { name: '📍 作成場所', value: '人気・新着部活', inline: true },
+                { name: '💡 気軽に始めよう', value: '• まずは小規模でも作ってみてOK\n• 途中で放置しても大丈夫\n• 気が向いたときに活動すればOK', inline: false },
+                { name: '📝 入力項目', value: '部活名・絵文字・活動内容', inline: true },
+                { name: '🎨 絵文字例', value: '⚽ 🎵 🎨 🎮 📚 🎮', inline: true }
+            )
+            .setTimestamp()
+            .setFooter({ text: 'HisameAI Mark.4' });
+
+        const messagePayload = {
+            embeds: rankingEmbeds && rankingEmbeds.length > 0 ? [...rankingEmbeds, clubPanelEmbed] : [clubPanelEmbed],
+            components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(config.CREATE_CLUB_BUTTON_ID).setLabel('部活を作成する').setStyle(ButtonStyle.Primary).setEmoji('🎫'))]
+        };
+        
+        console.log('[ランキング更新] パネルメッセージを更新中...');
+        await postStickyMessage(client, panelChannel, config.CREATE_CLUB_BUTTON_ID, messagePayload);
+        console.log('[ランキング更新] 週間ランキングと部活作成パネルを更新しました');
+    } catch (error) {
+        console.error('[ランキング更新] エラー:', error);
+        console.error('[ランキング更新] エラー詳細:', error.stack);
+    }
+}
+
 // アーカイブから復活する機能：アクティブポイントが0より大きい部活を部活カテゴリに戻す
 async function autoReviveArchivedClubs(guild, redis) {
     try {
@@ -711,12 +759,10 @@ module.exports = {
             }
             // 【ここまで修正】
             
+            // 起動時はランキングembedを更新しない（水曜日0時と自動ソート時のみ更新）
             const panelChannel = await client.channels.fetch(config.CLUB_PANEL_CHANNEL_ID).catch(() => null);
             if (panelChannel) {
-                // 週間ランキング（全ページ）を取得
-                const rankingEmbeds = await createWeeklyRankingEmbeds(client, redis);
-                
-                // 部活作成パネルの埋め込みを作成
+                // 部活作成パネルの埋め込みのみ作成（ランキングembedなし）
                 const clubPanelEmbed = new EmbedBuilder()
                     .setColor(0x5865F2)
                     .setTitle('🎫 部活作成パネル')
@@ -732,9 +778,9 @@ module.exports = {
                     .setTimestamp()
                     .setFooter({ text: 'HisameAI Mark.4' });
 
-                // 週間ランキングと部活作成パネルを送信
+                // 部活作成パネルのみ送信（ランキングembedなし）
                 const messagePayload = {
-                    embeds: rankingEmbeds && rankingEmbeds.length > 0 ? [...rankingEmbeds, clubPanelEmbed] : [clubPanelEmbed],
+                    embeds: [clubPanelEmbed],
                     components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(config.CREATE_CLUB_BUTTON_ID).setLabel('部活を作成する').setStyle(ButtonStyle.Primary).setEmoji('🎫'))]
                 };
                 
@@ -766,52 +812,7 @@ module.exports = {
                 console.log(`[定期バッチ] 部活メッセージ数をRedisに反映しました。合計: ${totalReflected}件`);
             }
             
-            // 週間ランキングと部活作成パネルを更新（メモリ反映の有無に関係なく実行）
-            try {
-                console.log('[定期バッチ] 週間ランキングと部活作成パネルの更新を開始します');
-                const guild = client.guilds.cache.first();
-                if (!guild) {
-                    console.error('[定期バッチ] ギルドが見つかりません');
-                    return;
-                }
-                
-                const panelChannel = await client.channels.fetch(config.CLUB_PANEL_CHANNEL_ID).catch(() => null);
-                if (!panelChannel) {
-                    console.error('[定期バッチ] 部活作成パネルチャンネルが見つかりません');
-                    return;
-                }
-                
-                console.log('[定期バッチ] 週間ランキングを計算中...');
-                const rankingEmbeds = await createWeeklyRankingEmbeds(client, redis);
-                console.log(`[定期バッチ] 週間ランキング計算完了: ${rankingEmbeds.length}ページ`);
-                
-                const clubPanelEmbed = new EmbedBuilder()
-                    .setColor(0x5865F2)
-                    .setTitle('🎫 部活作成パネル')
-                    .setDescription('**新規でもすぐ参加できる遊び場**\n\n気軽に部活を作ってみませんか？\n\n**流れ：**\n1. ボタンを押してフォームを開く\n2. 部活名・絵文字・活動内容を入力\n3. チャンネルが自動作成され、部長権限が付与される')
-                    .addFields(
-                        { name: '💰 作成費用', value: '無料', inline: true },
-                        { name: '⏰ 作成制限', value: '7日に1回', inline: true },
-                        { name: '📍 作成場所', value: '人気・新着部活', inline: true },
-                        { name: '💡 気軽に始めよう', value: '• まずは小規模でも作ってみてOK\n• 途中で放置しても大丈夫\n• 気が向いたときに活動すればOK', inline: false },
-                        { name: '📝 入力項目', value: '部活名・絵文字・活動内容', inline: true },
-                        { name: '🎨 絵文字例', value: '⚽ 🎵 🎨 🎮 📚 🎮', inline: true }
-                    )
-                    .setTimestamp()
-                    .setFooter({ text: 'HisameAI Mark.4' });
-
-                const messagePayload = {
-                    embeds: rankingEmbeds && rankingEmbeds.length > 0 ? [...rankingEmbeds, clubPanelEmbed] : [clubPanelEmbed],
-                    components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(config.CREATE_CLUB_BUTTON_ID).setLabel('部活を作成する').setStyle(ButtonStyle.Primary).setEmoji('🎫'))]
-                };
-                
-                console.log('[定期バッチ] パネルメッセージを更新中...');
-                await postStickyMessage(client, panelChannel, config.CREATE_CLUB_BUTTON_ID, messagePayload);
-                console.log('[定期バッチ] 週間ランキングと部活作成パネルを更新しました');
-            } catch (error) {
-                console.error('[定期バッチ] ランキング更新エラー:', error);
-                console.error('[定期バッチ] エラー詳細:', error.stack);
-            }
+            // 定期バッチではランキングembedを更新しない（水曜日0時と自動ソート時のみ更新）
         };
         cron.schedule('0,30 * * * *', flushClubMessageCounts, { scheduled: true, timezone: 'Asia/Tokyo' });
 
@@ -841,33 +842,8 @@ module.exports = {
                 // 5. チャンネルソート実行
                 await sortClubChannelsOnly(guild, redis);
                 
-                // 6. 週間ランキングの更新（部活作成パネルの更新）
-                const panelChannel = await client.channels.fetch(config.CLUB_PANEL_CHANNEL_ID).catch(() => null);
-                if (panelChannel) {
-                    const rankingEmbeds = await createWeeklyRankingEmbeds(client, redis);
-                    
-                    const clubPanelEmbed = new EmbedBuilder()
-                        .setColor(0x5865F2)
-                        .setTitle('🎫 部活作成パネル')
-                        .setDescription('**新規でもすぐ参加できる遊び場**\n\n気軽に部活を作ってみませんか？\n\n**流れ：**\n1. ボタンを押してフォームを開く\n2. 部活名・絵文字・活動内容を入力\n3. チャンネルが自動作成され、部長権限が付与される')
-                        .addFields(
-                            { name: '💰 作成費用', value: '無料', inline: true },
-                            { name: '⏰ 作成制限', value: '7日に1回', inline: true },
-                            { name: '📍 作成場所', value: '人気・新着部活', inline: true },
-                            { name: '💡 気軽に始めよう', value: '• まずは小規模でも作ってみてOK\n• 途中で放置しても大丈夫\n• 気が向いたときに活動すればOK', inline: false },
-                            { name: '📝 入力項目', value: '部活名・絵文字・活動内容', inline: true },
-                            { name: '🎨 絵文字例', value: '⚽ 🎵 🎨 🎮 📚 🎮', inline: true }
-                        )
-                        .setTimestamp()
-                        .setFooter({ text: 'HisameAI Mark.4' });
-
-                    const messagePayload = {
-                        embeds: rankingEmbeds && rankingEmbeds.length > 0 ? [...rankingEmbeds, clubPanelEmbed] : [clubPanelEmbed],
-                        components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(config.CREATE_CLUB_BUTTON_ID).setLabel('部活を作成する').setStyle(ButtonStyle.Primary).setEmoji('🎫'))]
-                    };
-                    
-                    await postStickyMessage(client, panelChannel, config.CREATE_CLUB_BUTTON_ID, messagePayload);
-                }
+                // 6. 週間ランキングの更新（部活作成パネルの更新）- 自動ソートの直前
+                await updateRankingPanel(client, redis);
                 
                 console.log('自動ソート + 廃部処理 + ランキング更新が完了しました');
             } catch (error) {
@@ -1104,6 +1080,65 @@ module.exports = {
             console.log('[週次リセット cronジョブ状態] スケジュール済み（実行待ち）');
         } else {
             console.warn(`[週次リセット cronジョブ状態] 警告: ステータスが「${resetCronJob.getStatus()}」です`);
+        }
+
+        // --- 水曜日0時のランキングembed更新 ---
+        const updateRankingOnWednesday = async () => {
+            const startTime = new Date();
+            const jstOffset = 9 * 60 * 60 * 1000;
+            const jstStartTime = new Date(startTime.getTime() + jstOffset);
+            console.log(`[水曜日ランキング更新開始] 実行時刻: JST=${jstStartTime.toISOString().replace('Z', '+09:00')}, UTC=${startTime.toISOString()}`);
+            try {
+                await updateRankingPanel(client, redis);
+                const endTime = new Date();
+                const jstEndTime = new Date(endTime.getTime() + jstOffset);
+                console.log(`[水曜日ランキング更新完了] 完了時刻: JST=${jstEndTime.toISOString().replace('Z', '+09:00')}, 実行時間: ${endTime - startTime}ms`);
+            } catch (error) {
+                const endTime = new Date();
+                const jstEndTime = new Date(endTime.getTime() + jstOffset);
+                console.error(`[水曜日ランキング更新エラー] エラー時刻: JST=${jstEndTime.toISOString().replace('Z', '+09:00')}, エラー:`, error);
+            }
+        };
+        
+        // 水曜日0時のcron式: 水曜日0:00 JST = 火曜日15:00 UTC
+        const wednesdayRankingCronJob = cron.schedule('0 0 * * 3', updateRankingOnWednesday, { scheduled: true, timezone: 'Asia/Tokyo' });
+        
+        // 次回実行時刻を計算（JSTの次の水曜日0:00）
+        const calculateNextWednesday = () => {
+            const nowDate = new Date();
+            const jstOffset = 9 * 60 * 60 * 1000;
+            const jstDate = new Date(nowDate.getTime() + jstOffset);
+            const jstYear = jstDate.getUTCFullYear();
+            const jstMonth = jstDate.getUTCMonth();
+            const jstDay = jstDate.getUTCDate();
+            const currentDay = jstDate.getUTCDay(); // 0=日曜, 3=水曜
+            
+            // 次の水曜日0:00を計算
+            let daysUntilWednesday;
+            if (currentDay === 3) { // 今日が水曜日
+                daysUntilWednesday = 7; // 来週の水曜日
+            } else if (currentDay < 3) {
+                // 水曜日より前（日、月、火）
+                daysUntilWednesday = 3 - currentDay;
+            } else {
+                // 水曜日より後（木、金、土）
+                daysUntilWednesday = 7 - (currentDay - 3);
+            }
+            
+            // 次の水曜日0:00 JSTを計算
+            const nextWednesdayJST = new Date(Date.UTC(jstYear, jstMonth, jstDay + daysUntilWednesday, 0, 0, 0, 0));
+            const nextWednesdayUTC = new Date(nextWednesdayJST.getTime() - jstOffset);
+            
+            return { jst: nextWednesdayJST, utc: nextWednesdayUTC };
+        };
+        const nextWednesday = calculateNextWednesday();
+        console.log(`[次回水曜日ランキング更新予定] JST=${nextWednesday.jst.toISOString().replace('Z', '+09:00')}, UTC=${nextWednesday.utc.toISOString()}`);
+        
+        // cronジョブの状態を確認
+        if (wednesdayRankingCronJob.getStatus() === 'scheduled') {
+            console.log('[水曜日ランキング更新 cronジョブ状態] スケジュール済み（実行待ち）');
+        } else {
+            console.warn(`[水曜日ランキング更新 cronジョブ状態] 警告: ステータスが「${wednesdayRankingCronJob.getStatus()}」です`);
         }
 
 	},

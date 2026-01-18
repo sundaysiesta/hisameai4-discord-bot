@@ -45,8 +45,6 @@ module.exports = {
             // ボタンの処理
             else if (interaction.isButton()) {
                 if (interaction.customId === config.CREATE_CLUB_BUTTON_ID) {
-                    await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
-                    
                     // 部活作成のクールダウンチェック（Redis使用）
                     const cooldownKey = `club_creation_cooldown:${interaction.user.id}`;
                     const cooldownEnd = await redis.get(cooldownKey);
@@ -54,6 +52,7 @@ module.exports = {
                         const now = Date.now();
                         const remaining = parseInt(cooldownEnd) - now;
                         if (remaining > 0) {
+                            await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
                             const remainingDays = Math.ceil(remaining / (1000 * 60 * 60 * 24));
                             const remainingHours = Math.ceil((remaining % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
                             let remainingText = '';
@@ -71,8 +70,7 @@ module.exports = {
                     }
                     
                     // 部活作成は無償化されたため、残高チェックは不要
-                    // モーダルを表示
-                    await interaction.deleteReply();
+                    // クールダウンが無効な場合は、deferReply()を使わずに直接モーダルを表示
                     const modal = new ModalBuilder().setCustomId(config.CREATE_CLUB_MODAL_ID).setTitle('部活作成フォーム');
                     const nameInput = new TextInputBuilder().setCustomId('club_name').setLabel('部活名').setStyle(TextInputStyle.Short).setRequired(true);
                     const emojiInput = new TextInputBuilder().setCustomId('club_emoji').setLabel('絵文字').setStyle(TextInputStyle.Short).setRequired(true).setPlaceholder('例: ⚽ 🎵 🎨 🎮').setMaxLength(10);
