@@ -70,57 +70,8 @@ module.exports = {
                         }
                     }
                     
-                    // ロメコイン残高を確認
-                    try {
-                        const controller = new AbortController();
-                        const timeoutId = setTimeout(() => controller.abort(), 5000); // 5秒タイムアウト
-                        
-                        if (!config.CROSSROID_API_TOKEN) {
-                            console.error('CROSSROID_API_TOKENが設定されていません');
-                            return interaction.editReply({ content: 'ロメコインシステムの設定が不完全です。管理者にお問い合わせください。' });
-                        }
-                        
-                        const balanceResponse = await fetch(`${config.CROSSROID_API_URL}/api/romecoin/${interaction.user.id}`, {
-                            headers: {
-                                'x-api-token': config.CROSSROID_API_TOKEN
-                            },
-                            signal: controller.signal
-                        });
-                        
-                        clearTimeout(timeoutId);
-                        
-                        if (!balanceResponse.ok) {
-                            let errorBody = '';
-                            try {
-                                errorBody = await balanceResponse.text();
-                            } catch (e) {
-                                // レスポンスボディの取得に失敗した場合は無視
-                            }
-                            console.error(`ロメコイン残高取得エラー: ${balanceResponse.status} ${balanceResponse.statusText}`);
-                            console.error(`エラーレスポンス: ${errorBody}`);
-                            return interaction.editReply({ content: 'ロメコイン残高の確認中にエラーが発生しました。しばらくしてから再度お試しください。' });
-                        }
-                        
-                        const balanceData = await balanceResponse.json();
-                        const currentBalance = balanceData.balance || 0;
-                        
-                        if (currentBalance < config.ROMECOIN_REQUIRED_FOR_CLUB_CREATION) {
-                            return interaction.editReply({ 
-                                content: `部活作成には<:romecoin2:1452874868415791236> ${config.ROMECOIN_REQUIRED_FOR_CLUB_CREATION.toLocaleString()}が必要です。現在の残高: <:romecoin2:1452874868415791236> ${currentBalance.toLocaleString()}` 
-                            });
-                        }
-                    } catch (error) {
-                        console.error('ロメコイン残高確認エラー:', error);
-                        if (error.name === 'AbortError') {
-                            return interaction.editReply({ content: 'ロメコイン残高の確認がタイムアウトしました。しばらくしてから再度お試しください。' });
-                        } else if (error.code === 'ECONNREFUSED' || error.cause?.code === 'ECONNREFUSED') {
-                            console.error(`CROSSROID APIへの接続に失敗しました。URL: ${config.CROSSROID_API_URL}`);
-                            return interaction.editReply({ content: 'ロメコインシステムに接続できませんでした。管理者にお問い合わせください。' });
-                        }
-                        return interaction.editReply({ content: 'ロメコイン残高の確認中にエラーが発生しました。しばらくしてから再度お試しください。' });
-                    }
-                    
-                    // 残高が十分な場合のみモーダルを表示
+                    // 部活作成は無償化されたため、残高チェックは不要
+                    // モーダルを表示
                     await interaction.deleteReply();
                     const modal = new ModalBuilder().setCustomId(config.CREATE_CLUB_MODAL_ID).setTitle('部活作成フォーム');
                     const nameInput = new TextInputBuilder().setCustomId('club_name').setLabel('部活名').setStyle(TextInputStyle.Short).setRequired(true);
@@ -197,55 +148,7 @@ module.exports = {
                         return interaction.editReply({ content: '活動内容は10文字以上200文字以下で入力してください。' });
                     }
                     
-                    // ロメコイン残高を確認
-                    try {
-                        const controller = new AbortController();
-                        const timeoutId = setTimeout(() => controller.abort(), 5000); // 5秒タイムアウト
-                        
-                        if (!config.CROSSROID_API_TOKEN) {
-                            console.error('CROSSROID_API_TOKENが設定されていません');
-                            return interaction.editReply({ content: 'ロメコインシステムの設定が不完全です。管理者にお問い合わせください。' });
-                        }
-                        
-                        const balanceResponse = await fetch(`${config.CROSSROID_API_URL}/api/romecoin/${interaction.user.id}`, {
-                            headers: {
-                                'x-api-token': config.CROSSROID_API_TOKEN
-                            },
-                            signal: controller.signal
-                        });
-                        
-                        clearTimeout(timeoutId);
-                        
-                        if (!balanceResponse.ok) {
-                            let errorBody = '';
-                            try {
-                                errorBody = await balanceResponse.text();
-                            } catch (e) {
-                                // レスポンスボディの取得に失敗した場合は無視
-                            }
-                            console.error(`ロメコイン残高取得エラー: ${balanceResponse.status} ${balanceResponse.statusText}`);
-                            console.error(`エラーレスポンス: ${errorBody}`);
-                            return interaction.editReply({ content: 'ロメコイン残高の確認中にエラーが発生しました。しばらくしてから再度お試しください。' });
-                        }
-                        
-                        const balanceData = await balanceResponse.json();
-                        const currentBalance = balanceData.balance || 0;
-                        
-                        if (currentBalance < config.ROMECOIN_REQUIRED_FOR_CLUB_CREATION) {
-                            return interaction.editReply({ 
-                                content: `部活作成には<:romecoin2:1452874868415791236> ${config.ROMECOIN_REQUIRED_FOR_CLUB_CREATION.toLocaleString()}が必要です。現在の残高: <:romecoin2:1452874868415791236> ${currentBalance.toLocaleString()}` 
-                            });
-                        }
-                    } catch (error) {
-                        console.error('ロメコイン残高確認エラー:', error);
-                        if (error.name === 'AbortError') {
-                            return interaction.editReply({ content: 'ロメコイン残高の確認がタイムアウトしました。しばらくしてから再度お試しください。' });
-                        } else if (error.code === 'ECONNREFUSED' || error.cause?.code === 'ECONNREFUSED') {
-                            console.error(`CROSSROID APIへの接続に失敗しました。URL: ${config.CROSSROID_API_URL}`);
-                            return interaction.editReply({ content: 'ロメコインシステムに接続できませんでした。管理者にお問い合わせください。' });
-                        }
-                        return interaction.editReply({ content: 'ロメコイン残高の確認中にエラーが発生しました。しばらくしてから再度お試しください。' });
-                    }
+                    // 部活作成は無償化されたため、残高チェックは不要
                     
                     // 絵文字の最初の文字のみを使用（複数絵文字が入力された場合の対応）
                     const firstEmoji = clubEmoji.trim().split(' ')[0] || '🎯';
@@ -312,55 +215,10 @@ module.exports = {
                             if(roleToRemove) await creator.roles.remove(roleToRemove);
                         }
                         
-                        // ロメコインを減らす
-                        let newBalance = 0;
-                        try {
-                            const controller = new AbortController();
-                            const timeoutId = setTimeout(() => controller.abort(), 5000); // 5秒タイムアウト
-                            
-                            const deductResponse = await fetch(`${config.CROSSROID_API_URL}/api/romecoin/${interaction.user.id}/deduct`, {
-                                method: 'POST',
-                                headers: {
-                                    'x-api-token': config.CROSSROID_API_TOKEN,
-                                    'Content-Type': 'application/json'
-                                },
-                                body: JSON.stringify({ amount: config.ROMECOIN_REQUIRED_FOR_CLUB_CREATION }),
-                                signal: controller.signal
-                            });
-                            
-                            clearTimeout(timeoutId);
-                            const deductData = await deductResponse.json();
-                            
-                            if (!deductResponse.ok || deductData.error) {
-                                // エラーレスポンスの場合
-                                const errorMessage = deductData.error || `HTTP ${deductResponse.status}`;
-                                console.error(`ロメコイン減算エラー: ${errorMessage}`);
-                                // 部活は作成済みなので、エラーログを残すが処理は続行
-                                console.error('部活作成は成功しましたが、ロメコインの減算に失敗しました。手動で確認してください。');
-                            } else if (deductData.success && deductData.newBalance !== undefined) {
-                                // 成功時のレスポンス: { success: true, userId, deducted, previousBalance, newBalance }
-                                newBalance = deductData.newBalance;
-                            } else {
-                                console.error('ロメコイン減算レスポンス形式エラー:', deductData);
-                                console.error('部活作成は成功しましたが、ロメコインの減算に失敗しました。手動で確認してください。');
-                            }
-                        } catch (error) {
-                            console.error('ロメコイン減算エラー:', error);
-                            if (error.name === 'AbortError') {
-                                console.error('ロメコイン減算がタイムアウトしました。');
-                            } else if (error.code === 'ECONNREFUSED' || error.cause?.code === 'ECONNREFUSED') {
-                                console.error(`CROSSROID APIへの接続に失敗しました。URL: ${config.CROSSROID_API_URL}`);
-                            }
-                            // 部活は作成済みなので、エラーログを残すが処理は続行
-                            console.error('部活作成は成功しましたが、ロメコインの減算に失敗しました。手動で確認してください。');
-                        }
+                        // 部活作成は無償化されたため、ロメコイン減算処理は不要
                         
-                        // 成功メッセージに残高を表示
-                        let successMessage = `部活「${clubName}」を人気部活カテゴリに設立しました！ ${newChannel} を確認してください。`;
-                        if (newBalance > 0) {
-                            successMessage += `\n残りのロメコイン: <:romecoin2:1452874868415791236> ${newBalance.toLocaleString()}`;
-                        }
-                        await interaction.editReply({ content: successMessage });
+                        // 成功メッセージ
+                        await interaction.editReply({ content: `部活「${clubName}」を人気部活カテゴリに設立しました！ ${newChannel} を確認してください。` });
                         // 部活作成完了後にクールダウンを設定（Redis使用）
                         const cooldownEnd = Date.now() + config.CLUB_CREATION_COOLDOWN;
                         await redis.setex(cooldownKey, Math.ceil(config.CLUB_CREATION_COOLDOWN / 1000), cooldownEnd.toString());

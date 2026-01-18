@@ -183,41 +183,14 @@ async function processClubMaintenanceAndRewards(guild, redis, ranking) {
                 continue;
             }
             
-            // TOP5の場合は賞金を支払い
-            const isTop5 = top5.some(top => top.id === club.id);
-            const rankIndex = top5.findIndex(top => top.id === club.id);
-            
-            if (isTop5 && rankIndex !== -1) {
-                // TOP5賞金支払い
-                const rewardAmount = config.CLUB_TOP5_REWARDS[rankIndex];
-                try {
-                    const rewardController = new AbortController();
-                    const rewardTimeoutId = setTimeout(() => rewardController.abort(), 5000);
-                    
-                    const rewardResponse = await fetch(`${config.CROSSROID_API_URL}/api/romecoin/${leaderUserId}/add`, {
-                        method: 'POST',
-                        headers: {
-                            'x-api-token': config.CROSSROID_API_TOKEN,
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({ amount: rewardAmount }),
-                        signal: rewardController.signal
-                    });
-                    
-                    clearTimeout(rewardTimeoutId);
-                    
-                    if (rewardResponse.ok) {
-                        const rewardData = await rewardResponse.json();
-                        console.log(`[賞金処理] 部活「${channel.name}」の部長（ID: ${leaderUserId}）に${rankIndex + 1}位賞金<:romecoin2:1452874868415791236> ${rewardAmount.toLocaleString()}を支払いました。`);
-                        rewardResults.push({ channel: channel.name, rank: rankIndex + 1, amount: rewardAmount, newBalance: rewardData.balance || 0 });
-                    } else {
-                        const errorBody = await rewardResponse.text().catch(() => '');
-                        console.error(`[賞金処理] 賞金支払いエラー: ${rewardResponse.status} ${errorBody}`);
-                    }
-                } catch (rewardError) {
-                    console.error(`[賞金処理] 賞金支払いエラー:`, rewardError);
-                }
-            }
+            // 賞金システムは削除されたため、支払い処理は実行しない
+            // TOP5の場合は賞金を支払い（無効化）
+            // const isTop5 = top5.some(top => top.id === club.id);
+            // const rankIndex = top5.findIndex(top => top.id === club.id);
+            // 
+            // if (isTop5 && rankIndex !== -1) {
+            //     // TOP5賞金支払い（削除済み）
+            // }
         }
         
         // 廃部処理
@@ -744,23 +717,17 @@ module.exports = {
                 const rankingEmbeds = await createWeeklyRankingEmbeds(client, redis);
                 
                 // 部活作成パネルの埋め込みを作成
-                const top5RewardsText = config.CLUB_TOP5_REWARDS.map((reward, index) => {
-                    return `${index + 1}位: <:romecoin2:1452874868415791236> ${reward.toLocaleString()}`;
-                }).join('\n');
-                
                 const clubPanelEmbed = new EmbedBuilder()
                     .setColor(0x5865F2)
                     .setTitle('🎫 部活作成パネル')
                     .setDescription('**新規でもすぐ参加できる遊び場**\n\n気軽に部活を作ってみませんか？\n\n**流れ：**\n1. ボタンを押してフォームを開く\n2. 部活名・絵文字・活動内容を入力\n3. チャンネルが自動作成され、部長権限が付与される')
                     .addFields(
-                        { name: '💰 作成費用', value: `<:romecoin2:1452874868415791236> ${config.ROMECOIN_REQUIRED_FOR_CLUB_CREATION.toLocaleString()}`, inline: true },
+                        { name: '💰 作成費用', value: '無料', inline: true },
                         { name: '⏰ 作成制限', value: '7日に1回', inline: true },
-                        { name: '🏆 TOP5賞金（週間）', value: top5RewardsText, inline: false },
                         { name: '📍 作成場所', value: '人気・新着部活', inline: true },
                         { name: '💡 気軽に始めよう', value: '• まずは小規模でも作ってみてOK\n• 途中で放置しても大丈夫\n• 気が向いたときに活動すればOK', inline: false },
                         { name: '📝 入力項目', value: '部活名・絵文字・活動内容', inline: true },
-                        { name: '🎨 絵文字例', value: '⚽ 🎵 🎨 🎮 📚 🎮', inline: true },
-                        { name: '⚠️ 注意事項', value: `部活作成には<:romecoin2:1452874868415791236> ${config.ROMECOIN_REQUIRED_FOR_CLUB_CREATION.toLocaleString()}が必要です。\nランキングTOP5に入ると賞金が支払われます！`, inline: false }
+                        { name: '🎨 絵文字例', value: '⚽ 🎵 🎨 🎮 📚 🎮', inline: true }
                     )
                     .setTimestamp()
                     .setFooter({ text: 'HisameAI Mark.4' });
@@ -818,23 +785,17 @@ module.exports = {
                 const rankingEmbeds = await createWeeklyRankingEmbeds(client, redis);
                 console.log(`[定期バッチ] 週間ランキング計算完了: ${rankingEmbeds.length}ページ`);
                 
-                const top5RewardsText = config.CLUB_TOP5_REWARDS.map((reward, index) => {
-                    return `${index + 1}位: <:romecoin2:1452874868415791236> ${reward.toLocaleString()}`;
-                }).join('\n');
-                
                 const clubPanelEmbed = new EmbedBuilder()
                     .setColor(0x5865F2)
                     .setTitle('🎫 部活作成パネル')
                     .setDescription('**新規でもすぐ参加できる遊び場**\n\n気軽に部活を作ってみませんか？\n\n**流れ：**\n1. ボタンを押してフォームを開く\n2. 部活名・絵文字・活動内容を入力\n3. チャンネルが自動作成され、部長権限が付与される')
                     .addFields(
-                        { name: '💰 作成費用', value: `<:romecoin2:1452874868415791236> ${config.ROMECOIN_REQUIRED_FOR_CLUB_CREATION.toLocaleString()}`, inline: true },
+                        { name: '💰 作成費用', value: '無料', inline: true },
                         { name: '⏰ 作成制限', value: '7日に1回', inline: true },
-                        { name: '🏆 TOP5賞金（週間）', value: top5RewardsText, inline: false },
                         { name: '📍 作成場所', value: '人気・新着部活', inline: true },
                         { name: '💡 気軽に始めよう', value: '• まずは小規模でも作ってみてOK\n• 途中で放置しても大丈夫\n• 気が向いたときに活動すればOK', inline: false },
                         { name: '📝 入力項目', value: '部活名・絵文字・活動内容', inline: true },
-                        { name: '🎨 絵文字例', value: '⚽ 🎵 🎨 🎮 📚 🎮', inline: true },
-                        { name: '⚠️ 注意事項', value: `部活作成には<:romecoin2:1452874868415791236> ${config.ROMECOIN_REQUIRED_FOR_CLUB_CREATION.toLocaleString()}が必要です。\nランキングTOP5に入ると賞金が支払われます！`, inline: false }
+                        { name: '🎨 絵文字例', value: '⚽ 🎵 🎨 🎮 📚 🎮', inline: true }
                     )
                     .setTimestamp()
                     .setFooter({ text: 'HisameAI Mark.4' });
@@ -874,7 +835,7 @@ module.exports = {
                 // 3. 週間ランキングの計算
                 const ranking = await calculateWeeklyRanking(guild, redis);
                 
-                // 4. TOP5賞金支払い
+                // 4. 部活メンテナンス処理（賞金支払いは無効化済み）
                 await processClubMaintenanceAndRewards(guild, redis, ranking);
                 
                 // 5. チャンネルソート実行
@@ -885,23 +846,17 @@ module.exports = {
                 if (panelChannel) {
                     const rankingEmbeds = await createWeeklyRankingEmbeds(client, redis);
                     
-                    const top5RewardsText = config.CLUB_TOP5_REWARDS.map((reward, index) => {
-                        return `${index + 1}位: <:romecoin2:1452874868415791236> ${reward.toLocaleString()}`;
-                    }).join('\n');
-                    
                     const clubPanelEmbed = new EmbedBuilder()
                         .setColor(0x5865F2)
                         .setTitle('🎫 部活作成パネル')
                         .setDescription('**新規でもすぐ参加できる遊び場**\n\n気軽に部活を作ってみませんか？\n\n**流れ：**\n1. ボタンを押してフォームを開く\n2. 部活名・絵文字・活動内容を入力\n3. チャンネルが自動作成され、部長権限が付与される')
                         .addFields(
-                            { name: '💰 作成費用', value: `<:romecoin2:1452874868415791236> ${config.ROMECOIN_REQUIRED_FOR_CLUB_CREATION.toLocaleString()}`, inline: true },
+                            { name: '💰 作成費用', value: '無料', inline: true },
                             { name: '⏰ 作成制限', value: '7日に1回', inline: true },
-                            { name: '🏆 TOP5賞金（週間）', value: top5RewardsText, inline: false },
                             { name: '📍 作成場所', value: '人気・新着部活', inline: true },
                             { name: '💡 気軽に始めよう', value: '• まずは小規模でも作ってみてOK\n• 途中で放置しても大丈夫\n• 気が向いたときに活動すればOK', inline: false },
                             { name: '📝 入力項目', value: '部活名・絵文字・活動内容', inline: true },
-                            { name: '🎨 絵文字例', value: '⚽ 🎵 🎨 🎮 📚 🎮', inline: true },
-                            { name: '⚠️ 注意事項', value: `部活作成には<:romecoin2:1452874868415791236> ${config.ROMECOIN_REQUIRED_FOR_CLUB_CREATION.toLocaleString()}が必要です。\nランキングTOP5に入ると賞金が支払われます！`, inline: false }
+                            { name: '🎨 絵文字例', value: '⚽ 🎵 🎨 🎮 📚 🎮', inline: true }
                         )
                         .setTimestamp()
                         .setFooter({ text: 'HisameAI Mark.4' });

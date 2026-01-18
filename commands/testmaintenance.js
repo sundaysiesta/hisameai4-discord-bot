@@ -151,21 +151,21 @@ module.exports = {
                     errors.push(`部活「${channel.name}」: ${e.message}`);
                 }
                 
-                // TOP5の場合は賞金対象
-                const isTop5 = top5.some(top => top.id === club.id);
-                const rankIndex = top5.findIndex(top => top.id === club.id);
-                
-                if (isTop5 && rankIndex !== -1) {
-                    const rewardAmount = config.CLUB_TOP5_REWARDS[rankIndex];
-                    rewardTargets.push({
-                        channel: channel.name,
-                        rank: rankIndex + 1,
-                        leader: leaderMember.user.username,
-                        leaderId: leaderUserId,
-                        amount: rewardAmount,
-                        balanceCheck: balanceCheck
-                    });
-                }
+                // TOP5の場合は賞金対象（賞金システムは削除済み）
+                // const isTop5 = top5.some(top => top.id === club.id);
+                // const rankIndex = top5.findIndex(top => top.id === club.id);
+                // 
+                // if (isTop5 && rankIndex !== -1) {
+                //     const rewardAmount = config.CLUB_TOP5_REWARDS?.[rankIndex] || 0;
+                //     rewardTargets.push({
+                //         channel: channel.name,
+                //         rank: rankIndex + 1,
+                //         leader: leaderMember.user.username,
+                //         leaderId: leaderUserId,
+                //         amount: rewardAmount,
+                //         balanceCheck: balanceCheck
+                //     });
+                // }
             }
             
             // 結果をEmbedで表示
